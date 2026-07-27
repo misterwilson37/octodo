@@ -1,7 +1,17 @@
 # SETUP-PHASE3-2.0.md — Calendars for Octodo (poll · mirror · carryover)
 
-**Version 1.0.0** · 2026-07-27 by Marginatus · For `functions/index.js` **1.0.0** · Build item 7
+**Version 1.1.0** · 2026-07-27 by Marginatus · For `functions/index.js` **1.0.0** · Build item 7
 
+> ## ⚠️ WHO DOES WHAT — read this first
+>
+> **This entire document is for YOU, once.** It stands up the machinery: one Cloud Run service, one robot account, one schedule, for the whole installation. Nobody else ever opens a Google Cloud console, and nobody else reads this file.
+>
+> **Every other user does exactly one thing, once, inside the app:** ⚙️ Settings → Tiers → **"📅 How do I show my Google Calendar here?"** — which shows them the robot's address with a copy button and walks the six clicks in Google Calendar. That walkthrough is the per-user guide, and it is the only one there is.
+>
+> **They share their OWN calendar and see only their own events.** The E37 guard means a personal calendar can only be polled by a workspace that person belongs to — so nobody can point a tier at somebody else's address and read their week.
+>
+> **⚠️ Fill `CALENDAR_ROBOT` into `config.js` after Part 3.** Until you do, the in-app walkthrough tells users calendar sync isn't switched on yet, which is honest but not useful.
+>
 > **What this is:** the browser-only walkthrough that gives Octodo working calendars — appointments pulled *in*, tasks mirrored *out* (which is what makes phone notifications happen), and the ❗ carryover. You did this once for 1.x. Same shape, one new project, and a few things that bit you last time are now steps instead of surprises.
 >
 > **Time:** about an hour. Splits cleanly at the ⏸.
@@ -92,7 +102,11 @@ The function authenticates as its own **service account** — no OAuth, no token
 
 4. In Octodo: ⚙️ **Settings → Timing → Mirror calendar** → paste that Calendar ID. (The tab is **Timing**, not "Calendar" — the docs said Calendar for a while and were wrong.)
 
+5. **Paste that same service-account address into `config.js`** as `CALENDAR_ROBOT`, and push. This is what puts it in front of every other user, so you never have to send it to anyone by hand.
+
 > **Sharing is per calendar and per person.** Whoever wants their calendar polled shares it with this robot themselves. Nothing is automatic, and nobody can be added without doing it.
+>
+> **⚠️ SCHOOL AND WORK ACCOUNTS MAY REFUSE THIS.** Plenty of Google Workspace administrators block sharing calendars with addresses outside the organisation. If a colleague's district account won't accept the robot, that is the cause and there is no fix on our side — they can use a personal calendar, or ask their admin to permit it. **Worth testing with one colleague before promising anything to several**, because it decides whether path A is viable for faculty at all. If it is blocked broadly, that is the argument for path B (E13) sooner rather than later.
 
 ---
 

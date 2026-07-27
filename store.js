@@ -129,7 +129,7 @@ import {
   writeBatch
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-import { FIREBASE_CONFIG } from "./config.js?v=1.0.0";
+import { FIREBASE_CONFIG } from "./config.js?v=1.1.0";
 
 export const STORE_VERSION = "0.20.0";
 

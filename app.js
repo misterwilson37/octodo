@@ -1,6 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.24.0 — E38, three fixes from Jake's first real use of item 4.
+// Version 1.25.0 — E39: the connect-a-calendar walkthrough, in the app.
+// SETUP-PHASE3-2.0.md is the OPERATOR's one-time guide — Jake, once, in a
+// console nobody else can reach. There was nothing at all for the other
+// twenty people, and he spotted it: "it sure looks like something that's not
+// going to work for anyone else." The six clicks now live beside the field
+// they fill, and the service-account address is shown with a copy button
+// instead of being something he has to paste into a chat window per person.
+// (prev) Version 1.24.0 — E38, three fixes from Jake's first real use of item 4.
 //   1. DEPENDENTS DON'T GET DEPENDENTS. A minor could see and use the
 //      create-a-board form. Jake: "that's just asking kids to mess with one
 //      another and lock them out of things." He's right, and the form is now
@@ -780,7 +787,7 @@
 // priority engine v2 + modals + filters.
 // ============================================================
 
-import { CONFIG_VERSION } from "./config.js?v=1.0.0";
+import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.1.0";
 import {
   watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
@@ -808,7 +815,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.24.0";
+export const APP_VERSION = "1.25.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1034,6 +1041,22 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#people-add").addEventListener("click", inviteMember);
   $("#dep-create").addEventListener("click", createDependentBoard);
   $("#ws-rename").addEventListener("click", renameBoard);          // E38
+  $("#cal-robot-copy").addEventListener("click", async () => {     // E39
+    const btn = $("#cal-robot-copy");
+    try {
+      await navigator.clipboard.writeText((CALENDAR_ROBOT || "").trim());
+      btn.textContent = "Copied";
+    } catch {
+      // Clipboard access is refused in plenty of ordinary situations (an
+      // insecure origin, a locked-down browser). Select the text instead so
+      // Cmd-C still works — never leave the button looking like it worked.
+      const r = document.createRange();
+      r.selectNodeContents($("#cal-robot"));
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = "Press ⌘C";
+    }
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  });
   // Fill the board name from the address as it's typed, so the value is a
   // real (black) value rather than a placeholder anyone would misread as one.
   $("#dep-email").addEventListener("input", () => {
@@ -1338,6 +1361,25 @@ function switchBoard(wsId) {
 }
 
 // ---------- E5/E32: People ----------
+
+/**
+ * E39 — show the address users share their calendar with.
+ * If config.js hasn't been filled in yet the walkthrough SAYS SO. A wizard
+ * that cheerfully asks you to share your calendar with an empty string is
+ * worse than no wizard, because you'd follow it and then wonder why nothing
+ * arrived for an hour.
+ */
+function renderCalendarRobot() {
+  const el = $("#cal-robot"), warn = $("#cal-robot-warn"), btn = $("#cal-robot-copy");
+  if (!el) return;
+  const addr = (CALENDAR_ROBOT || "").trim();
+  el.textContent = addr || "not set up yet";
+  btn.disabled = !addr;
+  warn.hidden = !!addr;
+  warn.textContent = addr ? "" :
+    "Calendar sync isn't switched on for this installation yet. Until it is, " +
+    "tasks and projects work normally — you just won't see your appointments.";
+}
 
 // Plain words for the roles. "editor" is a database value, not a sentence.
 const ROLE_WORD = { owner: "co-owner", editor: "can edit", viewer: "can view" };
@@ -5959,6 +6001,7 @@ function openSettings() {
   $("#settings-modal").hidden = false;
   switchSettingsTab("tiers");
   renderPeople();   // E5 — members may already be in hand
+  renderCalendarRobot();   // E39
   const c = S.config || {};
   $("#cfg-carryover").value = c.carryoverWriteHour ?? 9;
   $("#cfg-sleep-start").value = c.sleepStart ?? 22;

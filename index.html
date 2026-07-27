@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.43.0 (banner and data-html-version move together, always)
+     Version 0.44.0 (banner and data-html-version move together, always)
+     0.44.0 (E39): #cal-connect — the connect-a-calendar walkthrough, in
+     the app, beside the field it fills. SETUP-PHASE3-2.0 is the OPERATOR's
+     one-time guide; there was nothing at all for the other twenty people,
+     which is what Jake spotted. app -> 1.25.0, css -> 0.50.0,
+     config -> 1.1.0 (it now carries the service-account address).
      0.43.0 (E38): #ws-rename — a board can be renamed by an owner. There
      was no way to fix a board's name in the app at all; the only route
      was the Firebase console. Also: the dependent-board placeholders read
@@ -271,9 +276,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.49.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.50.0">
 </head>
-<body data-html-version="0.43.0">
+<body data-html-version="0.44.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -733,6 +738,26 @@
       <div class="tab-pane" data-pane="tiers">
         <h3>Tiers (priority queue)</h3>
         <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
+        <!-- E39 — the six clicks, next to the field they fill. -->
+        <details id="cal-connect">
+          <summary>📅 How do I show my Google Calendar here?</summary>
+          <div class="cal-steps">
+            <p class="hint">Your appointments live in Google Calendar and this app only <b>reads</b> them. To let it, you give one robot account permission to look — the same way you'd share a calendar with a person.</p>
+            <p><b>1.</b> Copy this address:</p>
+            <div class="robot-row">
+              <code id="cal-robot">—</code>
+              <button id="cal-robot-copy" class="mini" type="button">Copy</button>
+            </div>
+            <p class="hint" id="cal-robot-warn" hidden></p>
+            <p><b>2.</b> Open <b>Google Calendar</b> on a computer. In the left column, hover the calendar you want, click <b>⋮ → Settings and sharing</b>.</p>
+            <p><b>3.</b> Scroll to <b>Share with specific people or groups → Add people</b>. Paste the address, set permission to <b>See all event details</b>, and Send.</p>
+            <p><b>4.</b> On that same settings page, scroll to <b>Integrate calendar</b> and copy the <b>Calendar ID</b>. For your main calendar that is simply your own email address.</p>
+            <p><b>5.</b> Back here: pick a tier below, set its type to <b>Calendar</b>, and paste the Calendar ID into the field that appears.</p>
+            <p class="hint">Appointments appear within the hour. You can revoke this at any time from that same Google Calendar sharing page — the app has no access except what you just granted, and nobody else's calendar is visible to you.</p>
+            <p class="hint"><b>On a school or work account?</b> Some Google Workspace administrators block sharing calendars outside the organisation. If the address is refused, that is the reason — use a personal calendar, or ask your admin.</p>
+          </div>
+        </details>
+
         <div id="tier-editor"></div>
         <p class="hint" id="tier-color-hint"></p>
         <button id="tier-add" class="mini">+ Add tier</button>
@@ -1026,6 +1051,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.24.0"></script>
+  <script type="module" src="app.js?v=1.25.0"></script>
 </body>
 </html>

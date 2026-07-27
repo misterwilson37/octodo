@@ -1,7 +1,8 @@
 // ============================================================
 // Tentacalendar — config.js  (2.0 / OCTODO LINE)
-// Version 1.0.0 — the only hand-edited file (D26), now with two fewer
-// things in it than 1.x had.
+// Version 1.1.0 — the only hand-edited file (D26). Two fewer things in it
+// than 1.x had, and one new one: CALENDAR_ROBOT (E39), the address every
+// user shares their Google Calendar with.
 //
 // WHAT LEFT, AND WHY IT MATTERS:
 //
@@ -26,7 +27,22 @@
 // Values from SETUP-2.0.md Part 4, verified green by smoke.html 2026-07-26.
 // ============================================================
 
-export const CONFIG_VERSION = "1.0.0";
+export const CONFIG_VERSION = "1.1.0";
+
+// ============================================================
+// THE CALENDAR ROBOT (E39) — fill this in after SETUP-PHASE3-2.0 Part 3.
+//
+// Every user who wants their Google Calendar pulled in shares it with
+// this address. It is the Cloud Run service's own service account, and
+// it is an ADDRESS YOU SHARE THINGS WITH — not a secret, and not a
+// credential. It has to be visible to users or they cannot share with it.
+//
+// Until it is filled in, the app SAYS SO rather than showing a blank
+// box, because a wizard that silently asks you to share with nothing is
+// worse than no wizard.
+// ============================================================
+export const CALENDAR_ROBOT = "";   // e.g. "1234-compute@developer.gserviceaccount.com"
+
 
 export const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCLfoNFU0PB38xDIX_l3l47KXjLSgKv2fQ",
