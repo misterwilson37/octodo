@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.8.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · **rules 1.1.1 · functions 1.2.0 (BUILT, NOT DEPLOYED — needs Jake's console hour)** — the web app is deployed and **RUNNING 2026-07-27.** Jake and Nico both signed in; the collection-group index is created; **smoke IA · ID · IJ · IQ · IR all PASS.**|
+**Document version: 0.10.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · **rules 1.1.1 · functions 1.3.0** — the web app is deployed and **RUNNING 2026-07-27.** Jake and Nico both signed in; the collection-group index is created; **smoke IA · ID · IJ · IQ · IR all PASS.**|
 
 > **✅ IR PASSED, and it is the one that mattered.** Nico's dependent board was created from Jake's People tab, and Nico then signed in and **landed on that board rather than a fresh personal one** — the adoption path in `resolveWorkspace` fired, and the E33 rules held (his row shows `dependent`, he sees no member controls). This is the case that could not be tested any way but for real.
 >
@@ -14,6 +14,30 @@
 Live 1.x: `tentacalendar.misterwilson.org` (Katie's, untouched). Dev 2.0: `misterwilson37.github.io/octodo`.
 Current instance: **Marginatus** (Claude Opus 5, 12th instance / 11th named).
 Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus**.
+
+## 0a. WHERE JAKE ACTUALLY IS, 2026-07-27 evening
+
+**Read this before anything else. It is the difference between resuming and re-deriving.**
+
+| Thing | State |
+|---|---|
+| Firebase project, rules, index | ✅ Done. Rules **1.1.1** published. Collection-group index on `members.email` created. |
+| Web app | ✅ Deployed and in daily-usable shape. Jake and Nico both sign in; boards, switcher, People, dependent workspaces all work. |
+| **Repo vs. latest drop** | ⚠️ **UNCERTAIN.** Jake edits `config.js` by hand and pushes selectively. **Verify with the version badge, don't assume:** hover the version in the header. It must read **app 1.26.0 · store 0.20.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.51.0 · html 0.45.0**. Anything lower means the web files need re-uploading. |
+| Cloud Run function | Jake deployed 1.1.0, then 1.2.1, and finished the whole setup document. **1.3.0 adds `?job=fixtags`** — the one-time repair for events written before 1.2.0. Paste 1.3.0 into Cloud Run, run `?job=fixtags`, then `?job=all&force=1`. **The mirror calendar does NOT need deleting.** See §8h. |
+| `POLL_SECRET` / `TZ` | ✅ Both set and verified by a live curl. |
+| Calendars connected | ✅ Jake completed the setup document 2026-07-27 — calendars connected and a mirror calendar created. |
+| Cloud Scheduler | ❌ Not created — SETUP-PHASE3-2.0 Part 5. |
+| Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice — Jake doesn't want to bother her until he has to. |
+| `import.html` (item 9) | ❌ Not written. The last thing before flip. |
+
+**Jake's live curl, 2026-07-27 14:xx, is the proof the machinery works:** `claimed: 2`, both workspaces enumerated separately with their own job results, `elapsedMs: 1705`. That is E14 and per-workspace isolation confirmed against real data — smoke test WW8, which 1.x could not have had.
+
+**Nico's board is still named `nico.m.wilson`** (created before the E38 rename fix). Settings → People → Rename fixes it once the web files are current.
+
+**Minor, unhurried:** `POLL_SECRET` and the service URL both appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Rotating it is a two-minute env-var edit plus updating the Scheduler header. Not urgent, worth doing eventually.
+
+---
 
 ## 0. Read this first — which document answers your question
 
@@ -292,12 +316,42 @@ Both walkthroughs now live in Settings, beside the fields they fill, rendering t
 
 **The pattern across E36, E37 and E40 is worth naming: every one was a boundary OUTSIDE Firestore.** The rules file is airtight and cannot see any of them. When a feature touches an external system, the question "who owns this, and what stops someone else claiming it?" has to be asked about *that* system, separately, every time.
 
+## 8g. An honest note on this session's error rate
+
+Jake, at the end of a very long day: *"Given that literally every iteration of our conversation is revealing an error… is it time to handoff?"* A fair question, and it deserves a straight answer in the record rather than a defensive one.
+
+**The errors fall into two piles and only one of them is a worry.**
+
+*Design gaps that surfaced because the thing got built and used* — the rules clause that couldn't secure a query (E34), the project-wide service account (E37), the mirror tag scoped per app but not per workspace (E40). These are the system working. Every one was invisible on the page and obvious the moment a real person's Tuesday was traced through it, and finding them now rather than after Katie's data arrived is the entire point of dogfooding.
+
+*Carelessness, and it climbed as the session went on* — a CSS class reused for its shape while inheriting its meaning; a placeholder that read like a filled-in field; the same Python quoting bug twice; a Firebase console dialog described from memory twice, the second time **after** adopting a rule not to. A version banner that didn't move with its declaration, caught only because the ship-check iterates rather than trusting me.
+
+**The second pile is the signal.** It is not that the work got wrong, it is that it needed more catching — and the catching increasingly came from mechanical checks rather than from getting it right the first time. That is exactly the shape of a session that has run long.
+
+**The recommendation, made by the instance in question, which should be weighed accordingly: hand off.** The documents are current as of this line, §0a records the live state precisely, and the next piece of work — finish the console hour, then write `import.html` — is well-specified and does not depend on anything in one instance's head.
+
+## 8h. The sequencing failure — and the repair
+
+**What happened.** E40 (functions 1.2.0) scoped mirror tags per workspace. I wrote, in the code and in the message, that this was *"free because nothing is deployed yet"* — **an assumption I never checked with the person who does the deploying.** It was wrong. 1.1.0 was live, Jake worked straight through the setup document, and the mirror ran with a calendar attached. Those events carry `tcApp` and `tcTaskId` and no `tcWs`, so the 1.2.x filter cannot see them.
+
+**Compounding it: the instruction to redeploy existed but was unfindable.** It appeared in two consecutive messages, both times partway down a long reply, to someone who had been reading my output all day and reasonably picked up where he left off. **A blocking, order-dependent instruction that arrives buried is functionally the same as no instruction.**
+
+**The repair:** `?job=fixtags` (1.3.0) adopts the untagged events rather than deleting them — lists by the OLD unscoped filter, stamps `tcWs` on anything missing it, preserves `tcTaskId`/`tcCarryKey`. Idempotent, one curl, no calendar surgery.
+
+**Three rules for successors:**
+
+1. **Never assert what the user has deployed. Ask, or read it back from a report** — the function prints its own version in every response.
+2. **An order-dependent instruction goes at the TOP of the message, alone.** Buried in paragraph six it is a trap, not a warning.
+3. **When the user asks a direct question, ANSWER IT FIRST, before building anything.** Jake asked "do I need to delete my calendar, yes or no" and got code instead. That is the failure that ended this session.
+
 ## 9. Session log
 
 | Date | Instance | What happened |
 |---|---|---|
 | 2026-07-25 | Opus 5 · **Wunderpus** (11th) | The 2.0 design + setup kit. No app code, on purpose. Named for *Wunderpus photogenicus*, catalogued one animal at a time by its permanent unique pattern. |
 | 2026-07-26 | — (Jake solo) | Ran SETUP-2.0 end to end. `fantasktic-octodo`, repo, rules published, **smoke test green including denial**. Nico authenticated successfully. |
+| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE SEQUENCING FAILURE (§8h), AND THE END OF A LONG SESSION.** I asserted the function wasn't deployed rather than asking, buried the "redeploy first" instruction, and then — when Jake asked two plain questions — went and wrote code instead of answering them. Repaired with `?job=fixtags`. Verified on request that the poll secret appears in ZERO shipped files; my advice to rotate it was disproportionate and I should have dropped it when he first pushed back. **Jake's read on the day is fair and worth preserving: the app he felt good about yesterday is unchanged — queue.js and celebrate.js crossed byte-identical, app.js with four seams. Everything that broke today was in the NEW surface: multi-user, sharing, calendars-for-other-people, one day old and never before run by a human.** Eight hours of his day; a working multi-user app with two accounts, isolation proven, and calendars live at the end of it. |
+| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST LIVE CURL — the machinery is proven.** `claimed: 2`, both workspaces isolated, 1.7s. Every job "skipped" because no calendar is connected yet, which is the correct answer and not a failure. **The curl also surfaced a string naming a settings tab that has never existed** ("⚙️ Settings → Calendar" — it is Timing, and the carryover's message twelve lines below already said so). That is D84's error, fixed in the docs in July and never in the message a user actually reads; functions 1.2.1. **Wrote §0a so the next session resumes instead of re-deriving, and §8g on this session's error rate, honestly.** |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE PER-USER CALENDAR STORY (E39/E40).** Jake asked how anyone else would connect a calendar and whether he was building this only for himself — and the honest answer was that the operator guide existed and the user guide did not, for either direction. Both walkthroughs now live in the app. **Tracing the outbound one against a second user found E40:** the mirror tag was scoped per APP but not per WORKSPACE, so two workspaces sharing a mirror calendar would have deleted each other's events hourly. Free to fix only because nothing is deployed yet. **Third external-boundary bug in one session (E36, E37, E40), and all three were invisible to the rules file** — §8f names the pattern. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE CALENDAR HOLE (E37) + Jake's first real use of item 4 (E38).** He asked whether colleagues could end up with his calendar; tracing it found they could have TAKEN it — the shared service account plus an unchecked calendar id. **§8e is the entry to read: E1 was airtight and irrelevant, because the boundary that leaked belonged to Google, not Firestore.** Also fixed three things he hit inside five minutes of using the People tab, one of which was a placeholder that read like a value and produced a board named `nico.m.wilson`. **He found all four by using the thing, which is the argument for shipping to one careful user before shipping to five polite ones.** |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 7 — CALENDARS, BUILT.** functions 1.0.0 (the E14 work queue + the `octodo` tag namespace) and SETUP-PHASE3-2.0.md. **Ported by transformation, not rewrite**, so D135's reconcile survives byte-for-byte; the dispatcher is the only genuinely new code. Jake amended his own 2.0 definition (E35) — calendars must work — which is a bigger and better bar than E24 set and reorders the rest: items 5 and 6 are not blocking, 7 and 9 are. **Told him he never needed to anonymise the export JSON:** `export.html` dumps documents verbatim, so the shape is fully derivable from store.js, which I already had. His paste still earned its keep — it revealed a 7th tier the design didn't know about, and that his Home tier polls his PRIMARY calendar rather than a dedicated one. **Caught two stale comments in the ported function that still named the 1.x tag while the code used the new one** — the same "comment more confident than the code" shape that cost a round trip this morning, found this time by a check rather than by a user. |
