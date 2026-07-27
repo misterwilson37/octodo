@@ -1,6 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.23.1 — a Z: the E17 screen told Nico "connection hiccup" when the
+// Version 1.23.3 — a Z: repin to store 0.20.0 (item 7 made the workspace
+// document authoritative for pollIntervalMinutes, so saveConfig now writes
+// both copies). No app-layer behaviour change.
+// (prev) Version 1.23.2 — a Z. Two fixes in the People list: the tags reused the
+// existing .badge class, which means DANGER, so "holds the deed" rendered as
+// grey-on-red; and a member who is not an owner could see WHO held keys but
+// not WHAT those keys opened, because the role only appeared inside the
+// owner-only <select>. A dependent should be able to read his own board's
+// access list — that is the whole point of showing it to him.
+// (prev) Version 1.23.1 — a Z: the E17 screen told Nico "connection hiccup" when the
 // truth was a rules bug. A blocked screen that guesses wrong about WHY is
 // only marginally better than the silent bounce it replaced, so
 // permission-denied now gets its own honest sentence.
@@ -772,7 +781,7 @@ import {
   activeWorkspaceId, setActiveWorkspace, setPreferredWorkspace,   // E1/E34
   subscribeMyWorkspaces, subscribeWorkspaceDoc, subscribeMembers, // E34
   addMember, removeMember, setMemberRole, createDependentWorkspace // E5/E32
-} from "./store.js?v=0.19.1";
+} from "./store.js?v=0.20.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -783,7 +792,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.23.1";
+export const APP_VERSION = "1.23.3";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1298,6 +1307,9 @@ function switchBoard(wsId) {
 
 // ---------- E5/E32: People ----------
 
+// Plain words for the roles. "editor" is a database value, not a sentence.
+const ROLE_WORD = { owner: "co-owner", editor: "can edit", viewer: "can view" };
+
 function renderPeople() {
   const list = $("#people-list");
   if (!list) return;
@@ -1313,8 +1325,12 @@ function renderPeople() {
       const isDeed = (S.wsDoc?.ownerEmail || "") === m.id;
       row.innerHTML =
         `<span class="email">${esc(m.displayName || m.id)}${m.id === me ? " (you)" : ""}</span>` +
-        (isDeed ? `<span class="badge" title="Created this board. Cannot be removed.">holds the deed</span>` : "") +
-        (m.minor ? `<span class="badge" title="Cannot leave this board or hand back their own key.">dependent</span>` : "");
+        (isDeed ? `<span class="person-tag deed" title="Created this board. Cannot be removed.">holds the deed</span>` : "") +
+        (m.minor ? `<span class="person-tag" title="Cannot leave this board or hand back their own key.">dependent</span>` : "") +
+        // An owner sees the role in the <select> below. Everyone else saw
+        // nothing at all — so Nico could read who had keys to his board but
+        // not what they opened. Same information, rendered as text.
+        (owner ? "" : `<span class="person-tag">${esc(ROLE_WORD[m.role] || m.role || "")}</span>`);
 
       // The deed-holder's row is never editable — the rules lock ownerEmail,
       // so offering the control would be a button that always fails.

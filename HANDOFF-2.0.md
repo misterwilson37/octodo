@@ -1,6 +1,10 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.4.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · **rules 1.1.1** — app deployed 2026-07-27; **first sign-in FAILED on a rules bug, fixed in this drop.**|
+**Document version: 0.6.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · **rules 1.1.1 · functions 1.0.0 (BUILT, NOT DEPLOYED — needs Jake's console hour)** — the web app is deployed and **RUNNING 2026-07-27.** Jake and Nico both signed in; the collection-group index is created; **smoke IA · ID · IJ · IQ · IR all PASS.**|
+
+> **✅ IR PASSED, and it is the one that mattered.** Nico's dependent board was created from Jake's People tab, and Nico then signed in and **landed on that board rather than a fresh personal one** — the adoption path in `resolveWorkspace` fired, and the E33 rules held (his row shows `dependent`, he sees no member controls). This is the case that could not be tested any way but for real.
+>
+> **STILL OUTSTANDING — the actual E24 milestone:** Katie has not signed in. Two people on two boards, each seeing their own, one visiting the other, is what defines 2.0, and it has not happened yet.
 
 > **⚠️ IF YOU READ ONE THING: rules 1.1.0's collection-group clause could never have worked, and 1.1.1 fixes it.** It matched on the document ID (`match /{path=**}/members/{email}` with `email == me()`). That reasoning is correct for a GET of one named document and **meaningless for a QUERY** — a query names no documents, so Firestore evaluates the rule before reading anything, the ID wildcard is unbound, and the whole query is REFUSED as `permission-denied`. Not "returns nothing": refused. **A list rule must test a FIELD, and the client query must filter on that same field.** Member documents carry `email` exactly so this works.
 
@@ -80,6 +84,21 @@ Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy,
 | `manifest.json` | **0.2.0** | `"id": "/"` → `"./"` (E4a) |
 | `firestore-2.0.rules` | **1.1.1** | E33 minor guard + E34 collection-group clause, **the latter rewritten to secure a query rather than a document**. Publish in the console. |
 
+### Item 7 — calendars (built 2026-07-27, awaiting the console hour)
+
+`functions/index.js` **1.0.0** + `functions/package.json` 1.0.0 + **`SETUP-PHASE3-2.0.md`** 1.0.0, the browser-only walkthrough. **Nothing runs until Jake spends about an hour in the Google Cloud console** — the function has to exist somewhere before it can be scheduled.
+
+**Carried across untouched**, because re-deriving any of it by accident would be "a catastrophe wearing a rewrite's clothes": D135's poll reconcile (deterministic doc ids, write-only-what-changed, `syncedAt` deliberately absent — it took writes from 1,500/day to 116), D81's mirror ledger and loop guard, D87's no-hour-trigger carryover. The three job functions changed **only** by gaining a `wsId` parameter.
+
+**New: the E14 work queue.** 0.4.0 hardcoded `WS = "primary"`. A serial loop over every workspace eventually blows the request timeout, and the failure mode is silent — the last user never gets polled and nobody finds out. Instead: claim a bounded batch whose `nextPollAt` is due, oldest first, each inside its own try/catch, then re-stamp. Timeout-safe, self-healing after an outage, and load spreads itself.
+
+**Two decisions worth not re-litigating:**
+
+- **A failed workspace is stamped anyway.** Otherwise a broken calendar share stays permanently overdue at the head of the queue and starves everyone behind it. It reports its error hourly and costs one slot, not all of them — the poll's own "one bad tier must not starve the rest" discipline, one level up.
+- **`nextPollAt` is always a NUMBER, 0 = never polled.** Null sorts before numbers in Firestore, so nulls get swept into the `<=` comparison regardless; a field whose null and whose zero mean the same thing is one fewer case for the next reader. Legacy nulls self-migrate on first contact.
+
+**`?ws=<id>` runs one workspace** — the id is in the version tooltip. First thing to reach for when one person's calendar misbehaves, and 1.x never had it.
+
 ### Item 4 — houses and keys (the E24 milestone)
 
 Two words carry the whole permission model. **Owner** holds the deed and is the only one who hands out or takes back keys. **Member** holds a key — `editor` for full use, `viewer` for read-only (a viewer may still react on the activity feed, which is how kudos work). Everything Jake described is that model pointed one of two ways:
@@ -130,6 +149,8 @@ There is **no CNAME** and there should not be one yet — the custom domain gets
 - **IE. The badge tells the truth.** Hover the version number: `app.js 1.22.0 · store.js 0.18.0 · queue.js 0.20.0 · celebrate.js 0.2.0 · config.js 1.0.0 · css 0.47.0 · html 0.41.0`, then a line reading **`workspace <id>`**. If css says anything other than 0.47.0, stop — that is the 1.x doubling bug arriving in a new house.
 - **IF. THE IMPORTANT ONE — isolation.** Sign in as a second Google account (Nico's, or any other). It should get its **own** workspace with its own three tiers, and **must not see Jake's tasks**. Then in the Firebase console, confirm two `workspaces/` documents with different `ownerEmail`s. *This is E1, and it is the entire security model.*
 - **IG. `completedBy` is landing.** Console → any completed task → it should carry `completedBy` with your lowercased email. This is what stops Reflection crediting you with someone else's work the day a tier is shared (§7.2).
+**Item 7 — calendars.** Smoke tests WW1–WW8 live in SETUP-PHASE3-2.0.md Part 6. **WW8 is new and 1.x could not have had it:** the report must name more than one workspace, and one person's broken calendar share must show as an `error` on *their* row while everybody else's row is fine.
+
 - **IH. Sign-out is clean.** The ⏻ button returns you to the sign-in screen, not to a blank page.
 
 **Item 4 — the E24 milestone. This is the set that decides whether this is 2.0.**
@@ -222,12 +243,39 @@ Mirrored from 1.x's D-rows because these are the ones that bite **before** you h
 
 **The design flaw underneath, which is the durable lesson:** the failing query was the *optional* one — a lookup that exists so a child lands on the board built for them. In 0.19.0 a failure there threw, so **one bad clause in an enhancement stopped every new user from signing up at all.** An optional step that can strand everybody is not optional. It now warns and falls through. **Residual risk, stated rather than discovered: if that query is broken AND a dependent board exists, its resident gets a personal board instead of the one their parents hold — recoverable, where a locked-out app is not. This is why smoke test IR must be re-run after ANY rules change.**
 
+## 8c. First-run defects, in the order they were found
+
+Four, all mine, none of them in the feature — all four in what happens when something goes wrong.
+
+| # | Defect | Fixed in |
+|---|---|---|
+| 1 | The E34 rule matched on the **document ID**, which cannot secure a query. Every first sign-in died `permission-denied`. | rules 1.1.1 |
+| 2 | The E17 screen blamed the **network** for a refusal no retry could fix. | app 1.23.1 |
+| 3 | The console said "bootstrap failed" without naming which of four steps. | store 0.19.1 |
+| 4 | The **live board listener had no error handler**, so a missing index printed forty lines of Firestore internals — while the one-shot lookup beside it, fixed one round earlier, printed one clean sentence. | store 0.19.2 |
+
+**#4 is the one worth internalising: I fixed a failure mode and left its twin untouched.** The one-shot `getDocs` and the live `onSnapshot` run the *same query against the same index*, so they were always going to fail together; only one had been taught to fail well. **When you harden one call, grep for every other caller of the same thing before you ship.**
+
+**And a fifth, cosmetic but instructive:** the People tags reused the existing `.badge` class, which means DANGER (`background: var(--danger)`, bold). My rule set colour and border but not background, so specificity produced grey text on a red pill — and "holds the deed" is a statement of fact, not an alarm. **Reusing a class for its shape while inheriting its meaning.** D104's "one grammar" argues for reusing a *vocabulary*; it does not license borrowing a word that already means something else. Now `.person-tag`.
+
+## 8d. The tag namespace, and why a combined tag can't work
+
+Jake asked whether the mirror could tag `tentacalendar` on 1.x, `octodo` on 2.0, and `octodo tentacalendar` when both were involved — or whether that was overcomplicating and a separate script was cleaner.
+
+**Separate namespaces: yes. Combined tag: no, and the failure is worth understanding.** The mirror lists events with an **exact-match** filter on `tcApp`, then deletes any tagged event whose task it cannot find. A value of `octodo tentacalendar` matches neither filter, so such an event is invisible to **both** apps rather than visible to both. The tag records **ownership**, not provenance, and ownership must be binary for a prune to be safe — two apps sharing one tag would take turns deleting each other's work every hour.
+
+**It was never a new pattern.** D87 already gave the carryover its own namespace precisely so the mirror couldn't see its events and patch the ❗ back to the honest due time. Same calendar, two writers, mutually invisible. Jake re-derived his own project's solution without knowing it was already there.
+
+**On "new script or same script": both, and they don't conflict.** New file in a new project — it had to be, for the work queue — but a *descendant*, not a fresh start. One changed constant and a new dispatcher around logic that is otherwise verbatim.
+
 ## 9. Session log
 
 | Date | Instance | What happened |
 |---|---|---|
 | 2026-07-25 | Opus 5 · **Wunderpus** (11th) | The 2.0 design + setup kit. No app code, on purpose. Named for *Wunderpus photogenicus*, catalogued one animal at a time by its permanent unique pattern. |
 | 2026-07-26 | — (Jake solo) | Ran SETUP-2.0 end to end. `fantasktic-octodo`, repo, rules published, **smoke test green including denial**. Nico authenticated successfully. |
+| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 7 — CALENDARS, BUILT.** functions 1.0.0 (the E14 work queue + the `octodo` tag namespace) and SETUP-PHASE3-2.0.md. **Ported by transformation, not rewrite**, so D135's reconcile survives byte-for-byte; the dispatcher is the only genuinely new code. Jake amended his own 2.0 definition (E35) — calendars must work — which is a bigger and better bar than E24 set and reorders the rest: items 5 and 6 are not blocking, 7 and 9 are. **Told him he never needed to anonymise the export JSON:** `export.html` dumps documents verbatim, so the shape is fully derivable from store.js, which I already had. His paste still earned its keep — it revealed a 7th tier the design didn't know about, and that his Home tier polls his PRIMARY calendar rather than a dedicated one. **Caught two stale comments in the ported function that still named the 1.x tag while the code used the new one** — the same "comment more confident than the code" shape that cost a round trip this morning, found this time by a check rather than by a user. |
+| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **IT RUNS.** Jake signed in, Nico's dependent board was created and Nico landed on it — **IR passed**, which is the case no amount of reading could have verified. Four first-run defects found and fixed (§8c), every one in error handling rather than in the feature: the feature worked the first time it was allowed to run. **The two most useful things I shipped this morning both paid out within the hour** — the step tags told us instantly that the second failure was a different animal from the first, and the non-fatal fallthrough is why Jake was looking at a working app instead of a blocked screen while the index built. **Process failure worth recording: I twice described a Firebase console dialog from memory and got it wrong, costing round trips on a screen Jake could simply have shown me.** Console UIs move; my picture of them is stale by construction. New rule adopted mid-session: for any console step, ask for the screenshot and answer in clicks. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST DEPLOY, FIRST FAILURE.** Nico's sign-in died on permission-denied. Cause was mine: rules 1.1.0's collection-group clause matched the document ID, which cannot secure a query. **The clause carried a paragraph of confident reasoning for why it was safe, and that reasoning was about the wrong operation** — the surest sign a comment needs checking is that it argues rather than states. Fixed in 1.1.1 (match the field, filter on the field). Two things fixed alongside that were not the bug but made it expensive: the E17 screen blamed the network for a refusal that retrying can never fix, and the console said "bootstrap failed" without naming which of four steps. **Also made the failing query non-fatal — it was an optional lookup that could strand every new user, which is not optional.** Filled in SETUP-2.0's Part 0 and Part 9 blanks, which Jake caught: the real values were in the completion block at the top, so the document disagreed with itself and read as unfinished work. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 4 — houses and keys.** Jake stopped the deploy, said the permission description was more technical than he could follow, and re-described the target audiences himself. **He was right to stop, and the re-description contained a correction I had got wrong:** E25 had Jake owning Katie's board, which made her a guest in her own practice. Reversed — she owns hers, he owns Nico's, same mechanism opposite directions. He then improved on it, inventing the dependent workspace and the minor flag unprompted. **Two bugs came out of walking HIS description through MY rules rather than re-reading them:** Nico could have left his own board through a door marked "leave" (E33), and Nico's first sign-in would have built him a second board his parents never held (the adoption path). Neither was findable by reading the file; both were obvious the moment a real person's Tuesday was traced through it. **Lesson worth keeping: when the human re-describes the problem in their own words, walk the code through THEIR version, not yours.** Also declined to hotfix a latent 1.x tab-selector bug — no symptom, so E27 doesn't fire; a dual-fix window that covers every shared imperfection stops being paid. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th) | **Named for *Amphioctopus marginatus*, the coconut octopus — the only one that carries its shelter with it, disassembled, and rebuilds it somewhere else, never exposed in between.** That is §11 and §15 exactly. The other half: *marginatus* means "bordered," and E1 is the whole design — the boundary is a path, not a field. **Built items 1→3.** Jake's answers from the day became E23–E31; the two biggest are E24 (2.0.0 = the board switcher, his own definition, D67's shape) and E30 (store.js absorbs the workspace so 7,100 lines of app.js + queue.js cross unchanged). **Found the doubled 1.x stylesheet** while reading it to port it, measured the blast radius instead of assuming it, and explicitly ruled it OUT as an explanation for Katie's phone — the finding that would have been most tempting to over-claim. Caught the manifest's absolute `id` by running E4a's sweep rather than trusting that a byte-identical carry is a safe carry. **Process note for successors: the 1.x repo did not arrive in the first upload and I said so instead of inferring the missing files** — three of the four documents I needed were in hand, and the fourth was one sentence away. |

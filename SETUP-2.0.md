@@ -1,6 +1,6 @@
 # SETUP-2.0.md — Standing up Tentacalendar 2.0
 
-**Version 1.4.0** · Written 2026-07-25 by Wunderpus · Part 0 and Part 9 filled in from the real project 2026-07-27 by Marginatus · Companion to TENTACALENDAR-2.0-DESIGN.md 1.6.0
+**Version 1.5.0** · Written 2026-07-25 by Wunderpus · Part 0 and Part 9 filled in from the real project 2026-07-27 by Marginatus · Companion to TENTACALENDAR-2.0-DESIGN.md 1.6.0
 
 > **What this is:** the browser-only walkthrough for creating the new Firebase project and repo that 2.0 lives in. Same shape as SETUP-PHASE3.md, which you followed successfully once already. No CLI, no admin tools, no terminal.
 >
@@ -173,6 +173,30 @@ Throughout this document, `<PROJECT>` means the project ID you just wrote down.
 **About these rules, briefly, because "rules" sounded scarier than it is:** this file decides who can touch which bytes. It's different from every other file in the project because *a mistake in it is invisible* — a too-permissive rule looks exactly like a working app. That's the whole reason for the Playground checks above and for test 6 in the smoke page. It matters most at two moments, both months away: when Katie's data arrives, and when strangers can sign up. Today the only data in this project will be yours.
 
 **One thing worth knowing about the file you just pasted:** writing this guide turned up a deadlock in the design document's rules sketch. It allowed creating a member document only if you were already an owner-*member* — so the first member document could never exist and no workspace could ever be used. `firestore-2.0.rules 1.0.0` fixes it by rooting membership in the workspace document's `ownerEmail` instead. The smoke test in Part 7 walks exactly that sequence, which is how you'll know the fix holds.
+
+---
+
+## Part 5b — the collection-group index (5 min, and you WILL hit this)
+
+**This is not optional and it is not automatic.** Firestore auto-indexes every field, but only at *collection* scope. The board switcher asks "which boards is this email a member of?" across **all** `members` subcollections at once — a **collection-group** query — and that scope is opt-in per field. Without it, sign-in works, your own board works, and the board list fails with `failed-precondition`.
+
+Firebase's error contains a "create it here" link. **The link does not create anything** — it drops you on the Indexes page with no dialog open and no instruction. Do it by hand instead:
+
+1. **Firestore Database → Indexes → Automatic** tab.
+2. Scroll past *Automatic index settings* to **Exemptions** → **Add exemption**.
+3. Step 1 of the dialog:
+   - **Collection ID:** `members`
+   - **Field path:** `email`
+   - **Query scope:** tick **Collection group** only. Leave *Collection* unticked — it is already enabled by default, which is what the three green ticks in the panel above are telling you.
+   - **Next**
+4. Step 2: toggle **Ascending → Enabled**. Leave Descending and Arrays off — the query is a plain equality filter with no sort.
+5. **Save.** It builds in a minute or two.
+
+**Done looks like:** one Exemptions row reading `members` · `email` · Collection Group Scope **✓ Ascending**.
+
+> ⚠️ **Do NOT flip collection-group scope on in the "Automatic index settings" panel at the top.** That applies it to *every field in the database* — storage and write cost on all of them, permanently, to fix one query. The exemption is the targeted version. The word "exemption" is misleading here: it means *"index this field differently from the default"*, not *"don't index it."*
+
+**Per project, once, forever.** It belongs to the database, not to any user — every subsequent person who signs in just works.
 
 ---
 

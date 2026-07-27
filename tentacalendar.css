@@ -1,6 +1,16 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.48.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.48.1  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.48.1: .person-tag replaces .person-row .badge. `.badge` ALREADY EXISTED
+   and means DANGER — background: var(--danger), bold, near-black text. My
+   rule set colour and border but not background, so specificity handed the
+   People rows grey text on a red pill: unreadable, and semantically wrong,
+   since "holds the deed" is a fact and not a warning. Reusing a class for
+   its SHAPE while inheriting its MEANING is the trap here; D104's "one
+   grammar" argues for reusing a vocabulary, not for borrowing a word that
+   already means something else.
+   (prev) Version 0.48.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.48.0 (E34): the board switcher — .board-chip in the header (colour dot,
    board name, caret) and .board-menu beneath it. .board-chip.visiting marks
@@ -205,7 +215,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.48.0";
+  --tc-version: "0.48.1";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -314,10 +324,14 @@ button { cursor: pointer; font: inherit; }
   padding: .4rem .1rem; border-bottom: 1px solid var(--line);
 }
 .person-row .email { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
-.person-row .badge {
-  font-size: .7rem; color: var(--ink-dim);
-  border: 1px solid var(--line); border-radius: 999px; padding: .05rem .45rem;
+/* NOT .badge — see the 0.48.1 note in the banner. These are statements of
+   fact about a person's access, not alarms. */
+.person-tag {
+  font-size: .7rem; color: var(--ink-dim); background: none;
+  font-weight: 400; white-space: nowrap; flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 999px; padding: .1rem .5rem;
 }
+.person-tag.deed { color: var(--accent); border-color: var(--accent); }
 
 /* ---------- Header ---------- */
 header {

@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.42.1 (banner and data-html-version move together, always)
+     Version 0.42.3 (banner and data-html-version move together, always)
+     0.42.3: app -> 1.23.3 (store -> 0.20.0 rides in: the poll interval now
+     also lands on the workspace doc, which the work queue reads). Calendars
+     arrive via functions/index.js 1.0.0 + SETUP-PHASE3-2.0.md — no markup.
+     0.42.2: app -> 1.23.2, css -> 0.48.1 (People tags stop borrowing the
+     danger badge; store -> 0.19.2 rides in). No markup change.
      0.42.1: app -> 1.23.1 (E17 copy now tells the truth about a rules
      refusal instead of blaming the network). No markup change.
      0.42.0 (E32/E34): the BOARD SWITCHER (#board-switch) in the header and a
@@ -260,9 +265,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.48.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.48.1">
 </head>
-<body data-html-version="0.42.1">
+<body data-html-version="0.42.3">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1006,6 +1011,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.23.1"></script>
+  <script type="module" src="app.js?v=1.23.3"></script>
 </body>
 </html>

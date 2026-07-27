@@ -1,0 +1,12 @@
+{
+  "name": "octodo-functions",
+  "version": "1.0.0",
+  "description": "Tentacalendar 2.0 (Octodo) Cloud Functions — multi-tenant poll/mirror/carryover work queue (E14). Deployed via the Google Cloud Console inline editor; there is no CLI in this project.",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "firebase-admin": "^12.1.0",
+    "googleapis": "^140.0.0"
+  }
+}

@@ -1,6 +1,19 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.19.1 — bootstrap diagnostics + a query that can no longer strand
+// Version 0.20.0 — item 7 support. nextPollAt is now a NUMBER (0 = never
+// polled, poll now) rather than null: the work queue claims on
+// `nextPollAt <= now`, and null sorts before numbers in Firestore so it
+// would be swept in regardless — a field whose null and whose zero mean the
+// same thing is one fewer case for the next reader. And saveConfig now also
+// writes pollIntervalMinutes onto the WORKSPACE document, which E14 made
+// authoritative because the claim query has to read it. Both copies are
+// written so the settings UI can never be editing a field nobody reads.
+// (prev) Version 0.19.2 — the twin of 0.19.1's bug. 0.19.1 made the one-shot board
+// lookup degrade gracefully and left the LIVE LISTENER beside it with no
+// error handler at all — so a missing index printed one clean sentence from
+// one and forty lines of Firestore internals from the other. onSnapshot takes
+// an error callback and every listener that can fail on an index needs one.
+// (prev) Version 0.19.1 — bootstrap diagnostics + a query that can no longer strand
 // anybody. Nico's first sign-in died on "Missing or insufficient permissions"
 // and the console could only say the bootstrap failed, not WHERE — so this
 // adds a step tag to every stage of resolveWorkspace, and makes the one
@@ -118,7 +131,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.0.0";
 
-export const STORE_VERSION = "0.19.1";
+export const STORE_VERSION = "0.20.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -330,12 +343,10 @@ async function createPersonalWorkspace(user, uref, userExists) {
     createdAt: now,
     createdBy: ME,
     color: pickWorkspaceColor(ME),
-    nextPollAt: null,               // E14 — null = no calendars to poll yet
-    pollIntervalMinutes: 60         // §4.3. NOT yet authoritative: the settings
-                                    // UI still edits settings/config's copy.
-                                    // Build item 7 makes this one the truth and
-                                    // deletes the other. Until then, read the
-                                    // config copy. (Recorded in HANDOFF-2.0 §5c.)
+    nextPollAt: 0,                  // E14 — 0 = never polled; the first run claims it
+    pollIntervalMinutes: 60         // E14 — AUTHORITATIVE as of item 7: the claim
+                                    // query reads it, so it has to live here.
+                                    // saveConfig mirrors the UI's value onto it.
   });
 
   await setDoc(doc(db, "workspaces", ref.id, "members", ME), {
@@ -488,6 +499,25 @@ export function subscribeMyWorkspaces(cb) {
       (a.ownerEmail === ME ? 0 : 1) - (b.ownerEmail === ME ? 0 : 1) ||
       String(a.name || "").localeCompare(String(b.name || "")));
     cb(out);
+  },
+  // onSnapshot's THIRD argument. Without it a listener failure is an uncaught
+  // async error: forty lines of Firestore internals in the console and no
+  // sentence anybody can act on. This one has a known, expected failure —
+  // the collection-group index does not exist until somebody creates it —
+  // so it says exactly that, and reports an empty board list rather than
+  // leaving the switcher showing whatever it last saw.
+  err => {
+    const needsIndex = String(err?.code || "").includes("failed-precondition");
+    console.error(
+      needsIndex
+        ? "[store] the board list needs a one-time Firestore index that does " +
+          "not exist yet: collection group 'members', field 'email', " +
+          "Ascending. Firebase console -> Firestore -> Indexes -> Exemptions " +
+          "-> Add exemption. Until then you can use your own board normally; " +
+          "you just cannot see or switch to others. (SETUP-2.0.md Part 5b.)"
+        : "[store] the board list listener failed:",
+      err);
+    cb([]);
   });
 }
 
@@ -572,7 +602,7 @@ export async function createDependentWorkspace({ name, minorEmail, coOwnerEmail 
     ownerEmail: ME,                 // the deed. Permanent, and here that is the point.
     createdAt: now, createdBy: ME,
     color: pickWorkspaceColor(resident),
-    nextPollAt: null,
+    nextPollAt: 0,
     pollIntervalMinutes: 60
   });
 
@@ -1132,6 +1162,16 @@ export function deleteTier(tierId) {
 
 // ---------- Config ----------
 
-export function saveConfig(data) {
-  return setDoc(settingsRef("config"), data, { merge: true });
+export async function saveConfig(data) {
+  await setDoc(settingsRef("config"), data, { merge: true });
+  // E14 — the poll's claim query reads pollIntervalMinutes off the WORKSPACE
+  // document, because a query cannot reach into a subcollection to sort by a
+  // field. The settings form still edits settings/config, so the value is
+  // written to both rather than left to drift: a UI that edits a field the
+  // engine never reads is a setting that silently does nothing.
+  const mins = Number(data?.pollIntervalMinutes);
+  if (mins > 0) {
+    try { await updateDoc(wsRef(), { pollIntervalMinutes: mins }); }
+    catch (err) { console.warn("[store] could not update the workspace poll interval (a viewer cannot):", err); }
+  }
 }
