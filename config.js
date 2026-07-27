@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — config.js  (2.0 / OCTODO LINE)
-// Version 1.1.0 — the only hand-edited file (D26). Two fewer things in it
+// Version 1.2.0 — the only hand-edited file (D26). Two fewer things in it
 // than 1.x had, and one new one: CALENDAR_ROBOT (E39), the address every
 // user shares their Google Calendar with.
 //
@@ -27,7 +27,7 @@
 // Values from SETUP-2.0.md Part 4, verified green by smoke.html 2026-07-26.
 // ============================================================
 
-export const CONFIG_VERSION = "1.1.0";
+export const CONFIG_VERSION = "1.2.0";
 
 // ============================================================
 // THE CALENDAR ROBOT (E39) — fill this in after SETUP-PHASE3-2.0 Part 3.
@@ -41,7 +41,7 @@ export const CONFIG_VERSION = "1.1.0";
 // box, because a wizard that silently asks you to share with nothing is
 // worse than no wizard.
 // ============================================================
-export const CALENDAR_ROBOT = "470873844999-compute@developer.gserviceaccount.com";   // e.g. "1234-compute@developer.gserviceaccount.com"
+export const CALENDAR_ROBOT = "470873844999-compute@developer.gserviceaccount.com";
 
 
 export const FIREBASE_CONFIG = {

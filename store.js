@@ -1,6 +1,7 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.20.0 — item 7 support. nextPollAt is now a NUMBER (0 = never
+// Version 0.20.1 — repin to config 1.2.0 (it now carries CALENDAR_ROBOT).
+// (prev) Version 0.20.0 — item 7 support. nextPollAt is now a NUMBER (0 = never
 // polled, poll now) rather than null: the work queue claims on
 // `nextPollAt <= now`, and null sorts before numbers in Firestore so it
 // would be swept in regardless — a field whose null and whose zero mean the
@@ -129,9 +130,9 @@ import {
   writeBatch
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-import { FIREBASE_CONFIG } from "./config.js?v=1.1.0";
+import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.20.0";
+export const STORE_VERSION = "0.20.1";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);

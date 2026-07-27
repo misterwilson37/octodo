@@ -1,6 +1,11 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.25.0 — E39: the connect-a-calendar walkthrough, in the app.
+// Version 1.26.0 — E40: the OUTBOUND calendar walkthrough. 1.25.0 explained
+// how to see your appointments; nothing explained how to get your tasks onto
+// a calendar, which is the half that actually makes a phone buzz — this app
+// sends no notifications of its own and never has (§5, "Expectation set with
+// Katie"). Both walkthroughs now render from one function.
+// (prev) Version 1.25.0 — E39: the connect-a-calendar walkthrough, in the app.
 // SETUP-PHASE3-2.0.md is the OPERATOR's one-time guide — Jake, once, in a
 // console nobody else can reach. There was nothing at all for the other
 // twenty people, and he spotted it: "it sure looks like something that's not
@@ -787,7 +792,7 @@
 // priority engine v2 + modals + filters.
 // ============================================================
 
-import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.1.0";
+import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
   watchAuth, signIn, signOutUser, STORE_VERSION,
   subscribeTiers, subscribeTasks, subscribeEvents, subscribeConfig,
@@ -804,7 +809,7 @@ import {
   subscribeMyWorkspaces, subscribeWorkspaceDoc, subscribeMembers, // E34
   addMember, removeMember, setMemberRole, createDependentWorkspace, // E5/E32
   saveWorkspace, forgetWorkspaceCache                              // E38 rename
-} from "./store.js?v=0.20.0";
+} from "./store.js?v=0.20.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -815,7 +820,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.25.0";
+export const APP_VERSION = "1.26.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1041,22 +1046,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#people-add").addEventListener("click", inviteMember);
   $("#dep-create").addEventListener("click", createDependentBoard);
   $("#ws-rename").addEventListener("click", renameBoard);          // E38
-  $("#cal-robot-copy").addEventListener("click", async () => {     // E39
-    const btn = $("#cal-robot-copy");
-    try {
-      await navigator.clipboard.writeText((CALENDAR_ROBOT || "").trim());
-      btn.textContent = "Copied";
-    } catch {
-      // Clipboard access is refused in plenty of ordinary situations (an
-      // insecure origin, a locked-down browser). Select the text instead so
-      // Cmd-C still works — never leave the button looking like it worked.
-      const r = document.createRange();
-      r.selectNodeContents($("#cal-robot"));
-      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-      btn.textContent = "Press ⌘C";
-    }
-    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
-  });
+  $("#cal-robot-copy").addEventListener("click", ev => copyRobot(ev.currentTarget));      // E39
+  $("#mirror-robot-copy").addEventListener("click", ev => copyRobot(ev.currentTarget));   // E40
   // Fill the board name from the address as it's typed, so the value is a
   // real (black) value rather than a placeholder anyone would misread as one.
   $("#dep-email").addEventListener("input", () => {
@@ -1370,15 +1361,40 @@ function switchBoard(wsId) {
  * arrived for an hour.
  */
 function renderCalendarRobot() {
-  const el = $("#cal-robot"), warn = $("#cal-robot-warn"), btn = $("#cal-robot-copy");
-  if (!el) return;
   const addr = (CALENDAR_ROBOT || "").trim();
-  el.textContent = addr || "not set up yet";
-  btn.disabled = !addr;
+  // Both walkthroughs show the same address; one function so they can never
+  // disagree about it (D104 — one grammar, and here literally one value).
+  [["#cal-robot", "#cal-robot-copy"], ["#mirror-robot", "#mirror-robot-copy"]]
+    .forEach(([codeSel, btnSel]) => {
+      const el = $(codeSel), btn = $(btnSel);
+      if (!el) return;
+      el.textContent = addr || "not set up yet";
+      if (btn) btn.disabled = !addr;
+    });
+  const warn = $("#cal-robot-warn");
+  if (!warn) return;
   warn.hidden = !!addr;
   warn.textContent = addr ? "" :
     "Calendar sync isn't switched on for this installation yet. Until it is, " +
     "tasks and projects work normally — you just won't see your appointments.";
+}
+
+/** Copy the robot address, and never lie about having done it. */
+async function copyRobot(btn) {
+  const addr = (CALENDAR_ROBOT || "").trim();
+  try {
+    await navigator.clipboard.writeText(addr);
+    btn.textContent = "Copied";
+  } catch {
+    // Clipboard access is refused in plenty of ordinary situations. Select
+    // the text so ⌘C still works rather than showing a success that wasn't.
+    const code = btn.parentElement.querySelector("code");
+    const r = document.createRange();
+    r.selectNodeContents(code);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    btn.textContent = "Press ⌘C";
+  }
+  setTimeout(() => { btn.textContent = "Copy"; }, 2000);
 }
 
 // Plain words for the roles. "editor" is a database value, not a sentence.

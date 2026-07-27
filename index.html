@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.44.0 (banner and data-html-version move together, always)
+     Version 0.45.0 (banner and data-html-version move together, always)
+     0.45.0 (E40): #mirror-connect — the OUTBOUND half of the calendar
+     story finally explained in the app. The inbound walkthrough (0.44.0)
+     covers "show me my appointments"; this covers "put my tasks on my
+     calendar so my PHONE tells me", which is the half that actually
+     notifies anyone. app -> 1.26.0, css -> 0.51.0, config -> 1.2.0.
      0.44.0 (E39): #cal-connect — the connect-a-calendar walkthrough, in
      the app, beside the field it fills. SETUP-PHASE3-2.0 is the OPERATOR's
      one-time guide; there was nothing at all for the other twenty people,
@@ -276,9 +281,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.50.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.51.0">
 </head>
-<body data-html-version="0.44.0">
+<body data-html-version="0.45.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -826,6 +831,23 @@
         <p class="hint">A task speaks when it comes due and again on every step of <em>its own</em> escalation — the same schedule that turns it red, so a task set to nag hourly now chimes hourly. Project stages speak once when their deadline passes. Calendar events speak when they enter their lead window. Nothing makes a sound during sleep hours, and hidden tiers stay silent. An on-screen banner always appears; the sound and the system notification are the two switches above.</p>
         <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
         <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
+        <!-- E40 — the outbound half. This is the one that makes phones buzz. -->
+        <details id="mirror-connect">
+          <summary>🔔 How do I get reminders on my phone?</summary>
+          <div class="cal-steps">
+            <p class="hint">This app doesn't send notifications itself. Instead it <b>writes your dated tasks onto a Google Calendar you own</b> — and your phone already knows how to nag you about those. Your calendar becomes the alarm clock.</p>
+            <p><b>1.</b> In <b>Google Calendar</b>, left column, click <b>+</b> next to "Other calendars" → <b>Create new calendar</b>. Call it something like "Octodo". <b>Make a NEW one</b> — don't reuse a calendar you already keep appointments in.</p>
+            <p><b>2.</b> Open its <b>Settings and sharing</b> → <b>Share with specific people or groups → Add people</b> → paste this address, and set permission to <b>Make changes to events</b> (it has to write, not just read):</p>
+            <div class="robot-row">
+              <code id="mirror-robot">—</code>
+              <button id="mirror-robot-copy" class="mini" type="button">Copy</button>
+            </div>
+            <p><b>3.</b> Same page, scroll to <b>Integrate calendar</b>, copy the <b>Calendar ID</b>, and paste it in the box above.</p>
+            <p><b>4.</b> On your phone, make sure that calendar is switched on and has notifications enabled.</p>
+            <p class="hint">Your tasks appear there within the hour, at their real due times, and disappear when you check them off. Missed tasks in a ❗ tier also land on tomorrow morning at 9. <b>It is your calendar</b> — delete it and the mirroring simply stops.</p>
+            <p class="hint">Everyone gets their own. Two people <em>can</em> point at the same calendar if they want to see each other's work — each only ever adds and removes their own entries.</p>
+          </div>
+        </details>
         <p class="hint" id="poll-cost-hint"></p>
       </div>
 
@@ -1051,6 +1073,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.25.0"></script>
+  <script type="module" src="app.js?v=1.26.0"></script>
 </body>
 </html>

@@ -1,6 +1,28 @@
 // ============================================================
 // Tentacalendar 2.0 (Octodo) — Cloud Functions
-// functions/index.js — Version 1.1.0 (E14 work queue + E37 calendar guard)
+// functions/index.js — Version 1.2.0 (E14 queue · E37 guard · E40 ws-scoped tags)
+//
+// 1.2.0 — E40: THE MIRROR TAG IS NOW SCOPED PER WORKSPACE (`tcWs`).
+// 1.1.0 tagged every mirrored event `tcApp=octodo` and nothing else, then
+// listed by that tag and DELETED any event whose task it could not find. One
+// app, many workspaces — so if two workspaces ever pointed at the SAME mirror
+// calendar, each run would see the other's events as orphans and delete them.
+// Every hour. This is the identical failure the 1.x/2.0 tag split was written
+// to prevent (E36), one level further down, and it was still open.
+//
+// Fixed by adding `tcWs: <workspaceId>` to every written event and to the
+// list filter (privateExtendedProperty repeats and ANDs). Each workspace now
+// sees and prunes only its own events, which turns "two people share one
+// mirror calendar" from a mutual-deletion machine into something that simply
+// works — a household might well want exactly that.
+//
+// ⚠️ FREE ONLY BECAUSE NOTHING IS DEPLOYED YET. An event written by 1.0.0 or
+// 1.1.0 carries no tcWs, so it would fall outside the new filter, become
+// invisible, and never be pruned. There are no such events today. If this
+// ever changes after a real deploy, the migration is a one-off pass that
+// lists by tcApp alone and stamps tcWs onto anything missing it.
+//
+// (prev) Version 1.1.0 (E14 work queue + E37 calendar guard)
 //
 // 1.1.0 — ⚠️ CLOSES A REAL HOLE THAT 1.0.0 SHIPPED WITH, found by Jake
 // asking whether a colleague could end up with HIS calendar. He could have
@@ -142,7 +164,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "1.1.0";
+const FUNCTIONS_VERSION = "1.2.0";
 
 // ---- E14: the work queue's dials ----
 const BATCH = 5;               // workspaces claimed per run. Raise as users grow.
@@ -521,7 +543,8 @@ async function runMirror(cal, wsId, cfg, allTiers) {
   do {
     const r = await cal.events.list({
       calendarId: calId,
-      privateExtendedProperty: `tcApp=${TC_APP}`,
+      // E40 — both filters, ANDed: this app AND this workspace.
+      privateExtendedProperty: [`tcApp=${TC_APP}`, `tcWs=${wsId}`],
       maxResults: 250,
       pageToken
     });
@@ -538,7 +561,7 @@ async function runMirror(cal, wsId, cfg, allTiers) {
     description: `Tentacalendar${w.tier ? " · " + w.tier : ""}`,
     start: { dateTime: new Date(w.dueAt).toISOString() },
     end: { dateTime: new Date(w.dueAt + 30 * 60000).toISOString() },
-    extendedProperties: { private: { tcApp: TC_APP, tcTaskId: id } }
+    extendedProperties: { private: { tcApp: TC_APP, tcWs: wsId, tcTaskId: id } }
   });
 
   let created = 0, updated = 0, removed = 0;
@@ -631,7 +654,7 @@ async function runCarryover(cal, wsId, cfg, allTiers) {
   do {
     const r = await cal.events.list({
       calendarId: calId,
-      privateExtendedProperty: `tcApp=${TC_APP_CARRY}`,
+      privateExtendedProperty: [`tcApp=${TC_APP_CARRY}`, `tcWs=${wsId}`],   // E40
       timeMin: new Date(todayStart).toISOString(),
       maxResults: 250,
       pageToken
@@ -650,7 +673,7 @@ async function runCarryover(cal, wsId, cfg, allTiers) {
     colorId: "11", // tomato (D14)
     start: { dateTime: new Date(landsAt).toISOString() },
     end: { dateTime: new Date(landsAt + 30 * 60000).toISOString() },
-    extendedProperties: { private: { tcApp: TC_APP_CARRY, tcCarryKey: k, tcTaskId: w.taskId } }
+    extendedProperties: { private: { tcApp: TC_APP_CARRY, tcWs: wsId, tcCarryKey: k, tcTaskId: w.taskId } }
   });
 
   let created = 0, retimed = 0, removed = 0;

@@ -1,6 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.50.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.51.0  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.51.0 (E40): #mirror-connect shares #cal-connect's rules rather than
+   growing a second dialect for the same object (D104).
+   (prev) Version 0.50.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.50.0 (E39): #cal-connect, the collapsed calendar walkthrough, and
    .robot-row which has to hold a very long service-account address next
@@ -224,7 +228,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.50.0";
+  --tc-version: "0.51.0";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -342,13 +346,13 @@ button { cursor: pointer; font: inherit; }
 }
 .person-tag.deed { color: var(--accent); border-color: var(--accent); }
 /* E39 — the connect-a-calendar walkthrough */
-#cal-connect {
+#cal-connect, #mirror-connect {
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: .5rem .75rem; margin-bottom: .9rem; background: var(--panel-2);
 }
-#cal-connect summary { cursor: pointer; font-weight: 600; }
-#cal-connect .cal-steps { margin-top: .6rem; }
-#cal-connect p { margin: .45rem 0; font-size: .9rem; }
+#cal-connect summary, #mirror-connect summary { cursor: pointer; font-weight: 600; }
+.cal-steps { margin-top: .6rem; }
+#cal-connect p, #mirror-connect p { margin: .45rem 0; font-size: .9rem; }
 .robot-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 /* min-width:0 or the address refuses to shrink and widens the modal — D66 */
 .robot-row code {
