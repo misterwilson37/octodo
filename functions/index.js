@@ -1,6 +1,26 @@
 // ============================================================
 // Tentacalendar 2.0 (Octodo) — Cloud Functions
-// functions/index.js — Version 1.2.1 (E14 queue · E37 guard · E40 ws tags)
+// functions/index.js — Version 1.3.0 (E14 queue · E37 guard · E40 ws tags · fixtags)
+//
+// 1.3.0 — ?job=fixtags: THE REPAIR FOR MY OWN SEQUENCING FAILURE.
+// E40 (1.2.0) scoped mirror tags per workspace and I asserted it was free
+// "because nothing is deployed yet" — an assumption I never checked with the
+// person who does the deploying. It wasn't true: 1.1.0 was live and ran with
+// a mirror calendar set, so events exist carrying tcApp/tcTaskId and NO tcWs.
+// The new filter cannot see them, so 1.2.x would recreate every task as a
+// duplicate and never prune the originals.
+//
+// fixtags adopts them instead of deleting anything: for each workspace, it
+// lists its OWN mirror calendar by tcApp alone (the old, unscoped filter) and
+// stamps tcWs onto any event missing it, preserving tcTaskId/tcCarryKey. The
+// next ordinary mirror run then reconciles normally — anything whose task is
+// gone gets pruned by the logic that already exists.
+//
+// RUN ONCE:  curl -H "x-poll-secret: …" "https://…/?job=fixtags"
+// It is idempotent and safe to run repeatedly; a second run reports
+// everything as alreadyTagged and changes nothing.
+//
+// (prev) Version 1.2.1 (E14 queue · E37 guard · E40 ws tags)
 //
 // 1.2.1 — the mirror's "not configured" message pointed at "⚙️ Settings →
 // Calendar". THERE IS NO CALENDAR TAB; it is Timing, and the carryover's
@@ -173,7 +193,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "1.2.1";
+const FUNCTIONS_VERSION = "1.3.0";
 
 // ---- E14: the work queue's dials ----
 const BATCH = 5;               // workspaces claimed per run. Raise as users grow.
@@ -405,10 +425,67 @@ async function runWorkspace(cal, ws, job, force) {
       try { out.jobs.carryover = await runCarryover(cal, wsId, cfg, allTiers); }
       catch (err) { out.jobs.carryover = { error: String(err.message || err) }; }
     }
+    // Deliberately NOT part of "all" — a one-time repair should be asked for,
+    // not carried silently on every hourly run forever.
+    if (job === "fixtags") {
+      try { out.jobs.fixtags = await runFixTags(cal, wsId, cfg); }
+      catch (err) { out.jobs.fixtags = { error: String(err.message || err) }; }
+    }
   } catch (err) {
     out.error = String(err.message || err);
   }
   return out;
+}
+
+/**
+ * ONE-TIME REPAIR (1.3.0). Adopt pre-E40 events that carry no tcWs.
+ *
+ * Lists this workspace's own mirror calendar by tcApp ALONE — the old,
+ * unscoped filter — and stamps tcWs onto anything missing it. Nothing is
+ * deleted: the next ordinary mirror run reconciles, and prunes anything whose
+ * task no longer exists using logic that already works.
+ *
+ * `...p` matters: a patch on extendedProperties.private REPLACES the map, so
+ * spreading the existing properties is what keeps tcTaskId and tcCarryKey
+ * alive. Dropping them would orphan every event permanently — the exact
+ * problem this exists to fix, made worse.
+ *
+ * EDGE CASE, stated rather than discovered: if two workspaces somehow share a
+ * mirror calendar AND both have untagged events, whichever runs first adopts
+ * all of them. The following mirror run then prunes the ones whose tasks it
+ * cannot find, so the end state is still correct — just noisier than it looks.
+ */
+async function runFixTags(cal, wsId, cfg) {
+  const calId = (cfg.mirrorCalendarId || "").trim();
+  if (!calId) return { skipped: "no mirror calendar on this workspace — nothing to repair" };
+
+  let adopted = 0, alreadyTagged = 0;
+  for (const tag of [TC_APP, TC_APP_CARRY]) {
+    let pageToken;
+    do {
+      const r = await cal.events.list({
+        calendarId: calId,
+        privateExtendedProperty: `tcApp=${tag}`,   // the OLD filter, on purpose
+        maxResults: 250,
+        pageToken
+      });
+      for (const ev of r.data.items || []) {
+        if (ev.status === "cancelled") continue;
+        const p = ev.extendedProperties?.private || {};
+        if (p.tcWs) { alreadyTagged++; continue; }
+        await cal.events.patch({
+          calendarId: calId,
+          eventId: ev.id,
+          requestBody: { extendedProperties: { private: { ...p, tcWs: wsId } } }
+        });
+        adopted++;
+      }
+      pageToken = r.data.nextPageToken;
+    } while (pageToken);
+  }
+  return { calendar: calId, adopted, alreadyTagged,
+           note: adopted ? "run ?job=all next; the normal reconcile takes it from here"
+                         : "nothing needed fixing" };
 }
 
 /** Phase 3 step 1: calendars → eventsCache (unchanged logic, extracted). */
