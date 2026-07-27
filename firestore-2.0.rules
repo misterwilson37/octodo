@@ -1,0 +1,127 @@
+rules_version = '2';
+// ============================================================
+// Tentacalendar 2.0 — firestore.rules
+// Version 1.0.0 — the multi-workspace rules (design doc E1, E5, E19)
+//
+// WHAT CHANGED FROM 1.x (0.2.0):
+//   · No allowlist. Anyone with a verified Google account may sign in and
+//     create their OWN workspace. They cannot reach anyone else's, because
+//     isolation is by PATH, not by field (E1). A user who is not a member
+//     of a workspace cannot construct a query that touches it.
+//   · Membership documents ARE the security boundary. Their existence
+//     grants read; their `role` grants write.
+//   · The activity log is append-only IN THE RULES, not by convention.
+//   · secrets/ denies everything, always, so an OAuth refresh token can
+//     never be read by any client — including its own owner's browser.
+//
+// ⚠️ BOOTSTRAP FIX (found 2026-07-25 while writing SETUP-2.0.md, against
+//    the design doc's §5 sketch, which had a DEADLOCK):
+//    §5 allowed writing members/{email} only if you were already an owner-
+//    role MEMBER. So the very first member document could never be created,
+//    and no workspace could ever be used by the person who made it.
+//    Fixed by rooting membership in the WORKSPACE DOCUMENT's ownerEmail:
+//    isWsOwner() reads workspaces/{wsId}.ownerEmail, which is set at
+//    creation and locked against modification below. That is the root of
+//    trust; member docs hang off it. This is why smoke.html exists — it
+//    walks exactly this sequence and proves it before any real code.
+//
+// Paste into: Firebase Console → Firestore Database → Rules → Publish
+// Test in:    the Rules Playground, on that same screen, BEFORE Publish
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null
+          && request.auth.token.email_verified == true;
+    }
+
+    // Lowercased throughout. Google returns canonical lowercase for gmail,
+    // but custom domains carry whatever casing an admin provisioned — and
+    // 2.0 will not always be gmail addresses. The literals and document ids
+    // MUST be lowercase or this means nothing (same warning as 1.x 0.2.0).
+    function me() {
+      return request.auth.token.email.lower();
+    }
+
+    function wsDoc(wsId) {
+      return /databases/$(database)/documents/workspaces/$(wsId);
+    }
+    function memberDoc(wsId) {
+      return /databases/$(database)/documents/workspaces/$(wsId)/members/$(me());
+    }
+
+    // The root of trust: whoever the workspace document says owns it.
+    // Survives having no member documents at all, which is what makes
+    // workspace creation possible.
+    function isWsOwner(wsId) {
+      return signedIn() && get(wsDoc(wsId)).data.ownerEmail == me();
+    }
+    function isMember(wsId) {
+      return signedIn() && exists(memberDoc(wsId));
+    }
+    function roleIn(wsId, roles) {
+      return isMember(wsId) && get(memberDoc(wsId)).data.role in roles;
+    }
+    function canRead(wsId)  { return isMember(wsId) || isWsOwner(wsId); }
+    function canWrite(wsId) { return roleIn(wsId, ['owner', 'editor']) || isWsOwner(wsId); }
+
+    // ---- user profiles: yours and only yours ----
+    match /users/{email} {
+      allow read, write: if signedIn() && email == me();
+    }
+
+    // ---- OAuth refresh tokens: no client access, ever (E19) ----
+    // Admin SDK bypasses rules, so the functions can still read them.
+    // This clause ships even if path B is never built, so the collection
+    // cannot be created by accident later.
+    match /secrets/{docId} {
+      allow read, write: if false;
+    }
+
+    match /workspaces/{wsId} {
+      allow read:   if canRead(wsId);
+      allow create: if signedIn()
+                    && request.resource.data.ownerEmail == me();
+      // ownerEmail is LOCKED after creation — otherwise an owner-role member
+      // could rewrite it and seize the root of trust.
+      allow update: if roleIn(wsId, ['owner'])
+                    && request.resource.data.ownerEmail == resource.data.ownerEmail;
+      allow delete: if isWsOwner(wsId);
+
+      match /members/{email} {
+        allow read:   if canRead(wsId);
+        // The workspace owner adds and removes anyone — including the very
+        // first member (themselves), which is the deadlock fix.
+        allow write:  if isWsOwner(wsId) || roleIn(wsId, ['owner']);
+        // Anyone may remove THEMSELVES from a workspace they were added to.
+        allow delete: if signedIn() && email == me();
+        // …and may edit their own row, but never their own role.
+        allow update: if signedIn() && email == me()
+                      && request.resource.data.role == resource.data.role;
+      }
+
+      match /activity/{docId} {
+        allow read:   if canRead(wsId);
+        // Viewers may write here and NOWHERE else — that is how kudos work
+        // (E10): a viewer can cheer, and cannot check anything off.
+        allow create: if canRead(wsId)
+                      && request.resource.data.actor == me();
+        // Append-only: only `reactions` may change after the fact.
+        allow update: if canRead(wsId)
+                      && request.resource.data.diff(resource.data)
+                           .affectedKeys().hasOnly(['reactions']);
+        allow delete: if false;
+      }
+
+      // tasks, tiers, projects, sessions, eventsCache, settings.
+      // ⚠️ ONE LEVEL DEEP, exactly like 1.x. If anything in 2.0 ever grows a
+      // sub-subcollection this silently stops covering it and must become
+      // {path=**}. Carried verbatim from 0.2.0 because it is still true.
+      match /{subcollection}/{docId} {
+        allow read:  if canRead(wsId);
+        allow write: if canWrite(wsId);
+      }
+    }
+  }
+}
