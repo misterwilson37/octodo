@@ -1,6 +1,15 @@
 // ============================================================
 // Tentacalendar 2.0 (Octodo) — Cloud Functions
-// functions/index.js — Version 1.2.0 (E14 queue · E37 guard · E40 ws-scoped tags)
+// functions/index.js — Version 1.2.1 (E14 queue · E37 guard · E40 ws tags)
+//
+// 1.2.1 — the mirror's "not configured" message pointed at "⚙️ Settings →
+// Calendar". THERE IS NO CALENDAR TAB; it is Timing, and the carryover's
+// message twelve lines below already said so. This is D84's error, which was
+// corrected in the docs in July and never in the string a user actually sees.
+// Caught in Jake's first live curl. Both messages now name the tab that
+// exists AND the walkthrough that explains it.
+//
+// (prev) Version 1.2.0 (E14 queue · E37 guard · E40 ws-scoped tags)
 //
 // 1.2.0 — E40: THE MIRROR TAG IS NOW SCOPED PER WORKSPACE (`tcWs`).
 // 1.1.0 tagged every mirrored event `tcApp=octodo` and nothing else, then
@@ -164,7 +173,7 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "1.2.0";
+const FUNCTIONS_VERSION = "1.2.1";
 
 // ---- E14: the work queue's dials ----
 const BATCH = 5;               // workspaces claimed per run. Raise as users grow.
@@ -386,7 +395,7 @@ async function runWorkspace(cal, ws, job, force) {
       // healthy row shouts a warning is a report nobody reads.
       out.jobs.poll = calTiers.length
         ? await runPoll(cal, wsId, calTiers)
-        : { skipped: "no anchor tier has a gcalCalendarId" };
+        : { skipped: "no calendar connected — ⚙️ Settings → Tiers, and open '📅 How do I show my Google Calendar here?'" };
     }
     if (job === "mirror" || job === "all") {
       try { out.jobs.mirror = await runMirror(cal, wsId, cfg, allTiers); }
@@ -521,7 +530,7 @@ function eventChanged(cur, next) {
  *  gets removed. Honest dueAt only — no escalation theater. */
 async function runMirror(cal, wsId, cfg, allTiers) {
   const calId = (cfg.mirrorCalendarId || "").trim();
-  if (!calId) return { skipped: "no mirrorCalendarId in ⚙️ Settings → Calendar" };
+  if (!calId) return { skipped: "no mirror calendar set — ⚙️ Settings → Timing, and open '🔔 How do I get reminders on my phone?' for the six clicks" };
   // LOOP GUARD: mirroring into a polled calendar would feed every
   // task back into the queue as its own doppelgänger anchor.
   const clash = allTiers.find(t => t.gcalCalendarId === calId);
@@ -614,7 +623,7 @@ async function runMirror(cal, wsId, cfg, allTiers) {
  */
 async function runCarryover(cal, wsId, cfg, allTiers) {
   const calId = (cfg.mirrorCalendarId || "").trim();
-  if (!calId) return { skipped: "no mirrorCalendarId in ⚙️ Settings → Timing — the carryover writes to the same dedicated calendar as the mirror" };
+  if (!calId) return { skipped: "no mirror calendar set — ⚙️ Settings → Timing. The carryover writes to the same dedicated calendar as the mirror, so setting one turns both on" };
   // Same loop guard as the mirror: never write into a calendar we poll.
   const clash = allTiers.find(t => t.gcalCalendarId === calId);
   if (clash) return { error: `mirrorCalendarId is the same calendar tier "${clash.name}" polls — that's a feedback loop. Use a dedicated calendar.` };
