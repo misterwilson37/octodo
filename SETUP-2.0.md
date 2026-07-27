@@ -1,6 +1,6 @@
 # SETUP-2.0.md — Standing up Tentacalendar 2.0
 
-**Version 1.2.0** · Written 2026-07-25 by Wunderpus · Companion to TENTACALENDAR-2.0-DESIGN.md 1.0.0
+**Version 1.3.0** · Written 2026-07-25 by Wunderpus · Companion to TENTACALENDAR-2.0-DESIGN.md 1.0.0
 
 > **What this is:** the browser-only walkthrough for creating the new Firebase project and repo that 2.0 lives in. Same shape as SETUP-PHASE3.md, which you followed successfully once already. No CLI, no admin tools, no terminal.
 >
@@ -9,6 +9,45 @@
 > **Time:** about 45 minutes, and it splits cleanly across two sittings at the line marked ⏸.
 >
 > **⚠️ NOTHING HERE TOUCHES KATIE'S PROJECT** — with one deliberate, read-only exception, called out at the top and nowhere else. Every step creates something new. If you find yourself in the `tentacalendar` console, you're in the wrong place — back out.
+
+---
+
+## ✅ COMPLETED 2026-07-26 — the foundation exists
+
+Jake ran this guide end to end. **Smoke test: all eight checks green, including the denial test.** The values below are real; a successor does not need to ask for them.
+
+| | |
+|---|---|
+| **Project name** | `octodo` |
+| **Project ID** | **`fantasktic-octodo`** (permanent — `octodo` was taken; the prefix is Nico's, *fantastic* + *task*) |
+| **Project number** | `470873844999` |
+| **OAuth public-facing name** | `octodo-tentacalendar` — chosen so school admin recognises it regardless of which domain it is served from. **This is what a colleague sees on the Google consent screen.** Good call. |
+| **Web app nickname** | `octodo` |
+| **Repo** | `github.com/misterwilson37/octodo` |
+| **Dev URL** | **`https://misterwilson37.github.io/octodo`** — no CNAME yet; the custom domain gets pointed from GitHub Pages at flip time |
+| **Edition codename** | **Octodo** |
+
+```js
+const firebaseConfig = {
+  apiKey: "AIzaSyCLfoNFU0PB38xDIX_l3l47KXjLSgKv2fQ",
+  authDomain: "fantasktic-octodo.firebaseapp.com",
+  projectId: "fantasktic-octodo",
+  storageBucket: "fantasktic-octodo.firebasestorage.app",
+  messagingSenderId: "470873844999",
+  appId: "1:470873844999:web:3abbbe071b2c87e64529a2"
+};
+```
+
+**Authorized domains already set** (verified from console): `localhost`, `fantasktic-octodo.firebaseapp.com`, `fantasktic-octodo.web.app`, `tentacalendar.misterwilson.org`, `octodo.misterwilson.org`, `misterwilson37.github.io`. Flip day needs no auth change — the destination was authorised in advance.
+
+### ⚠️ ONE CONSEQUENCE OF THE DEV URL, AND IT WILL BITE THE FIRST BUILD SESSION
+
+`misterwilson37.github.io/octodo` is a GitHub Pages **project site**, so the app is served from a **SUBPATH, not a domain root.** Two things follow:
+
+1. **Every path must be RELATIVE.** `./store.js`, never `/store.js`. An absolute path resolves to `misterwilson37.github.io/store.js` and 404s. 1.x already imports with `./` throughout (D26), so porting is safe — but any new absolute reference, in HTML, JS, CSS or the manifest, breaks silently at the subpath and works fine once the custom domain lands. **That is the worst possible timing for a bug: invisible during development, invisible after launch, broken only in between.**
+2. **`localStorage` is shared with every other page on `misterwilson37.github.io`.** During development the origin is the whole github.io host, not the project. Namespace keys deliberately — which 2.0 wants anyway, since preferences become per-user.
+
+Neither affects Katie: E4 still holds, her flip lands on `tentacalendar.misterwilson.org`, and her existing preferences live at that origin untouched.
 
 ---
 

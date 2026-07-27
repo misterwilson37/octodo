@@ -1,7 +1,33 @@
 rules_version = '2';
 // ============================================================
 // Tentacalendar 2.0 — firestore.rules
-// Version 1.0.0 — the multi-workspace rules (design doc E1, E5, E19)
+// Version 1.1.0 — dependent workspaces + the lockout fix (E32, E33, E34)
+//
+// WHAT CHANGED FROM 1.0.0 — three things, all found by walking Jake's own
+// description of Nico through the 1.0.0 file rather than by reading it:
+//
+//   1. A MINOR CANNOT HAND BACK THEIR KEY (E33). 1.0.0 let anyone remove
+//      THEMSELVES from a workspace. Nico could not remove his parents — but
+//      he could remove himself from his own board, and the app would then
+//      cheerfully build him a fresh one his parents do NOT hold. Same
+//      lockout, different door. A member document may now carry minor:true,
+//      which blocks self-removal AND blocks that member from clearing the
+//      flag on their own row.
+//
+//   2. YOU CAN NOW LIST THE HOUSES YOU HOLD KEYS TO (E34). The board
+//      switcher has to ask "which workspaces am I a member of," and a rule
+//      nested under /workspaces/{wsId} cannot answer a collectionGroup
+//      query. The new top-level clause permits exactly one question — "show
+//      me member documents whose id is MY email" — which can only ever
+//      return rows about the asker.
+//
+//   3. Nothing about ownership changed, because nothing needed to. Katie
+//      owning her own house and Jake owning Nico's are the SAME mechanism
+//      aimed in opposite directions (E32). ownerEmail was already the
+//      permanent root of trust; on a dependent workspace that permanence
+//      stops being a caveat and becomes the entire point.
+//
+// (prev) Version 1.0.0 — the multi-workspace rules (design doc E1, E5, E19)
 //
 // WHAT CHANGED FROM 1.x (0.2.0):
 //   · No allowlist. Anyone with a verified Google account may sign in and
@@ -79,6 +105,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ---- "which houses do I hold a key to?" (E34) ----
+    // The board switcher runs collectionGroup('members').where(email == me).
+    // A collectionGroup query is NOT covered by rules nested under
+    // /workspaces/{wsId}, so it needs its own clause at the top level.
+    // This grants strictly less than it looks like: the document id IS the
+    // member's email, so the only rows this can ever return are the asker's
+    // own. It cannot enumerate a workspace's membership, and it cannot see
+    // a workspace the asker was never added to — there is no document there
+    // to read. Read-only on purpose; every write still goes through the
+    // nested rules below.
+    match /{path=**}/members/{email} {
+      allow read: if signedIn() && email == me();
+    }
+
     match /workspaces/{wsId} {
       allow read:   if canRead(wsId);
       allow create: if signedIn()
@@ -94,11 +134,25 @@ service cloud.firestore {
         // The workspace owner adds and removes anyone — including the very
         // first member (themselves), which is the deadlock fix.
         allow write:  if isWsOwner(wsId) || roleIn(wsId, ['owner']);
-        // Anyone may remove THEMSELVES from a workspace they were added to.
-        allow delete: if signedIn() && email == me();
-        // …and may edit their own row, but never their own role.
+
+        // Anyone may remove THEMSELVES from a workspace they were added to —
+        // UNLESS they are flagged as a minor on that workspace (E33).
+        // Without this, Nico's exit from his own board is a self-service
+        // button, and what he lands on afterwards is a brand-new workspace
+        // that HE owns and his parents have never heard of. Note `minor` is
+        // read with a default, so the ~all rows that lack the field are
+        // unaffected and no migration is needed.
+        allow delete: if signedIn() && email == me()
+                      && resource.data.get('minor', false) == false;
+
+        // …and may edit their own row: display name, the `hidden` flag that
+        // keeps a board out of their own switcher — but never their own
+        // role, and never their own minor flag. That second clause is the
+        // one that matters: a guard a child can switch off is decoration.
         allow update: if signedIn() && email == me()
-                      && request.resource.data.role == resource.data.role;
+                      && request.resource.data.role == resource.data.role
+                      && request.resource.data.get('minor', false)
+                         == resource.data.get('minor', false);
       }
 
       match /activity/{docId} {

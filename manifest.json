@@ -1,0 +1,17 @@
+{
+  "name": "Tentacalendar",
+  "short_name": "Tentacalendar",
+  "description": "Accountability calendar — the queue, the week board, the year.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "background_color": "#0a0f14",
+  "theme_color": "#0a0f14",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

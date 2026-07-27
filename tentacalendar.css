@@ -1,0 +1,1774 @@
+/* ============================================================
+   Tentacalendar — tentacalendar.css
+   Version 0.48.0  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.48.0 (E34): the board switcher — .board-chip in the header (colour dot,
+   board name, caret) and .board-menu beneath it. .board-chip.visiting marks
+   a board you hold a key to but do not own, which is the "identifier in the
+   corner" that tells you whose house you are standing in. The menu is
+   position:absolute inside a position:relative wrapper rather than fixed,
+   so it rides the header and needs nothing from D37's drift rules.
+   (prev) Version 0.47.0  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.47.0 (E17, OCTODO LINE): #blocked-screen joins #auth-screen on the one
+   selector they share, so "signed in with nowhere to go" inherits the exact
+   centering and card the sign-in screen already had — D104's one-grammar
+   lesson applied to a new surface instead of inventing a second dialect.
+   Plus .blocked-detail, a quiet monospace line for the technical reason.
+   Two rules; everything else is 1.x's 0.45.1 byte for byte.
+   ⚠️ 0.46.0 IS SKIPPED DELIBERATELY AND FOREVER. At the 1.x origin that URL
+   has doubled bytes cached against it (see the 1.x 0.45.2 note); it was
+   never a version any file declared, only a ?v= that index.html requested
+   by mistake. Octodo is a different origin with a clean cache, so 0.46.0
+   would be technically safe here — and would still be a number meaning two
+   different things in two repos during the dual-fix window (E27). Not worth
+   the saved digit.
+   0.45.1 (D138): phone overflow fix. On <=600px the two .nav-slots may
+   shrink (min-width:0; flex:1 1 0) instead of holding 7.5rem each — that
+   fixed floor was forcing the whole queue panel wider than a 360px
+   viewport, clipping every row and word-stacking the date. Patch, not
+   minor: no feature, one broken layout made correct. CSS only.
+   0.45.0 (D137): the alerter. #alert-toast (top-centre, z-index 141 so a
+   deploy banner at 140 can never bury an alert) + three level tints
+   (--alert-due/-nag/-soon) and a width for the volume slider. The
+   kiosk-idle override is load-bearing: D107 fades the wall's chrome
+   after 5 idle minutes, and an alarm that fades is not an alarm.
+   0.44.0 (D132): the follow-up chain builder in the New Task form —
+   .fu-chain-head, .fu-chain-row and its fuc-* children. Rows carry a
+   left border and panel-2 fill so the "and then, and then" indent is
+   visible as shape, not just implied by a dropdown. No new tokens.
+   0.43.0 (D130): #update-banner — a fixed bottom bar (z-index 140, above
+   modals so it's reachable even with Settings open), shown when the hourly
+   version check finds a newer deploy. Reuses --panel-2/--accent; no new
+   tokens. Outside #drift-wrap in the markup (D127).
+   0.42.0 (D120): the Time Report. .report-card widens the modal for a
+   table (920px vs the usual 640px); .report-controls, #report-table
+   (header/footer weight via border, right-aligned number columns, first
+   column left-aligned and allowed to wrap), .report-swatch (the project-
+   color dot). .clock-total.clickable adds the pointer cursor + hover —
+   the base .clock-total keeps cursor:default for the (now rarer) case
+   where a project has no logged time and the span isn't rendered at all.
+   0.41.0 (D126): have-tos/want-tos. .t-timeless-label mirrors .t-carry-label
+   for the tier editor's new ⏳ checkbox. Everything else — the .tab-bar
+   toggle atop #queue-panel, the want-tos header, the want-tos project
+   cards — reuses existing classes (.tab-bar/.tab-btn, .day-nav, .hint,
+   .project-card) on purpose: D104's "one control grammar" lesson applied
+   to a whole new surface instead of inventing a parallel one.
+   0.40.0 (D125): phone fit + dash scroll. text-size-adjust:100% stops
+   mobile Chrome font-boosting (was ballooning the day header ~2x and
+   breaking "Today — Sat, Jul 18" one-word-per-line); .day-nav h2 gains
+   min-width:0 and phones get slimmer panel padding. And #dash-bottom >
+   section now align-self:stretch — #projects-panel's base align-self:start
+   was collapsing it to content height in the dash row, defeating its own
+   overflow-y (the agenda scrolled, the pipeline didn't).
+   0.39.0 (D124): project-type library controls — #pipeline-picker-row
+   alignment, .mini:disabled (Default can't be renamed/deleted), and the
+   #project-type-label picker on the new-project form.
+   0.38.0 (D123): the US-federal-holiday overlay — --holiday amber, the
+   .yvg-day.yvg-holiday dot on month/wall calendars, .yv-holiday-mark tick
+   on the timeline, .wv-holname ★ label on the week day heads, and the
+   #wv-overlays/#yv-overlays control groups sharing the .ctl-group family.
+   0.37.0 (D121/D122): #parade-banner/.parade-text (the ticker-tape
+   parade's gold name card — z 99: above the night face, UNDER the
+   confetti so the paper falls in front of the words), .now-bar family
+   (Katie's current-project bar with the live second hand), and
+   .clock-cluster — the D119 finish: the three clock controls right-align
+   and wrap as one unit; the 🕰 finally matches its siblings' size.
+   0.36.0 (D117/D119): .yv-bar.forced-full (click-to-expand, outranks the
+   size rules; D115 hitbox reverted), .project-dates goes flex with the
+   inline clock controls (.clock-row retired).
+   0.35.1 (D115): .yv-bar::after — the invisible ±5px tap hitbox.
+   0.35.0 (D112): .clock-row/.clock-btn(.running)/.clock-total — the
+   billable clock on project cards.
+   0.34.1 (D111): .rec-badge — the quiet ↻ on recurring queue rows.
+   0.34.0 (D109): .st-hurrah — the 🎆 stage toggle, ember/gold.
+   0.33.0 (D107): burn-in care — #screen-rest night face (wandering clock,
+   near-black not pure #000), body.kiosk-idle chrome dim (opacity-only, no
+   layout shift).
+   0.32.0 (D105, PHASE 4): THE DASHBOARD — pane geometry (#dashboard-view
+   flex shells, --dash-cols/--dash-rows shares), .dash-split dividers
+   (wv-split's two-axis siblings), 🗂 corner toggle, the ≥1200px gate on
+   the 🐙 button, and in-pane overrides (#year-view sheds its 1500px solo
+   cap; the FAB hides — adding projects lives on the other screens).
+   0.31.1 (D104): ONE control grammar — shared .view-nav/.view-ctls/
+   .ctl-group/.ctl-label family replaces the parallel .wv-modes/.wv-sizes
+   and .yv-layouts/.yv-modes/.yv-sizes sets. Two families doing one job
+   is the D98 parity-drift trap in CSS form; the dashboard is why now.
+   0.27.0 (D95): .well-travelled — a quiet mark on a task that's been
+   moved 3+ times. Not a scolding; a question.
+   0.26.1 (D94): .wv-split (drag the projects/days boundary) + .wv-row
+   time and title finally share a centre line. Z, not Y — old ideas
+   behaving, not new ones (Jake's versioning rule, D94).
+   0.26.0 (D92): .wv-edit — the ✎ on an expanded bar, so click can mean
+   expand/collapse without stranding the edit path.
+   0.25.0 (D91): #week-view height is pinned from JS (100% against a
+   parent with no height resolved to auto — that's why the day columns
+   walked off the bottom); .forced-full for a bar clicked open at compact
+   sizes; #wv-projects[data-size="full"] is now explicit.
+   0.24.0 (D90): .nav-slot (fixed-width, so ◀ ▶ never move when "back to
+   now" appears — all three views); #wv-projects[data-size] bar heights;
+   .wv-strip packs DENSE (grid's sparse cursor never backtracks, so a
+   2-event Friday claimed a 3rd row); .wv-dl hovers again (pointer-events
+   none had killed its own tooltip); .clickable affordance.
+   0.23.0 (D89): .wv-dayhead row (dates at the TOP), .view-switch labeled
+   3-way, .wv-modes week-start buttons, .wv-dl deadline blocks. The
+   .wv-load meter is GONE — it looked like progress and wasn't.
+   0.22.1 (D89): week type re-scaled for the real screen — a 55" 4K
+   WHITEBOARD at 4 feet, not a wall at 8. Caps raised so full-width
+   (~548px columns) uses the room instead of stranding tiny text in it.
+   0.22.0 (D88): #week-view — two spanning strips over seven queue
+   columns; clamp() type, min-width:0 on every text-bearing flex child.
+   0.21.1 (D84): #cfg-mirror-cal sizes to its row (flex:1, min 12rem).
+   0.21.0 (D82): .past-event rows (dimmed, struck time) in the
+   #earlier box; #earlier heading matches waiting/done.
+   0.20.0 (D80): #allday-strip + .banner pills — tier-tinted, ambient,
+   above the queue; "things that are happening" get a shelf of their
+   own instead of impersonating midnight appointments.
+   0.19.0 (D78): phone chrome — #jump-add and #signout-bottom exist
+   only inside the 1000px stacked-layout query (where the scroll pain
+   lives); there the header's ⏻ square hides and "Log out" appears in
+   words at the very bottom.
+   0.18.1 (D77): .yv-bar.dragging dims in place (the ghost IS the
+   preview now — no more chip straying over neighboring months).
+   0.18.0 (D74): .yv-ghost — the drag drop-preview: dashed accent
+   slots at body level (position:fixed) showing exactly where the
+   dragged dates land, in every row they cross.
+   0.17.0 (D72, Katie's catch): the Annual is QUARTERS — 4 rows × 3
+   months (was 3×4). Breakpoints now 850/520 → 3/2/1 columns,
+   MIRRORED in renderYearGrid (change together).
+   0.16.0 (D71): Annual compaction — dow row is skipped by JS in wall
+   mode, month padding/lane clearance tightened (.yvg-lanes margin 13px
+   in wall), so the fit math's 26px/month chrome estimate is honest.
+   0.15.0 (D70): .yv-bar.thin (borderless — a 1px border is most of a
+   3px hairline bar) for the Annual view's window-fit density floor.
+   NOTE: the Annual column breakpoints below (1150/850/520) are
+   MIRRORED in renderYearGrid's window-fit math — change both together.
+   0.14.0 (D69): YEAR WALL — #yv-grid.yv-wall lays the 12 .yvg-month
+   blocks in a 4-column grid (3 rows of 4, Jake's wall of calendars),
+   with compact head/dow/day typography; container queries step the
+   wall to 3/2/1 columns as it narrows (1 column ≈ the stacked Months
+   layout, a graceful phone fallback). .yv-sizes control beside the
+   other toggles.
+   0.13.0 (D68): month-grid layout (.yvg-*: month blocks, Sun–Sat dow
+   header, week rows with a day-cell backdrop + bar lanes on top,
+   weekend/out-of-month/today cell states), .yv-layouts toggle beside
+   the mode buttons, ＋ New project FAB (fixed bottom-right), and the
+   project-form modal card. Timeline bar heights moved to JS
+   window-height sizing (inline), so no fixed .yv-bar height here.
+   0.12.0 (D66 + form-overflow fix): THE ENDS BOX, finally — .form-row
+   labels are flex:1 with min-width:auto, and a flex item won't shrink
+   below its content's min width; two native date inputs exceed the
+   340px panel, so Ends hung off the right edge (a SECOND bug behind
+   the same screenshot as the 0.8.0 stagger). min-width:0 on the label
+   and its controls ends the saga. Year view: .yv-month gets
+   flex-basis:0 so header widths are truly day-proportional (labels
+   were drifting off the gridlines); day texture everywhere — faint
+   day lines, stronger Monday week lines, weekend shading blocks;
+   adaptive bar density (full 20px ≤4 lanes / half 10px ≤9 / quarter
+   5px beyond, labels only at full height — hover/tap carry names);
+   compact query sheds day lines first, week lines on very narrow.
+   0.11.0 (D65, PHASE 2): year view — .yv-nav/.yv-modes, quarter rows
+   (.yv-row: month headers flex-grown by day count, .yv-lanes with
+   absolutely positioned .yv-bar segments), D30a ghost/fill via inline
+   gradients, today marker, month gridlines, continuation clipping,
+   drag handles (.yv-handle, touch-action:none), legend, and the D27
+   compact container query (labels hide when the grid is narrow).
+   #popover gains pre-line whitespace for multi-line bar details.
+   0.10.0 (D64): responsive rows — queue/waiting/done lists are size
+   containers; when a list is ≥540px wide the two-line row collapses
+   to ONE line (checkbox · title+time · ▸ · chip · buttons), notes
+   still expanding full-width below. Narrow lists keep the D63
+   two-line layout. Pure CSS (container queries); unsupported
+   browsers just keep the two-line layout.
+   0.9.0 (D63): two-line row layout (.row-2l/.row-top/.row-actions/
+   .row-notes) — long titles wrap as prose instead of one-word phone
+   columns; notes toggle; #task-notes textarea matches inputs.
+   0.8.0: #project-form labels get the SAME column-flex treatment as
+   #task-form (they never had a display rule, so each label's height
+   depended on how its inline contents wrapped — Jake's staggered
+   Starts/Ends screenshot); .snooze-row; .label-line.
+   0.7.0: .st-ghost (undated stages keep their columns via visibility —
+   the "name field ate the row" fix), dup review-form styles.
+   0.6.0 (D56/D52/D60/D58): collapsible project cards — header row
+   never wraps ([chevron][name wraps internally][pinned buttons]),
+   dates on their own .project-dates line, finished-projects toggle;
+   settings tab bar; per-tier day toggles (.t-days); stage-editor row
+   hardening (name field can no longer shove flags/✕ out of view:
+   min-width guards + wrap fallback — Jake's new-stage layout bug).
+   0.5.2: re-release of the project-card header fix + ship-check rule.
+   0.5.x: filter chips, modal-shell system, popover, decision rows.
+   ============================================================ */
+
+/* The hidden attribute applies display:none at UA-stylesheet priority,
+   which ANY author display rule silently overrides. Never let that
+   happen again. (Post-mortem: HANDOFF session log 2026-07-09 #5.) */
+[hidden] { display: none !important; }
+
+:root {
+  --tc-version: "0.48.0";
+  /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
+     colour says "which part of life", an alert colour says "how loud",
+     and overloading one onto the other would make a red Home task and an
+     overdue alert indistinguishable at a glance. */
+  --alert-due: #ff8787;
+  --alert-nag: #ffa94d;
+  --alert-soon: #74c0fc;
+  --bg: #0a0f14;
+  --panel: #101822;
+  --panel-2: #16212e;
+  --ink: #dce7f0;
+  --ink-dim: #8fa3b5;
+  --line: #1f2d3d;
+  --accent: #4dd0c4;          /* octopus teal */
+  --danger: #ff6b6b;
+  --holiday: #e6b84d;         /* federal-holiday amber (D123) */
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+/* D125 — stop mobile browsers from auto-inflating ("boosting") text.
+   Without this, Chrome on Android enlarged the day header far past its
+   1.15rem, wrapping it one word per line. We size type ourselves. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* D21 drift glides on the wrapper; D37: NEVER put transform on body —
+   it becomes the containing block for position:fixed descendants. */
+#drift-wrap { transition: transform 4s ease-in-out; }
+
+button { cursor: pointer; font: inherit; }
+
+/* ---------- Auth ---------- */
+/* E17 — the blocked screen is the sign-in screen wearing different words.
+   Same selector, so it cannot drift away from it (D104). */
+#auth-screen, #blocked-screen {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+}
+.auth-card {
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 3rem 4rem;
+}
+.auth-card .logo { font-size: 4rem; }
+.auth-card h1 { margin: .5rem 0 0; }
+.tagline { color: var(--ink-dim); margin: .4rem 0 1.6rem; }
+/* E17 — the technical reason, present for Jake and subordinate for everyone
+   else: readable if you look for it, never the first thing you read. */
+.blocked-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .78rem; color: var(--ink-dim); opacity: .75;
+  margin: 1rem auto 0; max-width: 34rem; word-break: break-word;
+}
+.auth-card .blocked-who { color: var(--ink-dim); font-size: .9rem; }
+
+/* ---------- E34: the board switcher ---------- */
+/* Absolutely positioned inside a relative wrapper, NOT fixed — a fixed
+   descendant would re-root against #drift-wrap's transform and wander (D37).
+   The header is a perfectly good containing block; use it. */
+.board-switch { position: relative; display: inline-flex; }
+.board-chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font: inherit; font-size: .85rem;
+  background: var(--panel-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: .25rem .6rem; cursor: pointer; max-width: 14rem;
+}
+.board-chip:hover { border-color: var(--accent); }
+#board-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-dot { width: .6rem; height: .6rem; border-radius: 50%; flex: 0 0 auto; background: var(--accent); }
+.board-caret { opacity: .6; font-size: .7rem; flex: 0 0 auto; }
+/* You are in someone else's house. Quiet, but never absent. */
+.board-chip.visiting { border-style: dashed; border-color: var(--accent); }
+.board-chip.visiting::after { content: "visiting"; opacity: .7; font-size: .7rem; }
+
+.board-menu {
+  position: absolute; top: calc(100% + .35rem); right: 0; z-index: 60;
+  min-width: 15rem; max-height: 60vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: .3rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+}
+.board-item {
+  display: flex; align-items: center; gap: .5rem; width: 100%;
+  font: inherit; font-size: .85rem; text-align: left;
+  background: none; color: var(--ink); border: 0; border-radius: 6px;
+  padding: .45rem .5rem; cursor: pointer;
+}
+.board-item:hover { background: var(--panel-2); }
+.board-item.current { background: var(--panel-2); font-weight: 600; }
+.board-item .who { color: var(--ink-dim); font-size: .75rem; margin-left: auto; flex: 0 0 auto; }
+
+/* People tab rows */
+.person-row {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .4rem .1rem; border-bottom: 1px solid var(--line);
+}
+.person-row .email { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.person-row .badge {
+  font-size: .7rem; color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: 999px; padding: .05rem .45rem;
+}
+
+/* ---------- Header ---------- */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.brand { font-weight: 700; font-size: 1.1rem; }
+.version { color: var(--ink-dim); font-size: .75rem; font-weight: 400; margin-left: .4rem; }
+.header-right { display: flex; align-items: center; gap: .5rem; }
+.user { color: var(--ink-dim); font-size: .85rem; }
+
+/* ---------- Layout ---------- */
+main {
+  display: grid;
+  grid-template-columns: 1fr 340px 300px;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+#queue-panel, #form-panel, #projects-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+#form-panel, #projects-panel { align-self: start; }
+#projects-panel h3:first-child { margin-top: 0; }
+
+/* ---------- Day nav ---------- */
+.day-nav { display: flex; align-items: center; gap: .6rem; margin-bottom: .8rem; }
+.day-nav h2 { margin: 0; font-size: 1.15rem; flex: 1; min-width: 0; text-align: center; }  /* D125 — min-width:0: wrap inside the box, don't blow out the row */
+
+/* ---------- Rows ---------- */
+.row {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .55rem .7rem;
+  margin-bottom: .45rem;
+}
+.row input[type="checkbox"] { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); flex-shrink: 0; }
+.row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.row-main strong { overflow-wrap: anywhere; }
+.sub { color: var(--ink-dim); font-size: .8rem; }
+.sub s { opacity: .7; }
+
+.chip {
+  color: #0a0f14; font-size: .7rem; font-weight: 700;
+  padding: .15rem .5rem; border-radius: 99px; flex-shrink: 0;
+}
+
+.overdue { border-color: var(--danger); }
+.overdue .sub { color: var(--danger); }
+.badge {
+  background: var(--danger); color: #0a0f14;
+  font-size: .68rem; font-weight: 700;
+  padding: .05rem .4rem; border-radius: 99px;
+}
+
+.event-row { opacity: .92; border-style: dashed; }
+.event-dot { flex-shrink: 0; }
+
+.pinned-row {
+  border-color: var(--accent);
+  background: #10262b;
+  animation: pinPulse 2.4s ease-in-out infinite;
+}
+@keyframes pinPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(77, 208, 196, .0); }
+  50%      { box-shadow: 0 0 0 4px rgba(77, 208, 196, .25); }
+}
+
+.waiting-row { opacity: .75; border-style: dotted; }
+.done-row { opacity: .6; }
+.done-row strong { text-decoration: line-through; text-decoration-color: var(--accent); }
+.badge-done { color: var(--accent); font-size: .85rem; }
+
+.empty { color: var(--ink-dim); text-align: center; padding: 2rem 0; }
+
+h3 { margin: 1.2rem 0 .5rem; font-size: .95rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ---------- Form ---------- */
+#task-form { display: flex; flex-direction: column; gap: .7rem; }
+#task-form label, #project-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--ink-dim); }
+#project-form .label-line { display: inline-flex; align-items: center; gap: .3rem; } /* "Workload ⓘ" stays one line */
+.form-row { display: flex; gap: .7rem; }
+/* min-width:0 is load-bearing: flex items refuse to shrink below their
+   content's min width, and two native date inputs out-minimum a 340px
+   panel — the Ends field hung off the screen until this. */
+.form-row label { flex: 1; min-width: 0; }
+.form-row input, .form-row select { min-width: 0; }
+input[type="text"], input[type="date"], input[type="time"], input[type="number"], select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: .5rem .6rem;
+  font: inherit;
+  width: 100%;
+}
+.esc-label { line-height: 1.7; }
+.esc-inputs { display: flex; gap: .4rem; }
+.esc-inputs input { width: 4.2rem; }
+
+.primary {
+  background: var(--accent); color: #06282a;
+  border: none; border-radius: 8px;
+  padding: .65rem 1rem; font-weight: 700;
+}
+.primary:hover { filter: brightness(1.1); }
+.icon-btn {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-dim); border-radius: 6px;
+  padding: .25rem .5rem;
+}
+.icon-btn:hover { color: var(--ink); border-color: var(--ink-dim); }
+.mini {
+  background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--ink-dim); border-radius: 6px;
+  padding: .25rem .6rem; font-size: .8rem;
+}
+.mini:disabled { opacity: .4; cursor: default; }   /* D124 — Default type can't be renamed/deleted */
+/* D124 — the project-type library controls */
+#pipeline-picker-row { align-items: center; gap: .4rem; flex-wrap: wrap; }
+#pipeline-picker-row label { flex: 0 1 auto; }
+#project-type-label { display: block; margin: .1rem 0 .3rem; }
+/* D132 — the follow-up chain builder in the New Task form. Rows are
+   indented under the task they hang off, so the "and then, and then"
+   shape is visible at a glance rather than implied by a dropdown. */
+.fu-chain-head { display: flex; align-items: center; gap: .5rem; }
+#fu-chain-rows:not(:empty) { display: flex; flex-direction: column; gap: .45rem; margin-top: .5rem; }
+.fu-chain-row {
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .45rem .5rem .5rem .6rem;
+  border-left: 2px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 0 6px 6px 0;
+}
+.fu-chain-row .fuc-top { display: flex; align-items: center; gap: .4rem; }
+.fu-chain-row .fuc-title { flex: 1; min-width: 0; }
+.fu-chain-row .fuc-when { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; font-size: .75rem; color: var(--ink-dim); }
+.fu-chain-row .fuc-n { width: 3.6rem; }
+.fu-chain-row .fuc-unit, .fu-chain-row .fuc-anchor { width: auto; flex: 0 1 auto; font-size: .75rem; padding: .3rem .4rem; }
+.fuc-anchor-fixed { font-size: .75rem; color: var(--ink-dim); }
+
+.hint { color: var(--ink-dim); font-size: .78rem; }
+.hint-inline { color: var(--ink-dim); font-size: .75rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* ---------- Modal system ---------- */
+#settings-modal, .modal-shell {
+  position: fixed; inset: 0;
+  background: rgba(4, 8, 12, .75);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+.modal-sm { width: min(420px, 100%); }
+.flex-spring { flex: 1; }
+.weekend-choices { display: flex; flex-direction: column; gap: .5rem; margin-top: .8rem; }
+.decision-row .row-main strong { color: var(--danger); }
+
+/* Tier filter chips (D47) */
+#tier-filters { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+.filter-chip {
+  border: 1px solid var(--line); border-radius: 99px;
+  background: transparent; color: var(--ink);
+  font-size: .72rem; font-weight: 600; padding: .2rem .6rem;
+}
+.filter-chip.chip-off { color: var(--ink-dim); opacity: .55; border-style: dashed; }
+
+/* Shared tap popover */
+#popover {
+  white-space: pre-line;
+  position: fixed; z-index: 130;
+  max-width: 300px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: .78rem;
+  padding: .5rem .65rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+}
+
+/* D130 — update banner: fixed bottom bar, above modals (140 > 130) so it's
+   always reachable, even with Settings open. */
+#update-banner {
+  position: fixed; z-index: 140;
+  left: 50%; transform: translateX(-50%);
+  bottom: 1.2rem;
+  display: flex; align-items: center; gap: .8rem;
+  background: var(--panel-2, var(--panel));
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: .7rem 1rem;
+  box-shadow: 0 6px 24px rgba(0,0,0,.55);
+  max-width: 92vw;
+}
+#update-msg { font-size: .85rem; color: var(--ink); }
+
+/* D137 — the alert toast. TOP-centre on purpose: the update banner owns
+   the bottom, and on the wall the agenda's live rows are down there too.
+   z-index 141 clears the banner (140) so a deploy notice can't bury an
+   alert. Reuses --panel-2/--accent; the only new tokens are the two
+   level tints, which exist so "due" and "soon" are distinguishable at a
+   glance across a room without reading the words. */
+#alert-toast {
+  position: fixed; z-index: 141;
+  left: 50%; transform: translateX(-50%);
+  top: 1.2rem;
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--panel-2, var(--panel));
+  border: 1px solid var(--alert-due);
+  border-left: 5px solid var(--alert-due);
+  border-radius: 10px;
+  padding: .65rem 1.1rem .65rem .9rem;
+  box-shadow: 0 6px 26px rgba(0,0,0,.6);
+  max-width: 92vw; cursor: pointer;
+  animation: alert-in .28s ease-out;
+}
+#alert-toast[data-level="nag"]  { border-color: var(--alert-nag);  border-left-color: var(--alert-nag); }
+#alert-toast[data-level="soon"] { border-color: var(--alert-soon); border-left-color: var(--alert-soon); }
+#alert-toast-level {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--alert-due); white-space: nowrap; font-weight: 700;
+}
+#alert-toast[data-level="nag"]  #alert-toast-level { color: var(--alert-nag); }
+#alert-toast[data-level="soon"] #alert-toast-level { color: var(--alert-soon); }
+#alert-toast .at-text { display: flex; flex-direction: column; min-width: 0; }
+#alert-toast strong { font-size: .95rem; color: var(--ink); }
+#alert-toast .at-text span { font-size: .78rem; opacity: .75; }
+@keyframes alert-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+/* The kiosk dims its chrome after 5 idle minutes (D107) — an ALERT must
+   not dim with it. That is the entire point of the alert. */
+body.kiosk-idle #alert-toast { opacity: 1 !important; }
+#cfg-alert-vol { vertical-align: middle; width: 8rem; }
+
+.proj-stage-done .st-name { text-decoration: line-through; opacity: .6; }
+.st-flags { font-size: .75rem; color: var(--accent); white-space: nowrap; }
+.stage-tmpl-row .st-dir { width: 5.2rem; }
+.stage-tmpl-row .st-anchor { width: 4.6rem; }
+.modal-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.2rem;
+  width: min(640px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; }
+.modal-head h2 { margin: 0; }
+.modal-card label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--ink-dim); margin: .3rem 0; flex-wrap: wrap; }
+.modal-card input[type="number"] { width: 4.5rem; }
+#cfg-mirror-cal { flex: 1; min-width: 12rem; }
+.modal-foot {
+  margin-top: 1.2rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+}
+.form-actions { display: flex; gap: .5rem; align-items: center; }
+.hint.warn { color: #ffa94d; min-height: 1em; }
+
+/* ---------- D120: THE TIME REPORT ---------- */
+.report-card { width: min(920px, 96vw); }
+.report-controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: .6rem; }
+#report-table-wrap { overflow-x: auto; margin: .6rem 0; }
+#report-table { border-collapse: collapse; width: 100%; font-size: .82rem; white-space: nowrap; }
+#report-table th, #report-table td { padding: .35rem .6rem; text-align: right; border-bottom: 1px solid var(--line); }
+#report-table th:first-child, #report-table td:first-child { text-align: left; white-space: normal; }
+#report-table thead th { color: var(--ink-dim); font-weight: 600; border-bottom: 1px solid var(--ink-dim); }
+#report-table tfoot td { border-top: 1px solid var(--ink-dim); border-bottom: none; font-weight: 600; }
+.report-swatch {
+  display: inline-block; width: .6rem; height: .6rem; border-radius: 50%;
+  margin-right: .4rem; vertical-align: middle;
+}
+.clock-total.clickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.clock-total.clickable:hover { color: var(--ink); }
+
+.tier-row {
+  display: flex; align-items: center; gap: .45rem;
+  margin-bottom: .4rem;
+  flex-wrap: wrap;
+}
+.tier-row .t-rank { width: 3.2rem; }
+.tier-row .t-name { flex: 1; min-width: 7rem; }
+.tier-row .t-color { width: 2.6rem; padding: 0; height: 2.1rem; }
+.tier-row .t-kind { width: 6.5rem; }
+.tier-row .t-cal { flex-basis: 100%; font-size: .8rem; }
+.t-carry-label { font-size: .75rem; white-space: nowrap; }
+.t-timeless-label { font-size: .75rem; white-space: nowrap; }   /* D126 */
+
+.info-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1rem; height: 1rem;
+  border: 1px solid var(--ink-dim); border-radius: 50%;
+  color: var(--ink-dim); font-size: .65rem; font-style: normal;
+  cursor: help; margin-left: .3rem; vertical-align: middle;
+}
+
+/* ---------- Phone ---------- */
+@media (max-width: 1000px) {
+  main { grid-template-columns: 1fr; }
+  #queue-panel { order: 1; }
+  #projects-panel { order: 2; }
+  #form-panel { order: 3; }
+  .auth-card { padding: 2rem 1.4rem; }
+  .user { display: none; }
+}
+/* D125 — reclaim horizontal room on phones so the header and chips breathe. */
+@media (max-width: 600px) {
+  #queue-panel, #projects-panel, #form-panel { padding: .7rem; }
+  .day-nav { gap: .35rem; }
+  /* D138 — THE OVERFLOW. The two .nav-slots flanking the day label are
+     `flex: 0 0 auto; min-width: 7.5rem` (D90, so ◀ ▶ don't jump when
+     "back to today" appears). That's ~15rem of REFUSE-TO-SHRINK width in
+     a row that also holds ◀ ▶ ⛶ — on a 360px phone the day-nav's
+     min-content exceeds the viewport, and because the queue panel's grid
+     track is minmax(auto,1fr) it inherits that floor (D66 landmine #5).
+     The whole panel goes wider than the glass: every row clips at the
+     screen edge AND the starved h2 word-stacks into "Thu, / Jul / 23".
+     One line, both symptoms. On phones the slots may shrink — the jump
+     they prevent is a non-issue on a screen this narrow, where "back to
+     today" wraps to its own line regardless. The wall keeps its 7.5rem. */
+  .day-nav .nav-slot, .wanttos-nav .nav-slot { min-width: 0; flex: 1 1 0; }
+  .day-nav .nav-slot .mini { white-space: normal; }
+}
+
+/* ---------- Projects panel ---------- */
+.project-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .7rem;
+  margin-bottom: .7rem;
+}
+.project-done { opacity: .55; }
+/* D56: the header row NEVER wraps — [chevron][name][buttons] stay on
+   one line; long names wrap INSIDE their own box; dates live on the
+   .project-dates line below. Whole header is a tap target. */
+.project-head { display: flex; align-items: flex-start; gap: .35rem; flex-wrap: nowrap; cursor: pointer; }
+.project-head strong { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.proj-chevron { flex: 0 0 auto; color: var(--ink-dim); font-size: .8rem; padding-top: .1rem; width: .9rem; }
+.proj-btns { flex: 0 0 auto; display: flex; gap: .2rem; }
+.project-dates { margin: .15rem 0 .3rem 1.25rem; white-space: normal; }
+.finished-toggle { display: block; width: 100%; text-align: left; margin-top: .3rem; }
+
+.progress-wrap {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  height: 14px;
+  margin: .5rem 0 .6rem;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .5s ease;
+}
+.progress-label {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .62rem; font-weight: 700; color: var(--ink);
+  text-shadow: 0 0 3px rgba(0,0,0,.8);
+}
+
+.stage-list { display: flex; flex-direction: column; gap: .1rem; }
+.stage-row {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .2rem .3rem;
+  border-radius: 6px;
+  font-size: .85rem;
+}
+.stage-row input[type="checkbox"] { width: .95rem; height: .95rem; accent-color: var(--accent); }
+.stage-name { flex: 1; overflow-wrap: anywhere; }
+.stage-done .stage-name { text-decoration: line-through; color: var(--ink-dim); }
+.stage-active {
+  background: rgba(77, 208, 196, .1);
+  border-left: 3px solid var(--accent);
+}
+.stage-badge {
+  font-size: .62rem; color: var(--ink-dim);
+  border: 1px solid var(--line); border-radius: 99px;
+  padding: .05rem .4rem; white-space: nowrap;
+}
+.stage-badge.clickable { cursor: pointer; }
+.stage-badge.clickable:hover { color: var(--ink); border-color: var(--ink-dim); }
+.stage-due-btn { font-size: .7rem; padding: .05rem .3rem; }
+.stage-proj { font-weight: 700; }
+
+/* ---------- Stage template editor (settings) ---------- */
+.stage-tmpl-row {
+  display: flex; align-items: center; gap: .4rem;
+  margin-bottom: .35rem;
+}
+.st-move { display: flex; flex-direction: column; }
+.st-move button {
+  background: transparent; border: none; color: var(--ink-dim);
+  font-size: .55rem; padding: 0 .2rem; line-height: 1.1;
+}
+.st-move button:hover { color: var(--ink); }
+/* 0.6.0 hardening: the name input must never shove the flags/✕ out of
+   view. min-width:0 lets it shrink (inputs refuse by default), width:
+   auto beats the global input width:100%, and the row wraps as a last
+   resort instead of clipping. */
+.stage-tmpl-row { flex-wrap: wrap; }
+.stage-tmpl-row .st-name { flex: 1 1 7rem; min-width: 0; width: auto; }
+.st-off-label { white-space: nowrap; font-size: .8rem; }
+.stage-tmpl-row .st-off { width: 3.4rem; }
+.st-del {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-dim); border-radius: 6px; padding: .15rem .4rem;
+}
+
+/* ---------- Katie's wave (celebration level 3) ---------- */
+body.celebration-wave::after {
+  content: "";
+  position: fixed; inset: 0;
+  background: linear-gradient(105deg,
+    transparent 35%,
+    rgba(77, 208, 196, .10) 45%,
+    rgba(77, 208, 196, .22) 50%,
+    rgba(77, 208, 196, .10) 55%,
+    transparent 65%);
+  pointer-events: none;
+  z-index: 99;
+  animation: waveSweep 1.9s ease-in-out;
+}
+@keyframes waveSweep {
+  from { transform: translateX(-110%); }
+  to   { transform: translateX(110%); }
+}
+
+/* ---------- Settings tabs (D52) ---------- */
+.tab-bar {
+  display: flex; gap: .3rem; margin: .2rem 0 .8rem;
+  border-bottom: 1px solid var(--line);
+}
+.tab-btn {
+  background: transparent; border: 1px solid transparent; border-bottom: none;
+  color: var(--ink-dim); padding: .35rem .8rem; font-size: .85rem;
+  border-radius: 8px 8px 0 0; cursor: pointer;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active {
+  color: var(--ink); border-color: var(--line);
+  background: var(--panel); font-weight: 700;
+}
+
+/* ---------- Per-tier working-day toggles (D60) ---------- */
+.t-days {
+  flex-basis: 100%;
+  display: flex; gap: .35rem; align-items: center;
+  font-size: .72rem; color: var(--ink-dim);
+  margin: .1rem 0 .25rem 0; padding-left: .1rem;
+}
+.t-day { display: inline-flex; align-items: center; gap: .12rem; white-space: nowrap; cursor: pointer; }
+.t-day input { width: auto; margin: 0; accent-color: var(--accent); }
+
+
+/* ---------- 0.7.0 additions ---------- */
+/* Undated stages: anchor/offset hold their space invisibly so every
+   editor row's columns line up (display:none let the name input
+   swallow the vacancy and the row read as broken). */
+.st-ghost { visibility: hidden; }
+
+/* Duplicate review form (D62) */
+#dup-modal .dup-wide { flex: 1 1 100%; }
+#dup-modal .dup-wide input { width: 100%; }
+#dup-modal select { min-width: 6rem; }
+#dup-modal input[type="color"] { width: 2.6rem; padding: 0; height: 2.1rem; }
+
+
+/* Dup snooze row (D62 rev) */
+.snooze-row { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+
+
+/* ---------- D63: two-line rows + task notes ---------- */
+.row-2l { flex-direction: column; align-items: stretch; gap: .3rem; }
+.row-top { display: flex; align-items: flex-start; gap: .6rem; }
+.row-top input[type="checkbox"] { margin-top: .1rem; }
+.row-2l .row-main { flex: 1; }
+.row-main.has-notes { cursor: pointer; }
+.note-chev { flex-shrink: 0; }
+.row-actions { display: flex; align-items: center; gap: .3rem; }
+.row-spacer { flex: 1; }
+.row-notes {
+  font-size: .82rem; color: var(--ink-dim);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  border-top: 1px dashed var(--line);
+  padding: .35rem .15rem 0 1.8rem;
+}
+/* ---------- D64: one-line rows when the list is wide enough ----------
+   The lists are inline-size containers; each row asks "how wide is MY
+   list?" (the viewport is a liar here — at 1100px the desktop grid
+   gives the queue barely 300px). Wide list → row-top and row-actions
+   sit side by side on one line; expanded notes wrap to a full-width
+   line of their own. Browsers without container queries skip this
+   block and keep the two-line layout — a safe fallback by design. */
+#queue, #waiting-list, #done-list { container-type: inline-size; }
+
+@container (min-width: 540px) {
+  .row-2l { flex-direction: row; flex-wrap: wrap; align-items: center; gap: .6rem; }
+  .row-2l .row-top { flex: 1 1 auto; min-width: 0; }
+  .row-2l .row-actions { flex: 0 0 auto; }
+  .row-2l .row-actions .row-spacer { flex: 0 0 0; }
+  .row-2l .row-notes { flex-basis: 100%; }
+}
+
+#task-notes {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit; font-size: .9rem;
+  padding: .45rem .55rem;
+  resize: vertical;
+  min-height: 2.6rem;
+}
+
+
+/* ---------- D65: Year view (Phase 2) ---------- */
+#year-view { padding: 1rem; max-width: 1500px; margin: 0 auto; }
+/* D104: the year's nav/control styling now comes from the SHARED
+   .view-nav/.view-ctls/.ctl-group family (defined with the week's,
+   next to .view-switch) — one dialect for both views. Only the
+   year-specific spacing survives here: #year-view is not a flex
+   column, so the nav needs its own bottom margin (the week's comes
+   from #week-view's gap). */
+#year-view .view-nav { margin-bottom: .8rem; }
+
+/* ---------- D105: The Dashboard (Phase 4 — this is 1.0) ---------- */
+/* The panes are empty shells; JS reparents the REAL views into them.
+   Geometry only here — every panel keeps its own skin. The dividers are
+   wv-split's siblings: same grip, same hover, two axes. Boundaries move
+   LIVE on a CSS-var flip (flex-basis grows AND shrinks — the max-height
+   deadness of D104 cannot happen here); contents refit on release. */
+#dashboard-view {
+  display: flex; min-height: 0; overflow: hidden;
+  padding: .5rem .8rem .8rem;
+}
+.dash-pane {
+  position: relative; display: flex; flex-direction: column;
+  min-width: 0; min-height: 0; overflow: hidden;
+}
+#dash-left  { flex: 0 0 var(--dash-cols, 50%); overflow-y: auto; }  /* pinned bar sizes may outgrow the pane — the pane scrolls, the wall stays */
+#dash-right { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; }
+#dash-week  { flex: 0 0 var(--dash-rows, 55%); }
+#dash-bottom { flex: 1 1 0; flex-direction: row; gap: .8rem; }
+#dash-bottom > section { flex: 1 1 0; min-width: 0; align-self: stretch; overflow-y: auto; }  /* agenda + pipeline; D125 align-self:stretch overrides #projects-panel's base align-self:start so overflow-y actually has room to scroll */
+.dash-pane > #year-view { max-width: none; margin: 0; padding: .6rem; } /* the 1500px solo cap would waste half a 4K pane */
+#dashboard-view #yv-add-project { display: none; }  /* Jake: adding projects lives on the other screens — this is the glance wall */
+#dash-projects-toggle {
+  position: absolute; right: .6rem; bottom: .6rem; z-index: 6; opacity: .55;
+}
+#dash-projects-toggle:hover, #dash-projects-toggle.active { opacity: 1; }
+.dash-split { flex: 0 0 auto; position: relative; touch-action: none; z-index: 5; }
+.dash-split-v { width: 11px; margin: 0 -2px; cursor: col-resize; }
+.dash-split-h { height: 11px; margin: -2px 0; cursor: row-resize; }
+.dash-split::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--line); border-radius: 2px; transition: background .12s;
+}
+.dash-split-v::before { width: 3px; height: 62px; }
+.dash-split-h::before { width: 62px; height: 3px; }
+.dash-split:hover::before, .dash-split.dragging::before { background: var(--accent); }
+/* The dashboard is a big-glass creature (D105/Jake). Below 1200px the
+   button vanishes; setView bounces a persisted "dash" to Today at the
+   same threshold — CSS and JS agree on the number. */
+@media (max-width: 1199px) {
+  #view-switch button[data-view="dash"] { display: none; }
+}
+
+/* D117 — click-to-expand for year bars (the week's forced-full answer,
+   transplanted; D115's hitbox reverted at Jake's call — overlapping
+   pointer fields complicate expansion). An expanded bar rides ABOVE its
+   lane neighbours: readability over tightness is the whole point. */
+.yv-bar.forced-full {
+  z-index: 6;
+  box-shadow: 0 1px 7px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(255, 255, 255, .28);
+}
+.yv-bar.forced-full .yv-bar-label { display: inline-block; }
+
+/* D112/D119 — the clock, inline on the dates/weight line (a whole row of
+   vertical space returned to the cards). The running button glows accent;
+   the Σ is quiet — it's the answer, not the interface. */
+.project-dates { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.clock-btn { padding: .02rem .4rem; font-size: .68rem; }
+.clock-btn.running {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 6px rgba(77, 208, 196, .3);
+  opacity: 1;
+}
+.clock-total { font-size: .78rem; color: var(--ink-dim); cursor: default; }
+/* D119 finish — the three clock controls are ONE unit: right-aligned on
+   the dates line, wrapping together when the card is narrow (the 🕰 was
+   wrapping ALONE at full .icon-btn size — Jake's report, verbatim). The
+   🕰 wears .clock-btn now, so the size rule above slims it too. */
+.clock-cluster { display: inline-flex; align-items: center; gap: .35rem; margin-left: auto; }
+
+/* D122 — Katie's NOW bar: the current project, at the top of the list.
+   Border-left + tint come inline in the project's own color; the elapsed
+   span is the live second hand (updated by a 1s interval, no render). */
+.now-bar {
+  display: flex; align-items: center; gap: .55rem;
+  margin: 0 0 .55rem; padding: .45rem .6rem;
+  border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  border-radius: 8px; background: var(--panel-2);
+  cursor: pointer;
+}
+.now-bar:hover { border-color: var(--ink-dim); border-left-width: 4px; }
+.now-pulse { animation: nowPulse 2.4s ease-in-out infinite; }
+@keyframes nowPulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+.now-main { flex: 1 1 auto; min-width: 0; }
+.now-main strong { display: block; overflow-wrap: anywhere; line-height: 1.15; }
+.now-elapsed {
+  font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: 1.05rem; color: var(--ink); white-space: nowrap;
+}
+
+/* D121 — the parade banner. Fixed on <body> (outside #drift-wrap, D37);
+   z-index 99 = above the screen-rest night face (98) and UNDER the
+   confetti canvas (100), so the ticker tape falls in front of the words.
+   Solid gold + layered glow rather than gradient-clipped text — the old
+   Android tablet gets the same party as the 4K wall. */
+#parade-banner {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 99;
+}
+.parade-text {
+  opacity: 0;
+  font-size: clamp(1.6rem, 6vw, 5rem);
+  font-weight: 900; text-align: center;
+  padding: 0 4vw; overflow-wrap: anywhere;
+  color: #ffd700;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .75), 0 0 26px rgba(255, 215, 0, .55), 0 0 60px rgba(255, 169, 77, .35);
+}
+.parade-on .parade-text { animation: paradePop 5.2s cubic-bezier(.2, .9, .3, 1) forwards; }
+@keyframes paradePop {
+  0%   { opacity: 0; transform: scale(.4) rotate(-4deg); }
+  8%   { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  14%  { transform: scale(1) rotate(0deg); }
+  80%  { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 0; transform: scale(1.08) translateY(-14px); }
+}
+
+/* D111 — the ↻ recurrence badge on queue rows. Quiet by design: the row
+   is about the task, the badge just answers "will this come back?" */
+.rec-badge { opacity: .55; font-size: .85em; cursor: default; }
+
+/* D109 — the 🎆 toggle in both stage editors. Dim ember until it's THE
+   one; gold ring when it is. Opacity + shadow only: rows never reflow. */
+.st-hurrah { opacity: .35; filter: grayscale(.6); }
+.st-hurrah:hover { opacity: .8; filter: none; }
+.st-hurrah.active {
+  opacity: 1; filter: none;
+  box-shadow: inset 0 0 0 1px #ffd700, 0 0 6px rgba(255, 215, 0, .35);
+}
+
+/* ---------- D107: burn-in care ---------- */
+/* The rest face: near-black (NOT pure #000 — some panels treat it as
+   signal loss), dim ink, and the clock wanders — updateScreenRest() moves
+   --rest-x/y every minute, this transition glides it there over 40s. */
+#screen-rest {
+  position: fixed; inset: 0; z-index: 98;
+  background: #030507; cursor: pointer;
+}
+#rest-face {
+  position: absolute; left: var(--rest-x, 40%); top: var(--rest-y, 40%);
+  transition: left 40s linear, top 40s linear;
+  color: #2b3a44; user-select: none;
+}
+#rest-clock { font-size: clamp(2.2rem, 3.4vw, 5rem); font-weight: 600; letter-spacing: .02em; }
+#rest-date  { font-size: clamp(.9rem, 1.1vw, 1.6rem); margin-top: .2rem; opacity: .8; }
+#rest-hint  { font-size: clamp(.7rem, .7vw, 1rem); margin-top: 1rem; opacity: .45; }
+/* Idle chrome dim: the header and dividers are the wall's most static
+   bright pixels. pokeIdle() adds/removes the class; opacity so layout
+   never moves. Anything hovering them still works — they're dim, not gone. */
+body.kiosk-idle header,
+body.kiosk-idle .dash-split { opacity: .35; }
+header, .dash-split { transition: opacity 1.2s ease; }
+
+#yv-grid { container-type: inline-size; }
+.yv-row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .4rem .6rem .6rem;
+  margin-bottom: .6rem;
+}
+.yv-months { display: flex; }
+.yv-month {
+  font-size: .78rem; color: var(--ink-dim); font-weight: 600;
+  padding: .1rem .3rem .25rem; min-width: 0;
+  flex-basis: 0%; white-space: nowrap; overflow: hidden;
+  border-left: 1px solid var(--line);
+  cursor: pointer; user-select: none;
+}
+.yv-month:first-child { border-left: none; }
+.yv-month:hover { color: var(--ink); }
+.yv-month.yv-now { color: var(--accent); }
+.yv-day-tick { cursor: default; text-align: center; padding: .1rem 0 .25rem; font-weight: 400; }
+.yv-day-tick:hover { color: var(--ink-dim); }
+
+.yv-lanes { position: relative; }
+.yv-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.yv-todayline { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); opacity: .8; z-index: 2; }
+/* D123 — a federal holiday on the timeline: a thin amber tick. Sits just
+   proud of the lanes so the top sliver stays hoverable for its name. */
+.yv-holiday-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--holiday); opacity: .7; z-index: 2; border-radius: 1px; }
+.yv-dayline { opacity: .22; }
+.yv-weekline { opacity: .65; }
+.yv-weekend { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,.30); }
+
+.yv-bar {
+  position: absolute;
+  border-radius: var(--bar-r, 6px);
+  border: 1px solid rgba(255,255,255,.14);
+  display: flex; align-items: center;
+  overflow: hidden;
+  cursor: grab; touch-action: none; user-select: none;
+  z-index: 1;
+}
+.yv-bar:active { cursor: grabbing; }
+.yv-bar.cont-l { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; }
+.yv-bar.cont-r { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+.yv-bar.dragging { opacity: .35; } /* D77: the tinted ghosts are the moving preview */
+.yv-bar-label {
+  font-size: .68rem; font-weight: 700; color: #0a0f14;
+  padding: 0 .35rem; white-space: nowrap; overflow: hidden;
+  pointer-events: none; text-shadow: 0 0 3px rgba(255,255,255,.25);
+}
+.yv-handle {
+  position: absolute; top: 0; bottom: 0; width: 10px;
+  cursor: ew-resize; touch-action: none;
+}
+.yv-handle.l { left: 0; } .yv-handle.r { right: 0; }
+.yv-bar.thin { border: none; }
+.yv-ghost {
+  position: fixed; pointer-events: none; z-index: 50;
+  border: 1.5px dashed var(--accent); border-radius: 3px;
+  background: rgba(77, 208, 196, .12);
+}
+
+#yv-legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin-top: .2rem; }
+.yv-key { display: flex; align-items: center; gap: .35rem; font-size: .8rem; color: var(--ink-dim); }
+.yv-key .swatch { width: .8rem; height: .8rem; border-radius: 3px; flex-shrink: 0; }
+
+/* D27 compact: on a narrow grid (projector slice / phone) bar labels
+   hide — the legend and tap-popover carry the names. */
+@container (max-width: 700px) {
+  .yv-bar-label { display: none; }
+  .yv-bar.forced-full .yv-bar-label { display: inline-block; }   /* D117: expansion outranks the size rule */
+  .yv-month { font-size: .68rem; padding-left: .15rem; }
+  .yv-dayline { display: none; }
+}
+@container (max-width: 460px) {
+  .yv-weekline { display: none; }
+}
+
+
+/* ---------- D68: month-grid layout + project FAB/modal ---------- */
+.yvg-month {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .4rem .6rem .6rem;
+  margin-bottom: .6rem;
+}
+.yvg-head { font-size: .82rem; font-weight: 700; color: var(--ink-dim); cursor: pointer; padding: .1rem .2rem .3rem; user-select: none; }
+.yvg-head:hover { color: var(--ink); }
+.yvg-head.yv-now { color: var(--accent); }
+.yvg-dow { display: flex; }
+.yvg-dow span { flex: 1 1 0; text-align: center; font-size: .62rem; color: var(--ink-dim); opacity: .7; padding-bottom: .15rem; min-width: 0; }
+.yvg-week { position: relative; border-top: 1px solid var(--line); }
+.yvg-days { position: absolute; inset: 0; display: flex; }
+.yvg-day { flex: 1 1 0; min-width: 0; border-left: 1px solid var(--line); font-size: .62rem; color: var(--ink-dim); padding: 2px 0 0 4px; }
+.yvg-day:first-child { border-left: none; }
+.yvg-day.yvg-we { background: rgba(0, 0, 0, .30); }
+.yvg-day.yvg-out { color: transparent; background: rgba(0, 0, 0, .18); }
+.yvg-day.yvg-today { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+/* D123 — a holiday day: amber number + a small corner dot. Weekend/today
+   composition is intentional (today's teal ring still reads over the amber). */
+.yvg-day.yvg-holiday { color: var(--holiday); position: relative; }
+.yvg-day.yvg-holiday::after {
+  content: ""; position: absolute; top: 2px; right: 2px;
+  width: 3px; height: 3px; border-radius: 50%; background: var(--holiday);
+}
+.yvg-lanes { position: relative; margin-top: 15px; }
+
+#yv-add-project {
+  position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 20;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .5);
+}
+.yv-project-card { position: relative; max-width: 380px; width: 92vw; }
+.yv-modal-close { position: absolute; top: .55rem; right: .55rem; }
+
+
+/* ---------- D69: year wall (12 mini calendars, 4 × 3) ---------- */
+#yv-grid.yv-wall { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; } /* D72: rows ARE quarters */
+#yv-grid.yv-wall .yvg-month { margin-bottom: 0; padding: .3rem .45rem .45rem; }
+#yv-grid.yv-wall .yvg-head { font-size: .72rem; padding-bottom: .2rem; }
+#yv-grid.yv-wall .yvg-dow span { font-size: .55rem; }
+#yv-grid.yv-wall .yvg-day { font-size: .55rem; padding: 1px 0 0 2px; }
+#yv-grid.yv-wall .yvg-lanes { margin-top: 13px; } /* day numbers only — no dow row in wall (D71) */
+#yv-grid.yv-wall .yvg-head { padding-bottom: .1rem; }
+@container (max-width: 850px)  { #yv-grid.yv-wall { grid-template-columns: repeat(2, 1fr); } }
+@container (max-width: 520px)  { #yv-grid.yv-wall { grid-template-columns: 1fr; } }
+
+
+/* ---------- D82: earlier today (passed events) ---------- */
+#earlier { margin-top: 1rem; }
+#earlier h3 { color: var(--ink-dim); font-size: .85rem; }
+.past-event { opacity: .5; }
+.past-event .sub { text-decoration: line-through; }
+
+/* ---------- D78: phone chrome ---------- */
+#jump-add, #signout-bottom { display: none; }
+@media (max-width: 1000px) {
+  #jump-add { display: inline-flex; align-items: center; justify-content: center; font-size: 1.05rem; }
+  #signout-btn { display: none; }
+  #signout-bottom {
+    display: block;
+    margin: 1.6rem auto 2.2rem;
+    padding: .55rem 1.4rem;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--ink-dim);
+    font-size: .85rem;
+    cursor: pointer;
+  }
+  #signout-bottom:hover { color: var(--ink); border-color: var(--ink-dim); }
+}
+
+
+/* ---------- D80: all-day banner strip ---------- */
+#allday-strip { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
+#allday-strip[hidden] { display: none; }
+.banner {
+  font-size: .78rem; color: var(--ink);
+  padding: .22rem .6rem; border-radius: 999px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.banner .banner-span { color: var(--ink-dim); }
+
+/* ============================================================
+   D88 — THE WEEK VIEW
+   Built for a 55" 4K wall at a quarter width (~960px → ~137px per
+   column), read from across a room. Consequences, all deliberate:
+   · type scales with the viewport (clamp), not fixed rem — the same
+     markup has to survive a laptop tab AND the kiosk;
+   · nothing lives in a hover title alone (a wall display has no mouse);
+   · rows are two lines max, ellipsised, never wrapped into a word-stack
+     (flexbox's five scalps, D84 — min-width:0 on every flex child that
+     holds text);
+   · past days dim, they don't disappear.
+   ============================================================ */
+
+/* D90 — fixed-width parking spaces on either side of the label. The
+   "back to now" button lives in one of them, so ◀ and ▶ are nailed to
+   their positions whether it's showing or not. Three clicks forward
+   should be three clicks forward. */
+.nav-slot {
+  flex: 0 0 auto; min-width: 7.5rem;
+  display: flex; align-items: center;
+}
+#day-slot-fwd, #yv-slot-fwd, #wv-slot-fwd { justify-content: flex-end; }
+
+.clickable { cursor: pointer; }
+.clickable:hover { filter: brightness(1.35); }
+
+/* D90 — bar heights. Auto thins as the list grows; the DAYS are the
+   board's job and the bars are context. */
+#wv-projects[data-size="full"] .wv-proj { padding: .3rem .5rem .55rem; }
+#wv-projects[data-size="half"] .wv-proj { padding: .12rem .4rem .34rem; }
+#wv-projects[data-size="half"] .wv-proj-next { display: none; }
+#wv-projects[data-size="quarter"] .wv-proj { padding: .02rem .35rem .26rem; }
+#wv-projects[data-size="quarter"] .wv-proj-next,
+#wv-projects[data-size="quarter"] .wv-proj-pct { display: none; }
+#wv-projects[data-size="quarter"] .wv-proj-name { font-size: clamp(.6rem, .45vw, 1rem); }
+#wv-projects[data-size="hair"] { gap: .15rem; }
+#wv-projects[data-size="hair"] .wv-proj {
+  padding: 0; min-height: 7px; overflow: hidden;
+}
+#wv-projects[data-size="hair"] .wv-proj-name,
+#wv-projects[data-size="hair"] .wv-proj-next,
+#wv-projects[data-size="hair"] .wv-proj-pct { display: none; }
+#wv-projects[data-size="hair"] .wv-dl { border-width: 1px; }
+
+/* D91 — clicked open for a read. Beats every [data-size] rule above on
+   specificity (id + 2 classes), and is allowed to grow past its slot:
+   being readable matters more than being tidy (Jake). */
+#wv-projects .wv-proj.forced-full {
+  padding: .3rem .5rem .55rem; min-height: 0; overflow: visible;
+  box-shadow: inset 0 0 0 1px var(--accent); z-index: 2;
+}
+#wv-projects .wv-proj.forced-full .wv-proj-name,
+#wv-projects .wv-proj.forced-full .wv-proj-next,
+#wv-projects .wv-proj.forced-full .wv-proj-pct { display: inline; }
+#wv-projects .wv-proj.forced-full .wv-proj-name { font-size: clamp(.72rem, .58vw, 1.5rem); }
+
+/* D92 — the act-on-it affordance, only on a bar that's been opened for
+   a read. Sits above the deadline block so it stays clickable. */
+.wv-edit {
+  position: relative; z-index: 3;
+  padding: 0 .35rem; margin-left: .3rem;
+  font-size: .78rem; line-height: 1.4; flex-shrink: 0;
+}
+.wv-edit:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Safety net: the strips may never eat the whole board. */
+/* D91 — the ladder does its best, but 🧵 is the floor: enough bars will
+   still overflow it (50 hairs need 700px). So CSS is the BACKSTOP — the
+   strips may never take more than 38% of the board, and scroll instead.
+   The day columns are the board's job; the bars are context. This is a
+   % of a DEFINITE height, which only works because fitWeekHeight() pins
+   #week-view — before that, this rule would have silently done nothing. */
+/* D94 — the share is set by the splitter, not by me guessing. Still a %
+   of a DEFINITE height (fitWeekHeight pins #week-view), and 🧵 is still
+   the floor, so the strip scrolls when even hairs won't fit. */
+#wv-strips {
+  flex: 0 1 auto; max-height: var(--wv-strip, 34%);
+  min-height: 0; overflow-y: auto;
+}
+#wv-grid { flex: 1 1 auto; min-height: 8rem; }
+
+.wv-split {
+  flex: 0 0 auto; height: 9px; margin: -3px 0;
+  cursor: row-resize; position: relative;
+  touch-action: none;   /* pointermove must not be eaten by scrolling */
+}
+.wv-split::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 62px; height: 3px; border-radius: 2px;
+  background: var(--line); transition: background .12s;
+}
+.wv-split:hover::before, .wv-split.dragging::before { background: var(--accent); }
+
+.view-switch { display: flex; gap: .2rem; }
+.view-switch button {
+  padding: .25rem .55rem; font-size: .78rem; white-space: nowrap;
+  opacity: .55;
+}
+.view-switch button.active {
+  opacity: 1; background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
+}
+
+/* D104 — ONE control grammar for every view (Jake: "they should be more
+   uniform before we combine them"). .view-nav is the header row (arrows ·
+   slots · label · ⛶ · .view-ctls); the h2's flex:1 is what pushes the
+   controls right. .view-ctls wraps the canonical groups in ONE order —
+   Layout · Window · Bars — each a .ctl-group with a visible .ctl-label.
+   Retires .wv-modes/.wv-sizes/.yv-layouts/.yv-modes/.yv-sizes: parallel
+   families doing one job is the D98 parity-drift trap in CSS form. */
+.view-nav { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.view-nav h2 {
+  margin: 0; flex: 1; text-align: center; min-width: 0;
+  font-size: clamp(1.05rem, 1.1vw, 2rem);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.view-ctls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+.ctl-group { display: flex; align-items: center; gap: .25rem; }
+.ctl-label {
+  font-size: .7rem; color: var(--ink-dim); text-transform: uppercase;
+  letter-spacing: .05em; margin-right: .25rem;
+}
+.ctl-group button { padding: .2rem .5rem; font-size: .72rem; opacity: .55; }
+.ctl-group button.active {
+  opacity: 1; box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent);
+}
+
+/* D91 — height comes from fitWeekHeight() in JS, not from height:100%.
+   #app-screen has no height of its own, so 100% resolved to auto: the
+   section grew to fit its content, #wv-grid's flex:1 had nothing to
+   divide, and the columns ran off the bottom of the window. */
+#week-view {
+  display: flex; flex-direction: column;
+  gap: .6rem; padding: .8rem 1rem 1.2rem;
+  min-height: 0; overflow: hidden;
+}
+
+/* --- the two spanning strips --- */
+#wv-strips { display: flex; flex-direction: column; gap: .3rem; }
+/* D90 — grid-auto-flow DENSE. Default ("sparse") never walks the
+   placement cursor backward: once DnD forced row 2, every later banner
+   started looking from row 2, so Adventure Sci Camp took row 2 and TN
+   ACWC spilled to row 3 — while row 1, columns 6–7 sat empty. Dense
+   backtracks and fills the hole. Two events, two rows. */
+.wv-strip {
+  display: grid;
+  grid-template-columns: var(--wv-tracks, repeat(7, 1fr));   /* D103 — same var as #wv-grid: the heads cannot drift from their days */
+  grid-auto-flow: row dense;
+  gap: .3rem;
+  align-items: start;
+}
+.wv-strip[hidden] { display: none; }
+
+.wv-span {
+  position: relative;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: .3rem .5rem;
+  min-width: 0;
+  font-size: clamp(.75rem, .62vw, 1.6rem);
+  white-space: nowrap;
+  /* NO overflow:hidden here — it would clip the project pips, which sit
+     on the bar's bottom edge. Each child clips its own text instead. */
+}
+
+.wv-banner {
+  color: var(--ink); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.wv-proj { display: flex; align-items: baseline; gap: .4rem; padding-bottom: .55rem; }
+.wv-proj-name {
+  flex: 1; min-width: 0; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wv-proj-pct { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* Past the clear-the-deck line (D86): this one wants FINISHING. */
+.wv-proj.clear-deck { box-shadow: inset 0 0 0 1px var(--accent); }
+.wv-proj.clear-deck .wv-proj-pct { color: var(--accent); font-weight: 700; }
+.wv-proj-meter {
+  position: absolute; left: 0; bottom: 0; height: 3px;
+  opacity: .85; border-radius: 0 2px 2px 0;
+}
+/* A pip = a day this project actually wants something. */
+/* D89: the deadline DAY, as a block that lines up with its column —
+   a 7px dot was invisible on a 55" board (Jake's screenshot proved it). */
+/* D90: pointer-events:none here killed the tooltip this element exists
+   to carry. It's a sibling of the text, not an overlay on it. */
+.wv-dl {
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(255, 255, 255, .16);
+  border-left: 2px solid var(--ink);
+  border-right: 2px solid var(--ink);
+}
+.wv-dl.expired { background: rgba(255, 107, 107, .28); border-color: var(--danger); }
+.wv-proj.expired { box-shadow: inset 0 0 0 1px var(--danger); }
+.wv-proj-next {
+  color: var(--ink-dim); flex-shrink: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  font-size: clamp(.65rem, .5vw, 1.2rem);
+}
+.wv-pip {
+  position: absolute; bottom: 5px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--ink-dim);
+  border: 1px solid var(--panel);
+}
+.wv-pip.done { background: var(--accent); opacity: .5; }
+.wv-pip.active { background: var(--ink); box-shadow: 0 0 0 2px var(--panel); }
+
+/* --- seven columns --- */
+#wv-grid {
+  display: grid;
+  /* D103 — ONE source of truth for the week's tracks, shared with .wv-strip
+     below. JS sets --wv-tracks on #week-view when a layout wants unequal
+     columns (Tidal's compressed past days); everything else inherits plain 7.
+     A variable rather than an inline style, so the phone rule can still win. */
+  grid-template-columns: var(--wv-tracks, repeat(7, 1fr));
+  gap: .3rem;
+  flex: 1; min-height: 0;
+}
+
+.wv-col {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.wv-col.is-today { border-color: var(--accent); background: var(--panel-2); }
+.wv-col.is-past { opacity: .55; }   /* dimmed, NOT gone — D14's promise */
+/* ...unless it's carrying reflection. A day you're reading is not a day
+   you're ignoring, so the Wake gets its contrast back (D97). */
+.wv-col.is-past.cards-open { opacity: .85; }
+
+/* ============================================================
+   D97 — THE TIDAL GRID (layout #2 under Week)
+   A day is three kinds of time, and they don't share a container:
+   the anchor shelf (fixed, not ours), the flow (ours to arrange),
+   and — once the day is gone — the wake.
+   ============================================================ */
+
+.tidal-col { gap: 0; }
+
+/* THE ANCHOR SHELF — "visually distinct background to separate fixed time
+   from flexible time." Tinted, inset, and sitting ON TOP like a header,
+   because that's what a fixed commitment does to a day. */
+.tidal-anchor-shelf {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: .2rem;
+  padding: .3rem;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 -3px 6px -4px rgba(0, 0, 0, .6);
+  max-height: 40%; overflow-y: auto;
+}
+/* No color-mix (old Android tablet — D96's habitat)? Fall back to a flat
+   panel tone. The shelf must still READ as separate; it just won't be teal. */
+@supports not (background: color-mix(in srgb, red 10%, blue)) {
+  .tidal-anchor-shelf { background: var(--panel-2); }
+}
+.tidal-anchor-shelf.empty {
+  padding: .15rem .3rem;
+  background: transparent;
+  border-bottom: 1px dashed var(--line);
+  box-shadow: none;
+}
+.tidal-shelf-none {
+  font-size: .62rem; color: var(--muted); opacity: .5;
+  letter-spacing: .04em; text-align: center;
+}
+
+/* THE FLOW — everything that's yours to move. */
+.tidal-flow {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .3rem; display: flex; flex-direction: column; gap: .25rem;
+}
+
+/* THE WAKE — what the day actually did to you. */
+.tidal-wake {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .3rem; display: flex; flex-direction: column; gap: .3rem;
+}
+.tidal-wake-summary {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; justify-content: center; gap: .3rem;
+  padding: .25rem; border-radius: var(--radius);
+  background: var(--panel-2); border: 1px solid var(--line);
+  font-size: .78rem; font-variant-numeric: tabular-nums;
+  /* D89: NO BAR. A bar that has to be explained is a bar that's wrong.
+     These are two numbers that mean exactly what they say. */
+}
+.tidal-wake-summary.all-clear { border-color: var(--ok, #69db7c); }
+.twk-won { color: var(--ok, #69db7c); font-weight: 700; }
+.twk-sep { color: var(--muted); opacity: .5; }
+.twk-lost { color: var(--warn, #ffa94d); font-weight: 700; }
+.twk-lost.none { color: var(--muted); font-weight: 400; opacity: .6; }
+
+/* THE CARDS (5a-bis) — victories and put-offs. */
+.refl-cards { display: flex; flex-direction: column; gap: .3rem; }
+.refl-card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2); overflow: hidden;
+}
+.refl-head {
+  padding: .2rem .35rem; font-size: .64rem; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.refl-card.victories .refl-head { color: var(--ok, #69db7c); }
+.refl-card.putoffs .refl-head { color: var(--warn, #ffa94d); }
+
+.refl-vrow, .refl-prow {
+  display: flex; align-items: center; gap: .3rem;
+  padding: .22rem .3rem;
+  border-left: 3px solid transparent;
+  font-size: .7rem; min-width: 0;
+}
+.refl-vrow + .refl-vrow, .refl-prow + .refl-prow { border-top: 1px solid var(--line); }
+.tv-time { color: var(--muted); font-size: .62rem; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.tv-title, .tp-title {
+  flex: 1; min-width: 0;                     /* landmine #5: without this the
+     title's min-content pushes the tag off the column (D65) */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.refl-vrow .tv-title { text-decoration: line-through; text-decoration-color: var(--muted); opacity: .85; }
+.tv-flag, .tp-moved {
+  flex: 0 0 auto; font-size: .58rem; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tp-tag {
+  flex: 0 0 auto; font-size: .6rem; color: var(--muted);
+  white-space: nowrap;
+}
+/* Three flavours, three colours — "she moved it" and "nobody looked at it"
+   are opposite behaviours and must not look identical. */
+.refl-prow.flavor-moved   { border-left-color: var(--warn, #ffa94d); }
+.refl-prow.flavor-shelved { border-left-color: var(--muted); }
+.refl-prow.flavor-ignored { border-left-color: var(--danger); }
+.refl-prow.flavor-ignored .tp-tag { color: var(--danger); }
+.refl-prow.well-travelled { border-left-style: dotted; border-left-width: 4px; }
+.refl-prow.clickable { cursor: pointer; }
+.refl-prow.clickable:hover { background: var(--panel); }
+
+/* D98 — GANTESQUE's placement: the day list keeps the column and the cards
+   sit beneath it, capped so a busy Tuesday can't push the list off-screen.
+   Tidal's Wake REPLACES the list; that difference is the comparison. */
+.refl-cards.in-columns {
+  flex: 0 0 auto;
+  margin: 0 .3rem .3rem;
+  max-height: 45%;
+  overflow-y: auto;
+  border-top: 1px dashed var(--line);
+  padding-top: .3rem;
+}
+
+/* D99 — the day is empty and the cards are the whole story: let the list stop
+   claiming flex:1 (an invisible box was holding a column of air) and hand the
+   glass to the cards. No :has() — the class comes from JS, because the target
+   is still an old Android tablet (D96). */
+.wv-col.cards-fill .wv-list { flex: 0 0 auto; padding: 0; }
+.wv-col.cards-fill .refl-cards.in-columns {
+  flex: 1 1 auto;
+  max-height: none;
+  margin-top: .3rem;
+  border-top: none;
+  padding-top: 0;
+}
+
+/* Past day heads speak in past tense (D98). */
+.wv-done {
+  font-size: .62rem; font-weight: 700;
+  color: var(--ok, #69db7c); font-variant-numeric: tabular-nums;
+}
+.wv-putoff {
+  font-size: .62rem; font-weight: 700;
+  color: var(--warn, #ffa94d); font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   D100 — THE CLOCK GRID (layout #3 under Week)
+   Time is the vertical axis. Events own [start,end]; a task owns a
+   DEADLINE, so its block ENDS there and its runway trails UP (D93).
+   Only the overdue tail runs down.
+   ============================================================ */
+
+.clock-col { padding: 0; }
+.clock-face {
+  position: relative; flex: 1; min-height: 0;
+  overflow: hidden;
+}
+.clock-hour {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 1px solid var(--line);
+  opacity: .5; pointer-events: none;
+}
+.clock-hour.noon { opacity: .9; border-top-style: dashed; }
+.clock-hour-label {
+  position: absolute; left: 2px; top: 1px;
+  font-size: .55rem; color: var(--muted); opacity: .75;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  background: var(--panel); padding: 0 2px; border-radius: 2px;
+}
+.clock-now {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 2px solid var(--accent);
+  z-index: 4; pointer-events: none;
+  box-shadow: 0 0 6px -1px var(--accent);
+}
+
+.clock-block {
+  position: absolute; z-index: 2;
+  border-left: 3px solid var(--muted);
+  border-radius: 3px;
+  overflow: visible;
+  padding: 1px 3px;
+  min-height: 8px;
+  box-sizing: border-box;
+}
+.clock-block.clickable { cursor: pointer; }
+.clock-block.clickable:hover { z-index: 5; box-shadow: 0 0 0 1px var(--accent); }
+.cb-title {
+  display: block; font-size: .62rem; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* An EVENT is given, not guessed — solid, no grip, no dashes. */
+.clock-block.k-event { border-left-style: solid; }
+/* A task with no estimate is being DRAWN at a default, not measured.
+   The dashed edge is the app admitting it. */
+.clock-block.unestimated { border: 1px dashed var(--line); border-left-width: 3px; }
+.clock-block.expired { box-shadow: inset 0 0 0 1px var(--danger); }
+/* Its runway began yesterday — the block is clipped, and says so. */
+.clock-block.clipped { border-top: 2px dotted var(--warn, #ffa94d); border-top-left-radius: 0; border-top-right-radius: 0; }
+.clock-block.dragging { z-index: 6; box-shadow: 0 0 0 2px var(--accent); }
+
+/* The red tail: deadline → now. Hangs BELOW the block, because overdue is
+   the only direction that actually travels forward. */
+.clock-tail {
+  position: absolute; left: -3px; right: 0; top: 100%;
+  background: repeating-linear-gradient(
+    45deg, var(--danger), var(--danger) 3px,
+    transparent 3px, transparent 6px);
+  opacity: .55; border-left: 3px solid var(--danger);
+  pointer-events: none;
+}
+
+/* The grip: drag UP for more room. This is the estimate. */
+.clock-grip {
+  position: absolute; top: -3px; left: 0; right: 0; height: 7px;
+  cursor: ns-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .5rem; color: var(--accent); font-weight: 700;
+  z-index: 3;
+}
+.clock-grip::before {
+  content: ""; position: absolute; left: 25%; right: 25%; top: 3px;
+  height: 2px; border-radius: 2px; background: var(--muted); opacity: 0;
+}
+.clock-block:hover .clock-grip::before { opacity: .8; }
+.clock-block.dragging .clock-grip::before { opacity: 0; }
+
+/* THE HORIZON — undated inventory, spanning the week. */
+#tidal-horizon {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: .3rem;
+  flex-wrap: wrap;
+  padding: .3rem; margin-top: .3rem;
+  border: 1px dashed var(--line); border-radius: var(--radius);
+  background: var(--panel);
+  max-height: 20%; overflow-y: auto;
+}
+.th-label {
+  font-size: .62rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); flex: 0 0 auto;
+}
+.th-chip {
+  font-size: .68rem; padding: .12rem .4rem;
+  border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: 999px; background: var(--panel-2);
+  max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.th-chip.clickable { cursor: pointer; }
+.th-chip.clickable:hover { background: var(--panel); }
+.th-chip.well-travelled { border-left-style: dotted; }
+/* A follow-up cannot be scheduled — it materialises when its parent is
+   checked off (D4). It reads as inert on purpose: it is not an invitation. */
+.th-chip.blocked {
+  opacity: .45; border-style: dashed; border-left-color: var(--muted);
+  cursor: default;
+}
+.th-chip.blocked::before { content: "⛓ "; opacity: .7; }
+
+/* D89 — the date row, at the TOP of the board. */
+.wv-dayhead {
+  display: flex; align-items: baseline; gap: .4rem;
+  padding: .3rem .5rem; min-width: 0;
+  border-bottom: 2px solid var(--line);
+}
+.wv-dayhead.is-today { border-bottom-color: var(--accent); }
+.wv-dayhead.wv-holiday:not(.is-today) { border-bottom-color: var(--holiday); }  /* D123 — amber underline; today's teal still wins */
+.wv-dayhead.is-past { opacity: .5; }
+.wv-dayhead.is-today .wv-date { color: var(--accent); }
+.wv-left {
+  font-size: clamp(.62rem, .5vw, 1.15rem); color: var(--ink-dim);
+  margin-left: auto; white-space: nowrap;
+}
+.wv-left.none { opacity: .4; font-style: italic; }
+/* D123 — the holiday label on a week day head: amber ★ + abbreviation,
+   truncating with the full name in the head's title. Sits after the date,
+   before .wv-left (which keeps its margin-left:auto push to the right). */
+.wv-holname {
+  font-size: clamp(.55rem, .42vw, 1rem); color: var(--holiday);
+  font-weight: 600; white-space: nowrap; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.wv-missed {
+  font-size: clamp(.62rem, .5vw, 1.15rem); color: var(--danger);
+  font-weight: 700; white-space: nowrap;
+}
+.wv-dow {
+  font-size: clamp(.7rem, .55vw, 1.5rem);
+  color: var(--ink-dim); text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 700; flex-shrink: 0;
+}
+.wv-date {
+  font-size: clamp(.95rem, .8vw, 2.4rem);
+  font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.wv-col.is-today .wv-date { color: var(--accent); }
+
+.wv-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .3rem; display: flex; flex-direction: column; gap: .25rem;
+}
+.wv-clear {
+  color: var(--ink-dim); opacity: .45; text-align: center;
+  padding: .5rem 0; font-size: clamp(.68rem, .52vw, .95rem);
+  font-style: italic;
+}
+
+/* D94 — the time and the title were on different lines. Default grid
+   align-items is STRETCH, so the title span filled its area and its text
+   sat at the TOP, while .wv-when was align-self:center. Two different
+   font sizes, two different vertical anchors, one visible misalignment
+   (Jake: "the text of the event/task is not aligned with the time").
+   Centre the row and both settle onto the same line — with a sub, the
+   time still centres across both rows, which is what you want. */
+.wv-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "when title" "when sub";
+  align-items: center;
+  column-gap: .35rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 5px;
+  padding: .3rem .4rem;
+  min-width: 0;
+}
+.wv-row.expired { box-shadow: inset 0 0 0 1px var(--danger); }
+/* D95 — moved three times or more. A dotted edge, not a red one: this
+   isn't a failure, it's a pattern worth noticing. */
+.wv-row.well-travelled { border-left-style: dotted; border-left-width: 4px; }
+.wv-when {
+  grid-area: when;
+  font-size: clamp(.65rem, .5vw, 1.25rem);
+  color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  white-space: nowrap; align-self: center;
+}
+.wv-row.expired .wv-when { color: var(--danger); font-weight: 700; }
+.wv-title {
+  grid-area: title; min-width: 0;
+  font-size: clamp(.72rem, .58vw, 1.5rem); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wv-sub {
+  grid-area: sub; min-width: 0;
+  font-size: clamp(.62rem, .48vw, 1.2rem); color: var(--ink-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Stage rows read project-first, stage-second — the project is the noun. */
+.wv-row.k-stage .wv-title { font-weight: 700; }
+
+@media (max-width: 900px) {
+  /* The phone rule. Later than the var rule and equal specificity, so it
+     WINS — which is the point of using a variable instead of an inline
+     style, and why Tidal's compression correctly yields to it here. */
+  #wv-grid, .wv-strip { grid-template-columns: repeat(3, 1fr); }
+  /* ...but NOT the clock. Wrapping 7 days into 3 rows of 3 makes three
+     unrelated time axes, and hour labels only render in column i===0, so
+     rows 2 and 3 would have no axis at all. A clock column is shapes, not
+     text — it reads fine narrow. Two ids + a class beats one id. */
+  #week-view.l-clock #wv-grid,
+  #week-view.l-clock .wv-strip { grid-template-columns: var(--wv-tracks, repeat(7, 1fr)); }
+  #week-view.l-clock .cb-title { font-size: .55rem; }
+  .wv-span { grid-column: auto !important; }
+}

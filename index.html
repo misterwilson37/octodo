@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — index.html
+     Version 0.42.0 (banner and data-html-version move together, always)
+     0.42.0 (E32/E34): the BOARD SWITCHER (#board-switch) in the header and a
+     People tab in Settings — invite, revoke, change access, and create a
+     dependent workspace for a child. Pins: app -> 1.23.0, css -> 0.48.0,
+     store -> 0.19.0 via app's import.
+     ---- OCTODO LINE (Tentacalendar 2.0) ----
+     0.41.0 (E17): #blocked-screen — "signed in with nowhere to go" is a real
+     screen now. Nico signed into 1.x, got bounced to the login page, and the
+     only explanation was in a console he'd never open. Reuses .auth-card so
+     it cannot drift from the sign-in screen it stands beside (D104).
+     Pins: app -> 1.22.0, css -> 0.47.0, config -> 1.0.0, manifest -> 0.2.0
+     (store -> 0.18.0 rides in via app's import). No other markup changed:
+     this file is 1.x's 0.40.0 plus one <div>, which is what E30 was for.
+     MANIFEST 0.2.0 is an E4a fix, not a feature: 1.x shipped "id": "/",
+     which is an ABSOLUTE reference. At a domain root that is harmless — it
+     is why nobody ever noticed — but octodo currently serves from the
+     SUBPATH misterwilson37.github.io/octodo, where "/" resolves to the
+     whole github.io host and the PWA identity collides with every other
+     project site there. "./" is correct in BOTH places: it gives /octodo/
+     today and exactly "/" after the flip, which is the same id Katie's
+     installed 1.x PWA already has — so E4's promise that her install
+     survives the switch depends on this one character.
+     0.40.0 (D140): #task-date-today inside the Due date label — a "Today"
+     shortcut, because the native date picker is Chrome's and admits no
+     buttons of ours. app -> 1.21.0, css -> 0.46.0.
+     0.39.2 (D139): no markup change — app ?v= -> 1.20.0 (bounded task
+     window; store.js -> 0.17.0 via app's import) and data-html-version
+     bumped so D130 pushes it to installed PWAs. No new ids, no CSS.
+     0.39.1 (D138): no markup change — css ?v= -> 0.45.1 (the phone
+     overflow fix) and data-html-version bumped so D130's hourly check
+     pushes the new stylesheet to installed PWAs, which have no
+     hard-refresh gesture (D77). This is the delivery vehicle for Katie's
+     fix: her phone should self-heal within the hour of deploy.
+     0.39.0 (D137): THE ALERTER. #alert-toast (outside #drift-wrap, D37/
+     D127 — the wall is often fullscreen, where an OS notification may
+     never paint but our own banner always does) + five per-device
+     controls in Settings > Timing (#cfg-alerts, #cfg-alert-sound,
+     #cfg-alert-notify, #cfg-alert-vol, #alert-test) and #alert-status.
+     They are #cfg-* on purpose: D129's dirty guard captures that prefix
+     generically, so the unsaved-changes check covers them for free.
+     0.38.0 (D136): no markup change — app ?v= → 1.18.0 for the document
+     census in the version tooltip / Settings footer.
+     0.37.0 (D134): no markup change — app ?v= → 1.17.0 for the Escape
+     handler. Bumped because data-html-version is the update signal
+     (D130) and app.js changed; the ?v= is what busts the cache.
+     0.36.0 (D132): the New Task form gains #fu-chain-block — the
+     chained-follow-up builder ("And then…"). Rows are JS-built so
+     add/remove preserves typed values; form.reset() does NOT clear
+     them, which is why cancelTaskEdit clears them by hand. css ?v= →
+     0.44.0, app ?v= → 1.16.0 (D133 rides along in app.js).
+     0.35.1 (D131): app.js ?v= → 1.15.0 only — the unsaved-changes guard now
+     covers the project form. No markup change (the form and its buttons
+     already existed). A Z carrying the bump (D94). AND — this is the first
+     deploy that will exercise D130 end-to-end: any tab already running
+     1.14.0 (D130) will see THIS html version (0.35.1) differ from its boot
+     value and offer the refresh banner. That's the live test Jake wanted.
+     0.35.0 (D130): #update-banner added — a fixed bottom bar (outside
+     #drift-wrap, D127) the hourly version check shows when a newer deploy
+     is live. ⚠️ NOTE: this data-html-version value is ITSELF what the
+     check compares — bumping it is what makes every OTHER running tab
+     notice this deploy. That's the whole mechanism; the version discipline
+     now does double duty. ?v= bumps app.js → 1.14.0, css → 0.43.0.
+     0.34.1 (D128/D129): app.js ?v= → 1.13.0 only. Blank project type is
+     injected by refreshTypeSelect() into the existing #project-type
+     picker (no static markup change), and the unsaved-changes guard uses
+     confirm() (no new modal). So this file only carries the version bump —
+     a Z, the D94 pattern (html moves so the cache busts app.js). No CSS
+     change either.
+     0.34.0 (D120): THE TIME REPORT. A new #report-modal (safely outside
+     #drift-wrap — D127 was a hard-earned lesson, verified with the same
+     div-balance count after adding this). A 📊 button in the Projects
+     panel header opens it for every project; each project's Σ total is
+     now clickable too, pre-filtered to just that one. Minor bump, not a
+     patch — a whole new modal surface, same weight as D111's cactus row
+     or D112's clock modal. ?v= bumps app.js → 1.12.0, css → 0.42.0.
+     0.33.2 (D127): THE REAL D37 FIX. A stray extra closing div, left over
+     from D118's modal-relocation edit, was accidentally acting as
+     #drift-wrap's true closing tag 150 lines later than intended — every
+     modal from #screen-rest through #yv-project-modal (incl. #settings-
+     modal) was structurally still INSIDE #drift-wrap this whole time,
+     D118's own comments notwithstanding. Moved the closing div to where
+     #drift-wrap's own header comment always said it belonged. Found by
+     Jake's screenshot (Settings needing a scroll to reach) plus a ruled-
+     out extensions theory (reproduced in a clean Edge profile) plus a
+     programmatic div-nesting count — not a guess. Full document verified
+     balanced before and after. No CSS or JS change needed; the CSS was
+     already correct, it just never had the DOM structure it assumed.
+     0.33.1 (D126 fix): app.js ?v= → 1.11.1 only — the sidebar mode-filter
+     bug (Jake's screenshot). No markup change; a Z for THIS file, carrying
+     the bump (D94).
+     0.33.0 (D126): HAVE-TOS / WANT-TOS — a new .tab-bar toggle atop
+     #queue-panel (reusing the settings tabs' own class, not a new idiom)
+     switches between #havetos-panel (the existing date-driven agenda,
+     now wrapped as one unit) and the new #wanttos-panel (timeless-tier
+     projects as cards, no day-nav — there's no day to nav). #project-tier
+     gains a change listener; the Starts/Ends row gets id="project-dates-row"
+     so JS can hide it live when the selected tier is marked ⏳ timeless.
+     A Y: a whole new panel + tab strip didn't exist before. ?v= bumps
+     app.js → 1.11.0, css → 0.41.0. No store.js change — saveTier/addProject
+     already pass arbitrary fields through untyped.
+     0.32.7 (D125): css ?v= → 0.40.0 only (phone font-boost fix + dash
+     projects scroll). No markup change.
+     0.32.6 (D124): the project-type LIBRARY — #project-type picker on the
+     new-project form, and the Pipeline tab's #pipeline-target selector +
+     New/Rename/Delete manager (the single stage editor now edits whichever
+     pipeline is selected). ?v= bumps app.js → 1.10.0, css → 0.39.0;
+     store.js → 0.16.0 (subscribeProjectTypes/saveProjectTypes) rides app's import.
+     0.32.5 (D123): the Overlay control group (★ Holidays) added to BOTH the
+     week and year .view-ctls (D104 grammar); ?v= bumps app.js → 1.9.0 and
+     queue.js → 0.18.0 (holidaysForRange). css → 0.38.0.
+     0.32.4 (D121/D122): ?v= bumps only — app.js → 1.8.0 (NOW bar + the
+     parade's name), css → 0.37.0, celebrate → 0.2.0 (rides inside app.js's
+     import). No markup changes: the NOW bar and parade banner are built
+     by JS.
+     0.32.3 (D118): clock/followup/yv-project modals relocated OUTSIDE
+     #drift-wrap — its transform re-rooted their fixed centering to the
+     page, so scrolled-down users got off-screen modals.
+     app ?v= → 1.7.0, css ?v= → 0.36.0.
+     0.32.2 (D116): ?v= bumps only — app → 1.6.0 (store → 0.15.0 rides
+     inside app.js's import).
+     0.32.1 (D113): the clock dialog inputs become datetime-local — the
+     dialog asks WHEN including the day (all-nighter support).
+     app ?v= → 1.5.0, css ?v= → 0.35.1.
+     0.32.0 (D112): the clock — #clock-modal (shared by clock-out and 🕰
+     manual log). The card clock rows are JS-built. app ?v= → 1.4.0,
+     css ?v= → 0.35.0.
+     0.31.0 (D111): the Christmas cactus — ↻ recurrence row in the task
+     form (blank = off), harmonized unit ladders in the escalation and
+     follow-up selects (…years, decades, centuries). app ?v= → 1.3.0.
+     0.30.3 (D110): ?v= bump only — app → 1.2.1.
+     0.30.2 (D109): ?v= bumps only — app → 1.2.0, css → 0.34.0. The 🎆
+     rows are JS-built; no markup here changed.
+     0.30.1 (D108): #hdr-fullscreen — the dashboard's ⛶, in the header,
+     dash-only. app ?v= → 1.1.1.
+     0.30.0 (D107): burn-in care — #screen-rest overlay (outside drift-wrap,
+     D37's rule) + two per-device Timing-tab toggles (🌙 rest / 🕯️ idle dim).
+     app ?v= → 1.1.0, css ?v= → 0.33.0.
+     0.29.0 (D105, PHASE 4): THE DASHBOARD — 🐙 fourth view-switch button
+     + the #dashboard-view pane shells (year left, week top-right, agenda
+     bottom-right, draggable dividers, 🗂 projects toggle). A Y for this
+     file: markup that didn't exist. The APP hits 1.0.0 with it (D67).
+     app ?v= → 1.0.0, css ?v= → 0.32.0.
+     0.28.3 (D104): ONE control grammar — week's two control rows fold
+     into its .view-nav; year's groups reorder to Layout · Window · Bars;
+     both use .view-ctls/.ctl-group/.ctl-label and data-layout /
+     data-window / data-size. Same controls, one dialect, ahead of the
+     dashboard. app ?v= → 0.38.1, css ?v= → 0.31.1.
+     0.25.0 (D96): INSTALLABLE — manifest.json + real PNG icons + the
+     mobile-web-app meta tags, so Add to Home Screen drops the address
+     bar on the old tablet. ⛶ fullscreen added to the AGENDA nav (week
+     and year had it; Today didn't). A Y: these didn't exist before.
+     app ?v= → 0.33.0.
+     0.24.2 (D95): app ?v= → 0.32.0, css ?v= → 0.27.0. A Z for THIS file —
+     nothing new lives in index.html, it's only carrying the bumps (D94).
+     0.24.1 (D94): #wv-split — drag the projects/days boundary. Z not Y:
+     this is an old idea finally working right (Jake's versioning rule,
+     D94). app ?v= → 0.31.1, css ?v= → 0.26.1.
+     0.24.0 (D92): app ?v= → 0.31.0, css ?v= → 0.26.0. No markup change.
+     0.23.0 (D91): app ?v= → 0.30.0, css ?v= → 0.25.0. No markup change —
+     the Bars buttons were always here; their handler never existed.
+     0.22.0 (D90): nav-slots in ALL THREE views — "back to now" no longer
+     shoves ▶ sideways; it sits on the side matching its direction of
+     travel and the arrows never move (Jake: three clicks forward should
+     be three clicks forward). #wv-sizes bar-height control. app → 0.29.0,
+     css → 0.24.0.
+     0.21.0 (D89): dates move to a header row ABOVE the strips (Jake:
+     "duplicate the date at the top — it's expected there"); week-start
+     mode buttons (Today+6 / Sun–Sat / Mon–Sun); the view toggle becomes
+     a LABELED 3-way switch (a cycling glyph needed a hover to explain
+     itself, which is a failed control). app ?v= → 0.28.0, css → 0.23.0.
+     0.20.0 (D88): #week-view — the third view. Two spanning strips
+     (all-day banners, project bars w/ stage pips) over seven queue
+     columns. app ?v= → 0.27.0, css ?v= → 0.22.0 (queue 0.13.0 inside).
+     0.19.0 (D86): clear-deck hint rewritten for the GROUPED model.
+     app ?v= → 0.26.0 (queue 0.12.0 rides inside app). css unchanged.
+     0.18.0 (D85): ⚙️ Pipeline tab gains "Clear-the-deck at N% complete"
+     (#cfg-cleardeck) — the point where the queue flips a project from
+     keep-abreast to just-finish-it. app ?v= → 0.25.0 (queue 0.11.0 +
+     store 0.9.0 ride inside app). css unchanged.
+     0.17.2 (D84): the Mirror field escapes cfg-poll's flex .form-row
+     (three children crammed into one row crushed the poll label into
+     a word-stack — Jake's screenshot). Own block now. app ?v= →
+     0.24.0, css → 0.21.1.
+     0.17.1 (D83): app ?v= → 0.23.1. Reference bump only.
+     0.17.0 (D82): #earlier box (passed events sink here, today only)
+     + #followup-modal (title, amount, minutes/hours/days/weeks unit —
+     retires two prompt()s). css ?v= → 0.21.0, app → 0.23.0, queue →
+     0.10.0.
+     0.16.0 (D81): ⚙️ Settings gains the Mirror calendar ID field
+     (cfg-mirror-cal). app ?v= → 0.22.0; css unchanged.
+     0.15.0 (D80): #allday-strip above the queue — all-day events land
+     here as ambient banners, not 12:00 AM queue rows. css ?v= →
+     0.20.0, app → 0.21.0.
+     0.14.1 (D79): lang="en" → "en-US". Native time pickers take their
+     12/24-hour cycle from the DEVICE setting in Chromium, but engines
+     that consult page language (Firefox family, some webviews) treat
+     bare "en" as ambiguous — en-US pins them to AM/PM. The primary
+     fix for Katie's military-time picker is her phone's "Use 24-hour
+     format" setting (see SETUP.md quick hits).
+     0.14.0 (D78): phone chrome — #jump-add ＋ in the header (scrolls
+     to the task form; swaps to Today view first if needed) and
+     #signout-bottom ("Log out", in words, at the very bottom). Both
+     phone-only via the 1000px stacked-layout query; the ⏻ square
+     hides there. css ?v= → 0.19.0, app → 0.20.0.
+     0.13.5 (D77): css ?v= → 0.18.1, app → 0.19.2. Reference bump only.
+     0.13.4 (D76): app ?v= → 0.19.1. Reference bump only.
+     0.13.3 (D74): css ?v= → 0.18.0, app → 0.19.0. Reference bump only.
+     0.13.2 (D73): hint mentions cross-row drags. app ?v= → 0.18.0.
+     0.13.1 (D72): css ?v= → 0.17.0, app → 0.17.0. Reference bump only.
+     0.13.0 (D71): ⛶ fullscreen button, 🧵 hairline bar pin. css ?v= →
+     0.16.0, app → 0.16.0.
+     0.12.1 (D70): "Year wall" → "Annual" (Jake's rename). css ?v= →
+     0.15.0, app → 0.15.0.
+     0.12.0 (D69): ▦▦ Year wall layout button (new default) + Bars
+     size control (Auto/▮/▪/▁). css ?v= → 0.14.0, app → 0.14.0.
+     0.11.0 (D68): year-view layout toggle (Month grid ⇄ Timeline),
+     ＋ New project FAB, #yv-project-modal shell (the REAL form gets
+     reparented in, listeners intact). css ?v= → 0.13.0, app → 0.13.0.
+     0.10.1: css ?v= → 0.12.0, app ?v= → 0.12.0 (D66 day texture +
+     density; form-overflow fix). Reference bump only.
+     0.10.0 (D65, PHASE 2): year view — header 📅 toggle, #year-view
+     section (nav, mode buttons, grid, legend, empty state, drag hint).
+     css ?v= → 0.11.0, app ?v= → 0.11.0.
+     0.9.1 (D64): css ?v= → 0.10.0 (responsive one-line rows). No markup
+     change — reference bump only.
+     0.9.0 (D63): #task-notes textarea. css ?v= → 0.9.0, app ?v= → 0.10.0.
+     0.8.0 (D62 rev): dup modal gains pipeline-review button + 1d/7d/30d
+     snooze row; project-form labels get task-form column treatment
+     (the staggered Starts/Ends); un-dater covers both remnant flavors.
+     css ?v= → 0.8.0, app.js ?v= → 0.9.0.
+     0.7.0 (D62): duplicate modal is a review FORM (name/dates/color/
+     tier/workload + snooze button). css ?v= → 0.7.0, app.js ?v= → 0.8.0.
+     0.6.0: settings modal split into tabs (Tiers / Pipeline / Timing)
+     with deadline-hour (D51) + decision-threshold (D52) fields and
+     #tier-color-hint (D55); new #uncheck-modal (D53) and #dup-modal
+     (D59); decision-modal hint rewritten for ✓/🕐 (D57); Workload ⓘ
+     gains a hover title (D58). css ?v= → 0.6.0, app.js ?v= → 0.7.0.
+     0.5.x: filter chips, workload, due/stages/weekend/decision modals
+     + shared popover (all OUTSIDE #drift-wrap, D37), D49 ?v= ritual.
+     ============================================================ -->
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tentacalendar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
+  <!-- D96 — installable. Add to Home Screen then launch from the icon and
+       the address bar is gone; display_override asks for true fullscreen
+       first and quietly falls back to standalone on older Android, which
+       is where the tablet lives. The ⛶ button is still there either way. -->
+  <link rel="manifest" href="manifest.json?v=0.2.0">
+  <meta name="theme-color" content="#0a0f14">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tentacalendar">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.48.0">
+</head>
+<body data-html-version="0.42.0">
+
+  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
+       ancestor becomes the containing block for position:fixed descendants,
+       which broke the settings modal's viewport centering. The modal and the
+       confetti canvas must stay OUTSIDE this div. -->
+  <div id="drift-wrap">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1>Tentacalendar</h1>
+      <p class="tagline">The to-do list that refuses to let go.</p>
+      <button id="signin-btn" class="primary">Sign in with Google</button>
+    </div>
+  </div>
+
+  <!-- ============ E17: SIGNED IN, NOWHERE TO GO ============ -->
+  <!-- Every state that can strand a signed-in user lands here with a
+       sentence: an unverified account, a bootstrap that failed, and later a
+       revoked share or a removed member. The one thing it must never do is
+       what 1.x did to Nico — drop him back on the sign-in screen as though
+       he had simply not signed in. -->
+  <div id="blocked-screen" hidden>
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1 id="blocked-title">Hold on a moment</h1>
+      <p class="tagline" id="blocked-body"></p>
+      <p class="blocked-who" id="blocked-who"></p>
+      <button id="blocked-signout" class="primary">Sign out and try again</button>
+      <p class="blocked-detail" id="blocked-detail" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app-screen" hidden>
+    <header>
+      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
+      <div class="header-right">
+        <!-- E34 — which house am I standing in? Hidden until you hold more
+             than one key, because a switcher with one entry is furniture. -->
+        <div id="board-switch" class="board-switch" hidden>
+          <button id="board-current" class="board-chip" title="The board you are looking at. Click to switch.">
+            <span id="board-dot" class="board-dot"></span>
+            <span id="board-name">…</span>
+            <span class="board-caret">▾</span>
+          </button>
+          <div id="board-menu" class="board-menu" hidden></div>
+        </div>
+        <span id="user-label" class="user"></span>
+        <div class="view-switch" id="view-switch" title="Today = the queue. Week = the planning board. Year = the whole map. Dashboard = all of it on one wall (big screens only).">
+          <button data-view="day" class="mini">📋 Today</button>
+          <button data-view="week" class="mini">🗓️ Week</button>
+          <button data-view="year" class="mini">📅 Year</button>
+          <button data-view="dash" class="mini">🐙 Dashboard</button>
+        </div>
+        <button id="hdr-fullscreen" class="icon-btn" title="Fullscreen — the wall without the browser" hidden>⛶</button><!-- D108: the dashboard's ⛶. It has no nav row of its own, so the header IS its chrome; hidden on every other view (they carry their own). -->
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
+        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ===== Queue column ===== -->
+      <section id="queue-panel">
+        <!-- D126 — have-tos / want-tos. Always visible; picks which panel
+             below is live. Katie's own household words, used verbatim. -->
+        <div class="tab-bar todo-mode-bar">
+          <button type="button" class="tab-btn active" id="mode-have" data-mode="have">Have-tos</button>
+          <button type="button" class="tab-btn" id="mode-want" data-mode="want">Want-tos</button>
+        </div>
+
+        <div id="havetos-panel">
+          <div class="day-nav">
+            <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+            <span class="nav-slot" id="day-slot-back"></span>
+            <h2 id="day-label">Today</h2>
+            <span class="nav-slot" id="day-slot-fwd"><button id="day-today" class="mini" hidden>back to today</button></span>
+            <button id="day-next" class="icon-btn" title="Next day">▶</button>
+            <button id="day-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+          </div>
+
+          <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
+
+          <div id="pinned" hidden></div>
+          <div id="allday-strip" hidden></div>
+          <div id="queue"></div>
+
+          <div id="waiting" hidden>
+            <h3>Waiting on…</h3>
+            <div id="waiting-list"></div>
+          </div>
+
+          <div id="earlier" hidden>
+            <h3>Earlier today</h3>
+            <div id="earlier-list"></div>
+          </div>
+
+          <div id="done" hidden>
+            <h3>Done today <span id="done-count" class="badge-done"></span></h3>
+            <div id="done-list"></div>
+          </div>
+        </div>
+
+        <!-- D126 — want-tos: dateless someday-projects, browsed for ideas.
+             No day-nav — there's no day to nav. -->
+        <div id="wanttos-panel" hidden>
+          <div class="day-nav wanttos-nav">
+            <h2>Want-tos — someday, for fun</h2>
+            <button id="wanttos-shuffle" class="icon-btn" title="Give me an idea — jump to a random someday project">🎲</button>
+            <button id="wanttos-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+          </div>
+          <p id="wanttos-hint" class="hint" hidden></p>
+          <div id="wanttos-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== Projects column (Katie's pipeline) ===== -->
+      <section id="projects-panel">
+        <h3>Projects <button id="report-btn" class="icon-btn" title="Time Report — hours by project, any date range and granularity (D120)">📊</button></h3>
+        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
+        <div id="projects-list"></div>
+      </section>
+
+      <!-- ===== Forms column ===== -->
+      <section id="form-panel">
+        <h3 id="task-form-title">New task</h3>
+        <form id="task-form">
+          <input id="task-title" type="text" placeholder="What needs doing?" required>
+          <textarea id="task-notes" rows="2" placeholder="Details (optional — tucked behind a ▸ under the task)"></textarea>
+          <label>Tier
+            <select id="task-tier"></select>
+          </label>
+          <div class="form-row">
+            <label>Due date <input id="task-date" type="date" required><button id="task-date-today" class="mini" type="button" title="Snap the due date back to today (the native calendar has no 'today' button — Chrome draws that picker, not us)">Today</button></label>
+            <label>Time <input id="task-time" type="time" value="09:00"></label>
+            <label title="How long it takes — NOT when to start. The due time is a deadline, so this is the runway BEFORE it (D93). Leave blank if you don't know; the clock grid draws those dashed at 30 min and doesn't pretend otherwise. You can also just drag a block's top edge in the Clock layout.">Est. min <input id="task-estimate" type="number" min="5" max="720" step="5" placeholder="—"></label>
+          </div>
+          <label class="esc-label">If ignored, nag again every
+            <span class="esc-inputs">
+              <input id="task-esc-n" type="number" min="1" value="1">
+              <select id="task-esc-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+                <option value="years">years</option>
+                <option value="decades">decades</option>
+                <option value="centuries">centuries</option>
+              </select>
+            </span>
+          </label>
+          <!-- D111: the Christmas cactus. Blank = not recurring (silence
+               isn't a number, D100). Anchor default = completion. -->
+          <label class="esc-label">↻ Repeats every
+            <span class="esc-inputs">
+              <input id="task-rec-n" type="number" min="1" max="999" placeholder="—">
+              <select id="task-rec-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours">hours</option>
+                <option value="days">days</option>
+                <option value="weeks" selected>weeks</option>
+                <option value="months">months</option>
+                <option value="years">years</option>
+                <option value="decades">decades</option>
+                <option value="centuries">centuries</option>
+              </select>
+              <select id="task-rec-anchor" title="When does the next one count from? 'after completion' = you just watered it, so the clock starts now. 'after scheduled due' = the schedule is the schedule, even if you were late — the next one can be born already overdue, which is honesty, not a bug.">
+                <option value="done" selected>after completion</option>
+                <option value="due">after scheduled due</option>
+              </select>
+            </span>
+          </label>
+          <!-- D132: chained follow-ups, authored up front. TASK-PLUS-N —
+               the task above is the root and every row hangs off either it
+               or the row above ("and then, and then"). Empty by default: a
+               blank list is not a list (D100/D111's silence rule). Rows are
+               built in JS so add/remove keeps typed values. CREATE ONLY —
+               hidden while editing, because ↳ on an existing task is the
+               path for that and two doors to one room is how drift starts. -->
+          <div id="fu-chain-block">
+            <div class="fu-chain-head">
+              <span class="hint-inline">↳ And then…</span>
+              <button type="button" id="fu-chain-add" class="mini">+ Add follow-up</button>
+            </div>
+            <div id="fu-chain-rows"></div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
+            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish. Chained follow-ups wait their turn — each one gets its date only when the step it hangs off is checked.</p>
+
+        <h3 id="project-form-title">New project</h3>
+        <form id="project-form">
+          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
+          <div class="form-row">
+            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
+            <label>Stage tier <select id="project-tier"></select></label>
+          </div>
+          <label id="project-type-label">Project type
+            <select id="project-type" title="Which pipeline to copy into this new project. 'Default' is your standard template; others are types you've built in Settings ▸ Pipeline. Existing projects keep whatever they already have.">
+              <option value="">Default template</option>
+            </select>
+          </label>
+          <div class="form-row" id="project-dates-row">
+            <label>Starts <input id="project-start" type="date" required></label>
+            <label>Ends <input id="project-end" type="date" required></label>
+          </div>
+          <label><span class="label-line">Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span></span>
+            <select id="project-workload">
+              <option value="1">Light (1)</option>
+              <option value="2" selected>Standard (2)</option>
+              <option value="3">Heavy (3)</option>
+            </select>
+          </label>
+          <p class="hint warn" id="project-color-hint"></p>
+          <div class="form-actions">
+            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
+            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
+        <p class="hint">Pick a tier marked ⏳ timeless (Settings ▸ Tiers) and the date fields disappear — it becomes a want-to, browsed under that tab instead of nagging in Have-tos.</p>
+      </section>
+    </main>
+
+    <!-- ============ YEAR VIEW (Phase 2, D65) ============
+         Toggled with the header 📅; quarter-aligned 4 rows × 3 months
+         (D31 modes), progress ghost-fill bars (D30a), drag to move /
+         edge-drag to stretch (D32), month-tap zoom (D18), legend +
+         tap-for-details (D27). -->
+    <section id="week-view" hidden>
+      <!-- D104: ONE control grammar for week and year — a .view-nav row
+           (arrows · slots · label · ⛶) followed by .view-ctls holding the
+           canonical groups in ONE order: Layout · Window · Bars. Same
+           labels grammar, same data attributes (data-layout / data-window /
+           data-size), same CSS family. View-specific extras (🏆 Reflection
+           here, ◱ whole year there) stay with their views. -->
+      <div class="view-nav">
+        <button id="wv-prev" class="icon-btn" title="Back one week">◀</button>
+        <span class="nav-slot" id="wv-slot-back"></span>
+        <h2 id="wv-label">Week</h2>
+        <span class="nav-slot" id="wv-slot-fwd"><button id="wv-today" class="mini" hidden>back to now</button></span>
+        <button id="wv-next" class="icon-btn" title="Forward one week">▶</button>
+        <button id="wv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+        <div class="view-ctls">
+          <div class="ctl-group" id="wv-layouts" title="Three ways to read the same week. Gantesque: one honest queue per day, everything interleaved in time order. Tidal: fixed time (events) shelved above the work that's yours to move, and past days become a reflection on what actually happened. Clock: the day as time.">
+            <span class="ctl-label">Layout</span>
+            <button data-layout="columns" class="mini">Gantesque</button>
+            <button data-layout="tidal" class="mini">Tidal</button>
+            <button data-layout="clock" class="mini" title="The day as a clock. An event at 6 PM sits at 6 PM. A task DUE at 6 PM is the block ENDING at 6 — its runway trails backward, because you can do it any time before the deadline (Katie, D93). Drag a task's top edge to say how long it takes; that's the only way a week can answer 'can I fit this on Tuesday?'">Clock</button>
+            <button id="wv-cards-toggle" class="mini" title="Show what each past day actually did: what got finished, and what got put off — and whether it was moved, shelved, or nobody touched it. Works in BOTH layouts: Gantesque hangs the cards under its day list, Tidal turns the whole past column into them. Off = just the headline numbers (and in Tidal, past days shrink to give the live days more room).">🏆 Reflection</button>
+          </div>
+          <div class="ctl-group" id="wv-modes" title="Where the week's window anchors. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
+            <span class="ctl-label">Week</span>
+            <button data-window="rolling" class="mini">Today +6</button>
+            <button data-window="sunday" class="mini">Sun–Sat</button>
+            <button data-window="monday" class="mini">Mon–Sun</button>
+          </div>
+          <div class="ctl-group" id="wv-sizes" title="Project bar height. Auto thins them out as the list grows so the day columns always get room; ▮ full (name + next step + %), ▪ medium, ▁ thin, 🧵 colour threads only (hover for names).">
+            <span class="ctl-label">Bars</span>
+            <button data-size="auto" class="mini">Auto</button>
+            <button data-size="full" class="mini">▮</button>
+            <button data-size="half" class="mini">▪</button>
+            <button data-size="quarter" class="mini">▁</button>
+            <button data-size="hair" class="mini">🧵</button>
+          </div>
+          <div class="ctl-group" id="wv-overlays" title="Overlays drawn on the days themselves — reference marks, not tasks.">
+            <span class="ctl-label">Overlay</span>
+            <button id="wv-holidays" class="mini" title="Show US federal holidays on the day headings. A reference overlay — nothing to check off.">★ Holidays</button>
+          </div>
+        </div>
+      </div>
+      <div class="wv-strip" id="wv-days"></div>
+      <div id="wv-strips">
+        <div class="wv-strip" id="wv-banners" hidden></div>
+        <div class="wv-strip" id="wv-projects" hidden></div>
+      </div>
+      <div class="wv-split" id="wv-split" title="Drag to give the projects more or less of the board. Auto refits the bars to whatever you choose."></div>
+      <div id="wv-grid"></div>
+      <div id="tidal-horizon" hidden></div>
+      <p class="hint" id="wv-empty" hidden>Nothing scheduled this week. Suspicious.</p>
+    </section>
+
+    <section id="year-view" hidden>
+      <div class="view-nav">
+        <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
+        <span class="nav-slot" id="yv-slot-back"></span>
+        <h2 id="yv-label">Year</h2>
+        <span class="nav-slot" id="yv-slot-fwd"><button id="yv-today" class="mini" hidden>back to now</button></span>
+        <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
+        <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
+        <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+        <div class="view-ctls">
+          <div class="ctl-group" id="yv-layouts" title="Three ways to read the same year. Annual: the whole year as a wall of month calendars. Months: they stack, weeks as rows, Sun–Sat. Timeline: days in one long row per quarter (a Gantt chart).">
+            <span class="ctl-label">Layout</span>
+            <button data-layout="wall" class="mini">▦▦ Annual</button>
+            <button data-layout="grid" class="mini">▦ Months</button>
+            <button data-layout="timeline" class="mini">▬ Timeline</button>
+          </div>
+          <div class="ctl-group" id="yv-modes" title="Where the year's window anchors: January, the current quarter, or the current month top-left (rolling 12 months either way)">
+            <span class="ctl-label">Year</span>
+            <button data-window="calendar" class="mini">Jan–Dec</button>
+            <button data-window="quarter" class="mini">Quarter first</button>
+            <button data-window="month" class="mini">Month first</button>
+          </div>
+          <div class="ctl-group" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
+            <span class="ctl-label">Bars</span>
+            <button data-size="auto" class="mini">Auto</button>
+            <button data-size="full" class="mini">▮</button>
+            <button data-size="half" class="mini">▪</button>
+            <button data-size="quarter" class="mini">▁</button>
+            <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
+          </div>
+          <div class="ctl-group" id="yv-overlays" title="Overlays drawn on the calendar itself — reference marks, not projects.">
+            <span class="ctl-label">Overlay</span>
+            <button id="yv-holidays" class="mini" title="Show US federal holidays on the month calendars and timeline. A reference overlay — hover a marked day for its name.">★ Holidays</button>
+          </div>
+        </div>
+      </div>
+      <div id="yv-grid"></div>
+      <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
+      <div id="yv-legend"></div>
+      <p class="hint">Drag a bar to move a project — across weeks, months, and rows · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
+      <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
+    </section>
+
+    <!-- ===== D105: THE DASHBOARD (Phase 4 — this is 1.0) =====
+         Empty shells ON PURPOSE: entering the dashboard REPARENTS the real
+         #year-view / #week-view / #queue-panel (and #projects-panel behind
+         the 🗂 toggle) into these panes — the D68 modal trick at kiosk
+         scale. Comment markers hold each panel's seat at home, so leaving
+         puts everything back exactly where it came from. Elements MOVE,
+         nothing is cloned, so nothing can drift (D98). -->
+    <section id="dashboard-view" hidden>
+      <div class="dash-pane" id="dash-left"></div>
+      <div class="dash-split dash-split-v" id="dash-vsplit" title="Drag to resize · double-click to reset"></div>
+      <div id="dash-right">
+        <div class="dash-pane" id="dash-week"></div>
+        <div class="dash-split dash-split-h" id="dash-hsplit" title="Drag to resize · double-click to reset"></div>
+        <div class="dash-pane" id="dash-bottom">
+          <button id="dash-projects-toggle" class="mini" title="Split this pane: agenda + project pipeline side by side. Adding projects lives on the other screens — this is the glance wall.">🗂 Projects</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- D118: the clock/followup/yv-project modals used to live HERE,
+         inside #drift-wrap — whose transform re-roots position:fixed to
+         the page box, so a "centered" modal floated above the viewport
+         when scrolled (Jake's clock-out bug). They now live with the
+         other six modals below, outside the wrap, where D37's rule
+         always said overlays belong. -->
+  </div>
+  </div><!-- /drift-wrap — D127: THIS is the real close. D118's refactor
+       left the actual closing tag stranded 150 lines down (see the note
+       by #yv-project-modal) disguised as one of ITS closing divs, so by
+       true tag-nesting every "moved outside the wrap" modal — screen-rest,
+       settings, weekend, decision, dup, stages, clock, followup, and
+       yv-project itself — was still genuinely INSIDE #drift-wrap the
+       whole time. D37's transform-reroot bug, structurally unfixed since
+       D118, just quiet: small drift amounts (±2-8px) rarely mispositioned
+       a SHORT modal enough to notice. Settings is the tallest modal in
+       the app, so it was the one that finally showed it plainly. -->
+
+  <!-- D130: update banner — OUTSIDE #drift-wrap (D127's lesson: a fixed
+       overlay inside the transformed wrapper mispositions). Hourly, the app
+       re-fetches index.html and compares its data-html-version; a newer one
+       shows this with a countdown auto-refresh. -->
+  <div id="update-banner" hidden>
+    <span id="update-msg"></span>
+    <button id="update-now" class="primary">Refresh now</button>
+    <button id="update-later" class="mini">Later</button>
+  </div>
+
+  <!-- D137: the alert toast — OUTSIDE #drift-wrap for the same reason as
+       the banner above, and z-index 141 so it clears the update banner.
+       This is the channel that matters on the WALL: a fullscreen kiosk may
+       never paint an OS notification, but it always paints its own page. -->
+  <div id="alert-toast" hidden>
+    <span id="alert-toast-level"></span>
+    <div class="at-text">
+      <strong id="alert-toast-title"></strong>
+      <span id="alert-toast-body"></span>
+    </div>
+  </div>
+
+  <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
+       a fixed overlay inside a transformed ancestor re-roots and shows the
+       drift as edge gaps). z-index 98: above everything but the confetti —
+       a midnight completion still gets its fireworks. -->
+  <div id="screen-rest" hidden>
+    <div id="rest-face">
+      <div id="rest-clock"></div>
+      <div id="rest-date"></div>
+      <div id="rest-hint">🐙 resting — tap to peek</div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS MODAL (tabbed, D52) ============ -->
+  <div id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Settings</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tiers">Tiers</button>
+        <button class="tab-btn" data-tab="pipeline">Pipeline</button>
+        <button class="tab-btn" data-tab="timing">Timing</button>
+        <button class="tab-btn" data-tab="people">People</button>
+      </div>
+
+      <!-- E5/E32 — houses and keys. Two words do all the work here. -->
+      <div class="tab-pane" data-pane="people" hidden>
+        <h3>Who holds a key to this board</h3>
+        <p class="hint">A shared board is <b>one set of lists, not a copy</b> — everyone with a key is looking at the same thing, so a task checked off here disappears from their screen too. <b>Co-owner</b> can also hand out and take back keys. <b>Can edit</b> is full use. <b>Can view</b> is read-only (they can still send a 👏). Only an owner sees these controls.</p>
+        <div id="people-list"></div>
+        <div class="form-row">
+          <label>Invite by email <input id="people-email" type="email" placeholder="name@gmail.com" autocomplete="off"></label>
+          <label>Access
+            <select id="people-role">
+              <option value="editor">Can edit</option>
+              <option value="viewer">Can view</option>
+              <option value="owner">Co-owner</option>
+            </select>
+          </label>
+        </div>
+        <button id="people-add" class="mini">+ Give them a key</button>
+
+        <h3 style="margin-top:1.6rem">A board for someone who doesn't own it</h3>
+        <p class="hint">For a child, or anyone whose list you're responsible for. <b>You keep the deed</b> — they can use their board fully but cannot remove you from it or delete it, and they can't hand their own key back. Add a co-owner and you both get in independently. This creates a <i>new</i> board; it doesn't change this one.</p>
+        <div class="form-row">
+          <label>Board name <input id="dep-name" type="text" placeholder="Nico" autocomplete="off"></label>
+          <label>Their email <input id="dep-email" type="email" placeholder="them@gmail.com" autocomplete="off"></label>
+        </div>
+        <div class="form-row">
+          <label>Co-owner, optional <input id="dep-coowner" type="email" placeholder="other.parent@gmail.com" autocomplete="off"></label>
+        </div>
+        <button id="dep-create" class="mini">Create their board</button>
+        <p class="hint" id="people-msg"></p>
+      </div>
+
+      <div class="tab-pane" data-pane="tiers">
+        <h3>Tiers (priority queue)</h3>
+        <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
+        <div id="tier-editor"></div>
+        <p class="hint" id="tier-color-hint"></p>
+        <button id="tier-add" class="mini">+ Add tier</button>
+      </div>
+
+      <div class="tab-pane" data-pane="pipeline" hidden>
+        <h3>Project pipelines</h3>
+        <p class="hint">Build a LIBRARY of pipelines and pick one when you create a project (e.g. an actuarial default, a "Holiday Card", a "Taiko Performance"). <em>Default</em> is the standard template copied into a new project when you don't choose another. Existing projects keep their own copy whatever you change here.</p>
+        <div class="form-row" id="pipeline-picker-row">
+          <label>Editing <select id="pipeline-target"></select></label>
+          <button id="pipeline-new" class="mini" type="button" title="Create a new project type">+ New type</button>
+          <button id="pipeline-rename" class="mini" type="button" title="Rename this type">Rename</button>
+          <button id="pipeline-delete" class="mini" type="button" title="Delete this type (the Default can't be deleted)">Delete</button>
+        </div>
+        <div id="stage-template-editor"></div>
+        <button id="stage-add" class="mini">+ Add stage</button>
+        <p class="hint"><em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date. 🎆 marks the stage whose completion throws the big celebration (D109).</p>
+        <div class="form-row">
+          <label>Clear the deck at <input id="cfg-cleardeck" type="number" min="0" max="100"> % complete</label>
+        </div>
+        <p class="hint">Two piles. Projects at or past this mark are in the <em>finish it</em> pile and sort <em>most</em>-done first — they sit above everything still catching up, however heavy. Below the mark, the <em>least</em>-done leads, so nothing gets abandoned. Workload only breaks a tie between two projects at the same %, heavier first. Tiebreaker only — anything due sooner still comes first.</p>
+      </div>
+
+      <div class="tab-pane" data-pane="timing" hidden>
+        <h3>Timing</h3>
+        <div class="form-row">
+          <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+        </div>
+        <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
+        <div class="form-row">
+          <label>🐙 Decision time opens after <input id="cfg-decision-days" type="number" min="1" max="30"> day(s) overdue</label>
+        </div>
+        <div class="form-row">
+          <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
+        </div>
+        <div class="form-row">
+          <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+          <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
+        </div>
+        <div class="form-row">
+          <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
+        </div>
+        <!-- D107: burn-in care. PER-DEVICE (localStorage, not workspace
+             config) — set these ON THE TV. Dashboard-only at runtime. -->
+        <div class="form-row">
+          <label><input id="cfg-rest" type="checkbox"> 🌙 Screen rest during sleep hours <span class="hint-inline">(dashboard · this device)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input id="cfg-idle-dim" type="checkbox"> 🕯️ Dim chrome when idle <span class="hint-inline">(dashboard · this device)</span></label>
+        </div>
+        <p class="hint">Burn-in care for a TV that lives on the dashboard: during sleep hours the screen goes near-black with a wandering clock (tap it to peek for 5 minutes), and after 5 idle minutes the header and dividers fade. The whole app already drifts a few pixels (D37); the dashboard rides a second, wider orbit. These two switches are per-device — flip them on the TV itself.</p>
+        <!-- D137: alerts. PER-DEVICE like the two above — turn these ON at
+             the wall and the tablet, leave them off on a phone. -->
+        <div class="form-row">
+          <label><input id="cfg-alerts" type="checkbox"> 🔔 Alert me when things come due <span class="hint-inline">(this device)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input id="cfg-alert-sound" type="checkbox"> 🔊 Play a sound</label>
+          <label><input id="cfg-alert-notify" type="checkbox"> 💬 System notifications</label>
+        </div>
+        <div class="form-row">
+          <label>Volume <input id="cfg-alert-vol" type="range" min="0" max="100" step="5"></label>
+          <button id="alert-test" class="mini" type="button">▶ Test</button>
+        </div>
+        <p class="hint" id="alert-status"></p>
+        <p class="hint">A task speaks when it comes due and again on every step of <em>its own</em> escalation — the same schedule that turns it red, so a task set to nag hourly now chimes hourly. Project stages speak once when their deadline passes. Calendar events speak when they enter their lead window. Nothing makes a sound during sleep hours, and hidden tiers stay silent. An on-screen banner always appears; the sound and the system notification are the two switches above.</p>
+        <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
+        <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
+        <p class="hint" id="poll-cost-hint"></p>
+      </div>
+
+      <div class="modal-foot">
+        <span id="versions-line" class="hint-inline"></span>
+        <button id="settings-save" class="primary">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUE-DATE DIALOG ============ -->
+  <!-- D118: relocated from inside #drift-wrap (see the note there). -->
+    <!-- D112: the clock dialog — clock-out (editable end + cancel = Jake's
+       "transition time or cancel the click") and 🕰 manual log share it. -->
+  <div id="clock-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <h3 id="clock-heading">Clock out</h3>
+      <p id="clock-sub" class="hint"></p>
+      <!-- D113: datetime-local, not time — the dialog ASKS which day.
+           All-nighters and multi-day forgets are one honest field. -->
+      <label id="clock-start-row" hidden>Started at <input id="clock-start" type="datetime-local"></label>
+      <label id="clock-end-row">Ended at <input id="clock-end" type="datetime-local"></label>
+      <div class="modal-actions">
+        <button id="clock-save" class="primary">Save</button>
+        <button id="clock-cancel" class="mini">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- D120: THE TIME REPORT — an arbitrary date range, not a fiscal-vs-
+       calendar setting; month/quarter/year buckets step from wherever
+       "Starts" is set, so either kind of year falls out for free. -->
+  <div id="report-modal" class="modal-shell" hidden>
+    <div class="modal-card report-card">
+      <div class="modal-head">
+        <h2>📊 Time Report</h2>
+        <button id="report-close" class="icon-btn">✕</button>
+      </div>
+      <p id="report-project-filter" class="hint" hidden></p>
+      <div class="report-controls">
+        <label>Starts <input id="report-start" type="date"></label>
+        <label>Ends <input id="report-end" type="date"></label>
+        <label>By
+          <select id="report-granularity">
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month" selected>Month</option>
+            <option value="quarter">Quarter</option>
+            <option value="year">Year</option>
+          </select>
+        </label>
+      </div>
+      <p id="report-warn" class="hint warn" hidden></p>
+      <div id="report-table-wrap">
+        <table id="report-table"></table>
+      </div>
+      <p id="report-empty" class="hint" hidden>No sessions logged in this range.</p>
+      <div class="modal-actions">
+        <button id="report-export-rollup" class="mini">⬇ Export rollup CSV</button>
+        <button id="report-export-raw" class="mini">⬇ Export raw sessions CSV</button>
+      </div>
+      <p class="hint">The rollup export is spreadsheet-ready hours per project per period. The raw export is every logged session, un-split, exactly as recorded — build your own model on it.</p>
+    </div>
+  </div>
+
+  <!-- D82: follow-up create/edit — retires the prompt() pair -->
+  <div id="followup-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <h3 id="fu-heading">Follow-up</h3>
+      <label>Title <input id="fu-title" type="text"></label>
+      <label>Materializes
+        <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
+        <select id="fu-unit">
+          <option value="minutes">minutes</option>
+          <option value="hours">hours</option>
+          <option value="days" selected>days</option>
+          <option value="weeks">weeks</option>
+          <option value="months">months</option>
+          <option value="years">years</option>
+          <option value="decades">decades</option>
+          <option value="centuries">centuries</option>
+        </select>
+        after completion</label>
+      <div class="modal-actions">
+        <button id="fu-save" class="primary">Save</button>
+        <button id="fu-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- D78: phone-only, in words, at the very bottom — where a
+       logout belongs on a device you rarely log out of. -->
+  <button id="signout-bottom">Log out</button>
+
+  <!-- D68: the REAL project form is reparented in here from the form
+       panel while this is open — listeners, color assistant, and the
+       working-day interception all come along for free. -->
+  <div id="yv-project-modal" class="modal-shell" hidden>
+    <div class="modal-card yv-project-card">
+      <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
+    <div id="yv-project-slot"></div>
+    </div>
+  </div>
+  <!-- D127: a stray extra closing div used to sit HERE — a leftover from
+       D118's modal-relocation edit that never got cleaned up. It wasn't
+       harmless: by simple tag counting it was the ACTUAL closing tag for
+       #drift-wrap (see the real fix, ~150 lines up), meaning every modal
+       from #screen-rest through this one was still structurally INSIDE
+       #drift-wrap the whole time, D118's own comments notwithstanding.
+       Moved to where #drift-wrap is genuinely supposed to close. -->
+
+
+  <div id="due-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="due-title">Hard due date</h3>
+      <div class="form-row">
+        <label>Date <input id="due-date" type="date"></label>
+        <label>Time <input id="due-time" type="time" value="17:00"></label>
+      </div>
+      <div class="modal-foot">
+        <button id="due-clear" class="mini">Clear due date</button>
+        <span class="flex-spring"></span>
+        <button id="due-cancel" class="mini">Cancel</button>
+        <button id="due-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PER-PROJECT STAGE EDITOR ============ -->
+  <div id="stages-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="stages-title">✎ Stages</h2>
+        <button id="stages-cancel" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
+      <div id="stage-proj-editor"></div>
+      <button id="stage-proj-add" class="mini">+ Add stage</button>
+      <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
+      <div class="modal-foot">
+        <span></span>
+        <button id="stages-save" class="primary">Save stages</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WORKING-DAY DATE CHECK (D45→D60) ============ -->
+  <div id="weekend-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🗓️ Working-day check</h3>
+      <p id="weekend-text"></p>
+      <div class="weekend-choices">
+        <button id="weekend-yes" class="mini">Yes, keep it</button>
+        <button id="weekend-fri" class="primary"></button>
+        <button id="weekend-mon" class="primary"></button>
+        <button id="weekend-back" class="mini">Go back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OVERDUE DECISION TIME (D46/D57) ============ -->
+  <div id="decision-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>🐙 Decision time</h2>
+        <button id="decision-close" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">These have been overdue past your check-in threshold (⚙️ Timing). ✓ completes the next step, 🕐 pushes the deadline to the next working day at 9 AM — or close this and live dangerously; it won't ask again until tomorrow.</p>
+      <div id="decision-list"></div>
+    </div>
+  </div>
+
+  <!-- ============ UN-COMPLETE REWIND (D53) ============ -->
+  <div id="uncheck-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="uncheck-title">↩️ Un-complete?</h3>
+      <p id="uncheck-text" class="hint"></p>
+      <div class="weekend-choices">
+        <button id="uncheck-oops" class="primary">Oops — keep it done</button>
+        <button id="uncheck-rewind" class="primary">Un-complete & pull follow-ups back to "Waiting on…"</button>
+        <button id="uncheck-keep" class="mini">Un-complete, but follow-ups keep their dates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
+  <div id="dup-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🔁 Same time next year?</h3>
+      <p id="dup-text" class="hint"></p>
+      <div class="form-row">
+        <label class="dup-wide">Name <input id="dup-name" type="text"></label>
+      </div>
+      <div class="form-row">
+        <label>Start <input id="dup-start" type="date"></label>
+        <label>End <input id="dup-end" type="date"></label>
+      </div>
+      <div class="form-row">
+        <label>Color <input id="dup-color" type="color"></label>
+        <label>Tier <select id="dup-tier"></select></label>
+        <label>Workload
+          <select id="dup-workload">
+            <option value="1">1 — light</option>
+            <option value="2">2 — standard</option>
+            <option value="3">3 — heavy</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
+      <div class="weekend-choices">
+        <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
+        <button id="dup-yes" class="primary">Create next year's run</button>
+        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
+          <button id="dup-snooze-1" class="mini">a day</button>
+          <button id="dup-snooze-7" class="mini">a week</button>
+          <button id="dup-snooze-30" class="mini">a month</button>
+        </div>
+        <button id="dup-no" class="mini">No thanks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared tap-popover for ⓘ dots -->
+  <div id="popover" hidden></div>
+
+  <script type="module" src="app.js?v=1.23.0"></script>
+</body>
+</html>
