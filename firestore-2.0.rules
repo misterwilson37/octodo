@@ -1,7 +1,10 @@
 rules_version = '2';
 // ============================================================
 // Tentacalendar 2.0 — firestore.rules
-// Version 1.1.0 — dependent workspaces + the lockout fix (E32, E33, E34)
+// Version 1.1.1 — E34 FIX: a rule that matched on the document ID could
+// never have secured a QUERY. Symptom was "Missing or insufficient
+// permissions" on every first sign-in. Detail in the E34 block below.
+// (prev) Version 1.1.0 — dependent workspaces + the lockout fix (E32, E33, E34)
 //
 // WHAT CHANGED FROM 1.0.0 — three things, all found by walking Jake's own
 // description of Nico through the 1.0.0 file rather than by reading it:
@@ -108,15 +111,30 @@ service cloud.firestore {
     // ---- "which houses do I hold a key to?" (E34) ----
     // The board switcher runs collectionGroup('members').where(email == me).
     // A collectionGroup query is NOT covered by rules nested under
-    // /workspaces/{wsId}, so it needs its own clause at the top level.
-    // This grants strictly less than it looks like: the document id IS the
-    // member's email, so the only rows this can ever return are the asker's
-    // own. It cannot enumerate a workspace's membership, and it cannot see
-    // a workspace the asker was never added to — there is no document there
-    // to read. Read-only on purpose; every write still goes through the
-    // nested rules below.
-    match /{path=**}/members/{email} {
-      allow read: if signedIn() && email == me();
+    // /workspaces/{wsId}, so it needs this clause at the top level.
+    //
+    // ⚠️ 1.1.1 FIX — READ THIS BEFORE "SIMPLIFYING" IT BACK.
+    // 1.1.0 wrote `match /{path=**}/members/{email}` with the condition
+    // `email == me()`, reasoning that the document id IS the member's email
+    // so only the asker's own rows could return. That reasoning is sound for
+    // a GET of one named document and MEANINGLESS FOR A QUERY:
+    //
+    //   A query does not name documents. Firestore evaluates a list rule
+    //   against the QUERY ITSELF, before any document is read, so the
+    //   document-id wildcard is simply not bound — and the whole query is
+    //   refused. Not filtered to nothing: REFUSED, as permission-denied.
+    //
+    // The rule for securing a list must therefore test a FIELD, and the
+    // client query must filter on that same field so Firestore can prove
+    // the result set is confined to what the rule permits. Member documents
+    // carry `email` precisely so this works.
+    //
+    // Security is unchanged: `resource.data.email == me()` still admits only
+    // rows describing the asker. Asking for somebody else's memberships
+    // (where email == 'katie@…') is denied, because the rule compares
+    // against the CALLER, not against the filter.
+    match /{path=**}/members/{memberId} {
+      allow read: if signedIn() && resource.data.email == me();
     }
 
     match /workspaces/{wsId} {
