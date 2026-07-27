@@ -41,7 +41,7 @@ export const CONFIG_VERSION = "1.1.0";
 // box, because a wizard that silently asks you to share with nothing is
 // worse than no wizard.
 // ============================================================
-export const CALENDAR_ROBOT = "";   // e.g. "1234-compute@developer.gserviceaccount.com"
+export const CALENDAR_ROBOT = "470873844999-compute@developer.gserviceaccount.com";   // e.g. "1234-compute@developer.gserviceaccount.com"
 
 
 export const FIREBASE_CONFIG = {
