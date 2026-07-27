@@ -1,6 +1,6 @@
 # SETUP-2.0.md — Standing up Tentacalendar 2.0
 
-**Version 1.3.0** · Written 2026-07-25 by Wunderpus · Companion to TENTACALENDAR-2.0-DESIGN.md 1.0.0
+**Version 1.4.0** · Written 2026-07-25 by Wunderpus · Part 0 and Part 9 filled in from the real project 2026-07-27 by Marginatus · Companion to TENTACALENDAR-2.0-DESIGN.md 1.6.0
 
 > **What this is:** the browser-only walkthrough for creating the new Firebase project and repo that 2.0 lives in. Same shape as SETUP-PHASE3.md, which you followed successfully once already. No CLI, no admin tools, no terminal.
 >
@@ -93,10 +93,14 @@ Avoid **inkling** (Nintendo's, and this goes public).
 Write your choice here before continuing, because the next four parts all use it:
 
 ```
-PROJECT ID:  ____________________     (permanent, lowercase, no spaces)
-REPO NAME:   ____________________     (can be changed later)
-DEV SUBDOMAIN: ______________.misterwilson.org
+PROJECT ID:    fantasktic-octodo      (permanent — "octodo" was taken)
+REPO NAME:     octodo
+DEV SUBDOMAIN: (none — served from the GitHub Pages SUBPATH instead,
+                misterwilson37.github.io/octodo. See the ⚠️ near the top:
+                this is why every path in the project must be relative.)
 ```
+
+> **Filled in 2026-07-27.** These were blanks in the template and stayed blank after Jake ran the guide, because the real values went into the completion block at the top of this document instead — so the document disagreed with itself. Both places now say the same thing. **Anyone reproducing this for their own school or family replaces every value here with their own**; that is what the blanks were for, and the reproduction path is the README in this repo.
 
 Throughout this document, `<PROJECT>` means the project ID you just wrote down.
 
@@ -228,17 +232,37 @@ Neither is needed while the only users are you and Nico.
 Paste this back, filled in. It's everything needed to start writing code:
 
 ```
-PROJECT ID:      ____________________
-DEV URL:         https://____________________
-REPO:            github.com/____________________
+PROJECT ID:      fantasktic-octodo
+DEV URL:         https://misterwilson37.github.io/octodo
+REPO:            github.com/misterwilson37/octodo
 
-firebaseConfig = {  ...paste the whole block from Part 4...  }
+firebaseConfig = {
+  apiKey: "AIzaSyCLfoNFU0PB38xDIX_l3l47KXjLSgKv2fQ",
+  authDomain: "fantasktic-octodo.firebaseapp.com",
+  projectId: "fantasktic-octodo",
+  storageBucket: "fantasktic-octodo.firebasestorage.app",
+  messagingSenderId: "470873844999",
+  appId: "1:470873844999:web:3abbbe071b2c87e64529a2"
+}
 
-Smoke test:      [ ] all green     [ ] failed on: ______
-Blaze:           [ ] on   [ ] still Spark
-Nico's account:  [ ] can sign in   [ ] not tried yet
-Edition codename: ____________________
+Smoke test:      [x] all green (2026-07-26, including the denial test)
+Blaze:           [x] on
+Nico's account:  [x] can sign in (proved by smoke.html before any app existed)
+Edition codename: Octodo
 ```
+
+**✅ HANDED OFF AND SPENT.** This form's job was to carry the foundation into
+the first build session, and it did — `config.js` 1.0.0 is built from exactly
+the block above. The live values now live in `config.js`; this is the record of
+where they came from, not a second source of truth. **If they ever disagree,
+`config.js` is right and this is stale.**
+
+> **The blanks were a template, and for a real reason — but they should not have
+> survived being filled.** A form with empty lines in a repo reads as "nobody
+> did this yet," which is exactly the wrong signal for a foundation that was
+> finished and verified. Someone reproducing this project for their own school
+> or family blanks them again along with everything else; the README is the
+> front door for that.
 
 With that in hand, the next session starts at **build order item 2** (auth + workspace bootstrap) with nothing left to guess at.
 

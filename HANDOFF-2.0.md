@@ -1,6 +1,8 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.3.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · rules 1.1.0 — BUILT, NOT YET DEPLOYED. Nothing has ever been pushed to octodo; this is one clean first deploy.**
+**Document version: 0.4.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · **rules 1.1.1** — app deployed 2026-07-27; **first sign-in FAILED on a rules bug, fixed in this drop.**|
+
+> **⚠️ IF YOU READ ONE THING: rules 1.1.0's collection-group clause could never have worked, and 1.1.1 fixes it.** It matched on the document ID (`match /{path=**}/members/{email}` with `email == me()`). That reasoning is correct for a GET of one named document and **meaningless for a QUERY** — a query names no documents, so Firestore evaluates the rule before reading anything, the ID wildcard is unbound, and the whole query is REFUSED as `permission-denied`. Not "returns nothing": refused. **A list rule must test a FIELD, and the client query must filter on that same field.** Member documents carry `email` exactly so this works.
 
 > **⚠️ RULES 1.1.0 MUST BE PUBLISHED, and it is a separate action from pushing files.** Firestore Rules live in the console, not the repo. Publish before or with the deploy: the E33 minor guard and the E34 collection-group clause are both in it, and the board switcher **returns nothing at all** without the latter. Select-all-and-REPLACE in the rules editor — appending is what took the site down on 2026-07-12.
 >
@@ -76,7 +78,7 @@ Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy,
 | `index.html` | **0.41.0** | One `<div>` added (`#blocked-screen`) + pins |
 | `tentacalendar.css` | **0.47.0** | Two rules: `#blocked-screen` shares `#auth-screen`'s selector (D104's one grammar), plus `.blocked-detail` |
 | `manifest.json` | **0.2.0** | `"id": "/"` → `"./"` (E4a) |
-| `firestore-2.0.rules` | **1.1.0** | E33 minor guard + E34 collection-group clause. **Publish in the console.** |
+| `firestore-2.0.rules` | **1.1.1** | E33 minor guard + E34 collection-group clause, **the latter rewritten to secure a query rather than a document**. Publish in the console. |
 
 ### Item 4 — houses and keys (the E24 milestone)
 
@@ -208,12 +210,25 @@ Mirrored from 1.x's D-rows because these are the ones that bite **before** you h
 
 ---
 
+## 8b. The first sign-in failure — what it cost and what it taught
+
+**Symptom:** Nico signed in at the dev URL and got the E17 screen reading *"We couldn't finish setting up your calendar… almost always a connection hiccup."* Console: `Missing or insufficient permissions` at `store.js:193`.
+
+**Three things went wrong, and only the first was a bug.**
+
+1. **The rules bug (real).** Covered in the header. The clause was written and commented with confident reasoning — *"the document id IS the member's email, so the only rows this can ever return are the asker's own"* — that is simply not how list authorisation works. **The comment was more confident than the code was correct, which is the worst possible pairing** because it discourages the next reader from checking.
+2. **The error message lied.** It said "connection hiccup, try again." `permission-denied` is never a hiccup and retrying never fixes it. E17 exists so a stranded user gets the truth; a screen that guesses wrong is only marginally better than the silent bounce it replaced. Fixed: `permission-denied` now has its own copy that says the account is fine and the configuration is not.
+3. **The diagnostic said "bootstrap failed" and nothing else.** `resolveWorkspace` has four steps that can throw and the console named none of them. Now every step is tagged and the failing one is printed, and a `permission-denied` prints an ordered checklist. **Cost of not having this: one full round trip to identify a line number.**
+
+**The design flaw underneath, which is the durable lesson:** the failing query was the *optional* one — a lookup that exists so a child lands on the board built for them. In 0.19.0 a failure there threw, so **one bad clause in an enhancement stopped every new user from signing up at all.** An optional step that can strand everybody is not optional. It now warns and falls through. **Residual risk, stated rather than discovered: if that query is broken AND a dependent board exists, its resident gets a personal board instead of the one their parents hold — recoverable, where a locked-out app is not. This is why smoke test IR must be re-run after ANY rules change.**
+
 ## 9. Session log
 
 | Date | Instance | What happened |
 |---|---|---|
 | 2026-07-25 | Opus 5 · **Wunderpus** (11th) | The 2.0 design + setup kit. No app code, on purpose. Named for *Wunderpus photogenicus*, catalogued one animal at a time by its permanent unique pattern. |
 | 2026-07-26 | — (Jake solo) | Ran SETUP-2.0 end to end. `fantasktic-octodo`, repo, rules published, **smoke test green including denial**. Nico authenticated successfully. |
+| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST DEPLOY, FIRST FAILURE.** Nico's sign-in died on permission-denied. Cause was mine: rules 1.1.0's collection-group clause matched the document ID, which cannot secure a query. **The clause carried a paragraph of confident reasoning for why it was safe, and that reasoning was about the wrong operation** — the surest sign a comment needs checking is that it argues rather than states. Fixed in 1.1.1 (match the field, filter on the field). Two things fixed alongside that were not the bug but made it expensive: the E17 screen blamed the network for a refusal that retrying can never fix, and the console said "bootstrap failed" without naming which of four steps. **Also made the failing query non-fatal — it was an optional lookup that could strand every new user, which is not optional.** Filled in SETUP-2.0's Part 0 and Part 9 blanks, which Jake caught: the real values were in the completion block at the top, so the document disagreed with itself and read as unfinished work. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 4 — houses and keys.** Jake stopped the deploy, said the permission description was more technical than he could follow, and re-described the target audiences himself. **He was right to stop, and the re-description contained a correction I had got wrong:** E25 had Jake owning Katie's board, which made her a guest in her own practice. Reversed — she owns hers, he owns Nico's, same mechanism opposite directions. He then improved on it, inventing the dependent workspace and the minor flag unprompted. **Two bugs came out of walking HIS description through MY rules rather than re-reading them:** Nico could have left his own board through a door marked "leave" (E33), and Nico's first sign-in would have built him a second board his parents never held (the adoption path). Neither was findable by reading the file; both were obvious the moment a real person's Tuesday was traced through it. **Lesson worth keeping: when the human re-describes the problem in their own words, walk the code through THEIR version, not yours.** Also declined to hotfix a latent 1.x tab-selector bug — no symptom, so E27 doesn't fire; a dual-fix window that covers every shared imperfection stops being paid. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th) | **Named for *Amphioctopus marginatus*, the coconut octopus — the only one that carries its shelter with it, disassembled, and rebuilds it somewhere else, never exposed in between.** That is §11 and §15 exactly. The other half: *marginatus* means "bordered," and E1 is the whole design — the boundary is a path, not a field. **Built items 1→3.** Jake's answers from the day became E23–E31; the two biggest are E24 (2.0.0 = the board switcher, his own definition, D67's shape) and E30 (store.js absorbs the workspace so 7,100 lines of app.js + queue.js cross unchanged). **Found the doubled 1.x stylesheet** while reading it to port it, measured the blast radius instead of assuming it, and explicitly ruled it OUT as an explanation for Katie's phone — the finding that would have been most tempting to over-claim. Caught the manifest's absolute `id` by running E4a's sweep rather than trusting that a byte-identical carry is a safe carry. **Process note for successors: the 1.x repo did not arrive in the first upload and I said so instead of inferring the missing files** — three of the four documents I needed were in hand, and the fourth was one sentence away. |
 

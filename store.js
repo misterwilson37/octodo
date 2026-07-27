@@ -1,6 +1,12 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.19.0 — E32/E33/E34: HOUSES AND KEYS, and the bug that walking
+// Version 0.19.1 — bootstrap diagnostics + a query that can no longer strand
+// anybody. Nico's first sign-in died on "Missing or insufficient permissions"
+// and the console could only say the bootstrap failed, not WHERE — so this
+// adds a step tag to every stage of resolveWorkspace, and makes the one
+// optional step optional in fact as well as in intent. The rules bug itself
+// is fixed in firestore-2.0.rules 1.1.1.
+// (prev) Version 0.19.0 — E32/E33/E34: HOUSES AND KEYS, and the bug that walking
 // Nico's first sign-in through 0.18.0 exposed.
 //   · THE BUG: a dependent workspace is built for a child BEFORE that child
 //     has ever signed in, so there is no users/{email} document to point at
@@ -112,7 +118,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.0.0";
 
-export const STORE_VERSION = "0.19.0";
+export const STORE_VERSION = "0.19.1";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -190,7 +196,19 @@ export function watchAuth(onIn, onOut, onBlocked) {
       onIn(user);
     } catch (err) {
       ACTIVE_WS = null;
-      console.error("[store] workspace bootstrap failed:", err);
+      // The step tag is the point. "Bootstrap failed" sent one debugging
+      // round to the wrong place; the failing STEP names the fix.
+      console.error(
+        `[store] workspace bootstrap failed at step: ${err.tcStep || "unknown"}`,
+        err);
+      if (String(err?.code || "").includes("permission-denied")) {
+        console.error(
+          "[store] permission-denied during bootstrap. Check, in this order:\n" +
+          "  1. Are firestore rules PUBLISHED, and are they at least 1.1.1?\n" +
+          "  2. Rules 1.1.0's collection-group clause matched on the document\n" +
+          "     ID, which cannot secure a QUERY — 1.1.1 matches on the field.\n" +
+          "  3. Console -> Firestore -> Rules; select all, replace, publish.");
+      }
       if (onBlocked) onBlocked("error", user, err); else onOut();
     }
   });
@@ -203,10 +221,16 @@ async function canOpen(wsId) {
   catch { return false; }
 }
 
+/** Tag an error with the bootstrap step it died on, then rethrow. */
+async function step(name, fn) {
+  try { return await fn(); }
+  catch (err) { err.tcStep = name; throw err; }
+}
+
 /** Find the board this user should land on, or build them one. */
 async function resolveWorkspace(user) {
   const uref = doc(db, "users", ME);
-  const usnap = await getDoc(uref);
+  const usnap = await step("1-read-user-profile", () => getDoc(uref));
 
   // 1. Where they were last time (the switcher's memory).
   if (await canOpen(PREFERRED_WS)) return PREFERRED_WS;
@@ -230,9 +254,29 @@ async function resolveWorkspace(user) {
   // membership counted, then a colleague sharing a board with someone who
   // had never signed in would silently deny that person a house of their
   // own. A shared board should show up in your switcher, not become your home.
-  const keys = await getDocs(
-    query(collectionGroup(db, "members"), where("email", "==", ME)));
-  const dependent = keys.docs
+  //
+  // ⚠️ NON-FATAL BY DESIGN, and 0.19.0 got this wrong. This lookup is an
+  // ENHANCEMENT — it exists so a child lands on the board built for them —
+  // and in 0.19.0 a failure here threw, which meant one bad rules clause
+  // stopped EVERY new user from signing up at all. An optional step that can
+  // strand everybody is not optional. It now warns and falls through.
+  //
+  // The residual risk, stated rather than discovered: if this query is broken
+  // AND a dependent board exists, its resident gets a personal board instead
+  // of the one their parents hold. That is recoverable (delete it, sign in
+  // again) where a locked-out app is not — but it is why smoke test IR must
+  // be re-run after ANY change to the rules.
+  let keys = null;
+  try {
+    keys = await getDocs(
+      query(collectionGroup(db, "members"), where("email", "==", ME)));
+  } catch (err) {
+    console.warn(
+      "[store] could not check for an existing board (non-fatal — a personal " +
+      "one will be created). If this user was supposed to have a board made " +
+      "FOR them, fix this before letting them use the one they just got:", err);
+  }
+  const dependent = !keys ? null : keys.docs
     .map(d => ({ wsId: d.ref.parent.parent.id, ...d.data() }))
     .find(r => r.minor === true);
   if (dependent) {
@@ -246,7 +290,8 @@ async function resolveWorkspace(user) {
   }
 
   // 4. Nobody has built them anything. Build them a house.
-  return createPersonalWorkspace(user, uref, usnap.exists());
+  return step("4-create-workspace",
+    () => createPersonalWorkspace(user, uref, usnap.exists()));
 }
 
 // A small stable palette so two workspaces in the board switcher (item 4)

@@ -1,6 +1,10 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.23.0 — E32/E34: THE BOARD SWITCHER, which by Jake's own
+// Version 1.23.1 — a Z: the E17 screen told Nico "connection hiccup" when the
+// truth was a rules bug. A blocked screen that guesses wrong about WHY is
+// only marginally better than the silent bounce it replaced, so
+// permission-denied now gets its own honest sentence.
+// (prev) Version 1.23.0 — E32/E34: THE BOARD SWITCHER, which by Jake's own
 // definition (E24) is what makes this 2.0. Houses and keys, on screen:
 //   · a header chip naming the board you are standing in, marked "visiting"
 //     when you hold a key to a house you do not own;
@@ -768,7 +772,7 @@ import {
   activeWorkspaceId, setActiveWorkspace, setPreferredWorkspace,   // E1/E34
   subscribeMyWorkspaces, subscribeWorkspaceDoc, subscribeMembers, // E34
   addMember, removeMember, setMemberRole, createDependentWorkspace // E5/E32
-} from "./store.js?v=0.19.0";
+} from "./store.js?v=0.19.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -779,7 +783,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.23.0";
+export const APP_VERSION = "1.23.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1424,6 +1428,15 @@ const BLOCKED_COPY = {
     title: "We couldn't finish setting up your calendar",
     body: "You're signed in, but building your workspace didn't complete. " +
           "That's almost always a connection hiccup — wait a moment and try again."
+  },
+  // A blocked screen that guesses wrong is barely better than no screen.
+  // permission-denied is never a hiccup and waiting never fixes it: the
+  // database refused, which is a configuration problem on our side.
+  permissions: {
+    title: "Your account is fine — the database turned us away",
+    body: "This isn't something you did, and trying again won't help. " +
+          "The security rules need attention on our end. If you're the one " +
+          "who set this up, the browser console names the exact step."
   }
 };
 
@@ -1434,7 +1447,10 @@ function onBlocked(reason, user, err) {
   S.boards = []; S.wsDoc = null; S.members = [];
   $("#board-switch").hidden = true;
   S.user = null;
-  const copy = BLOCKED_COPY[reason] || BLOCKED_COPY.error;
+  // Read the real cause off the error rather than the caller's label — the
+  // caller only knows "bootstrap threw", the error knows what refused.
+  const denied = String(err?.code || "").includes("permission-denied");
+  const copy = BLOCKED_COPY[denied ? "permissions" : reason] || BLOCKED_COPY.error;
   $("#auth-screen").hidden = true;
   $("#app-screen").hidden = true;
   $("#blocked-screen").hidden = false;
@@ -1442,7 +1458,9 @@ function onBlocked(reason, user, err) {
   $("#blocked-body").textContent = copy.body;
   $("#blocked-who").textContent = user?.email || "";
   const detail = $("#blocked-detail");
-  detail.textContent = err ? String(err.message || err) : "";
+  detail.textContent = err
+    ? String(err.message || err) + (err.tcStep ? ` (step: ${err.tcStep})` : "")
+    : "";
   detail.hidden = !err;
 }
 

@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.42.0 (banner and data-html-version move together, always)
+     Version 0.42.1 (banner and data-html-version move together, always)
+     0.42.1: app -> 1.23.1 (E17 copy now tells the truth about a rules
+     refusal instead of blaming the network). No markup change.
      0.42.0 (E32/E34): the BOARD SWITCHER (#board-switch) in the header and a
      People tab in Settings — invite, revoke, change access, and create a
      dependent workspace for a child. Pins: app -> 1.23.0, css -> 0.48.0,
@@ -260,7 +262,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.48.0">
 </head>
-<body data-html-version="0.42.0">
+<body data-html-version="0.42.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1004,6 +1006,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.23.0"></script>
+  <script type="module" src="app.js?v=1.23.1"></script>
 </body>
 </html>
