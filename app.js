@@ -1,6 +1,21 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.23.3 — a Z: repin to store 0.20.0 (item 7 made the workspace
+// Version 1.24.0 — E38, three fixes from Jake's first real use of item 4.
+//   1. DEPENDENTS DON'T GET DEPENDENTS. A minor could see and use the
+//      create-a-board form. Jake: "that's just asking kids to mess with one
+//      another and lock them out of things." He's right, and the form is now
+//      hidden from anyone flagged minor on any board they hold. HONESTY: this
+//      is a UI gate, not a rules one — see the comment on the check.
+//   2. A BOARD CAN BE RENAMED. There was no way to fix a board's name in the
+//      app at all; the only route was the Firebase console.
+//   3. THE PLACEHOLDER LIED. "Board name" showed a grey "Nico", which reads
+//      as filled-in — so Jake submitted an empty field and got a board named
+//      after the email's local part. Placeholders now read as instructions,
+//      the name auto-fills from the address as you type, and the fallback
+//      derives "Nico" from "nico.m.wilson" instead of using it whole.
+//   Plus: a dependent board you own says "you hold the deed" in the switcher
+//   rather than "yours", which was true and misleading at once.
+// (prev) Version 1.23.3 — a Z: repin to store 0.20.0 (item 7 made the workspace
 // document authoritative for pollIntervalMinutes, so saveConfig now writes
 // both copies). No app-layer behaviour change.
 // (prev) Version 1.23.2 — a Z. Two fixes in the People list: the tags reused the
@@ -780,7 +795,8 @@ import {
   fetchCompletedTasks, liveCompletedCutoff,  // D139
   activeWorkspaceId, setActiveWorkspace, setPreferredWorkspace,   // E1/E34
   subscribeMyWorkspaces, subscribeWorkspaceDoc, subscribeMembers, // E34
-  addMember, removeMember, setMemberRole, createDependentWorkspace // E5/E32
+  addMember, removeMember, setMemberRole, createDependentWorkspace, // E5/E32
+  saveWorkspace, forgetWorkspaceCache                              // E38 rename
 } from "./store.js?v=0.20.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
@@ -792,7 +808,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.23.3";
+export const APP_VERSION = "1.24.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1017,6 +1033,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#people-add").addEventListener("click", inviteMember);
   $("#dep-create").addEventListener("click", createDependentBoard);
+  $("#ws-rename").addEventListener("click", renameBoard);          // E38
+  // Fill the board name from the address as it's typed, so the value is a
+  // real (black) value rather than a placeholder anyone would misread as one.
+  $("#dep-email").addEventListener("input", () => {
+    const n = $("#dep-name");
+    if (!n.dataset.touched) n.value = niceNameFromEmail($("#dep-email").value);
+  });
+  $("#dep-name").addEventListener("input", ev => { ev.target.dataset.touched = "1"; });
 
   // Tier color conflict assistant (D55) — delegated, rows are dynamic
   $("#tier-editor").addEventListener("input", ev => {
@@ -1264,6 +1288,14 @@ function iOwnThisBoard() {
   return me?.role === "owner";
 }
 
+// "yours" is true of a board you hold the deed to for somebody else, and
+// misleading — it is their list. Say what you actually are to it.
+function boardWho(b) {
+  if (b.minor) return "yours";                       // you live here
+  if (!ownsBoard(b)) return esc(b.ownerEmail || "");
+  return b.kind === "dependent" ? "you hold the deed" : "yours";
+}
+
 function renderBoards() {
   const active = activeWorkspaceId();
   const visible = S.boards.filter(b => !b.hidden);
@@ -1290,7 +1322,7 @@ function renderBoards() {
     btn.innerHTML =
       `<span class="board-dot" style="background:${esc(b.color || "#4dabf7")}"></span>` +
       `<span>${esc(b.name || "Board")}</span>` +
-      `<span class="who">${ownsBoard(b) ? "yours" : esc(b.ownerEmail || "")}</span>`;
+      `<span class="who">${boardWho(b)}</span>`;
     btn.addEventListener("click", () => switchBoard(b.id));
     menu.appendChild(btn);
   });
@@ -1309,6 +1341,27 @@ function switchBoard(wsId) {
 
 // Plain words for the roles. "editor" is a database value, not a sentence.
 const ROLE_WORD = { owner: "co-owner", editor: "can edit", viewer: "can view" };
+
+/** "nico.m.wilson@gmail.com" -> "Nico". The old fallback used the whole local
+ *  part, which is how a board ended up called "nico.m.wilson". */
+function niceNameFromEmail(email) {
+  const local = String(email || "").split("@")[0];
+  const first = local.split(/[._+\-0-9]+/).filter(Boolean)[0] || local;
+  return first ? first.charAt(0).toUpperCase() + first.slice(1) : "";
+}
+
+/** E38 — is this user a dependent anywhere? Dependents don't get dependents.
+ *  ⚠️ HONESTY: this is a UI gate, not a security boundary. It cannot be a
+ *  rules check today — rules would have to ask "is this person a minor
+ *  somewhere", and the only place to record that cheaply is the user's own
+ *  document, which they can rewrite. The gate is proportionate because the
+ *  harm Jake named is kids locking each other out, not a data breach: E1
+ *  still holds absolutely, and nothing a dependent creates can reach anyone
+ *  else's board. If this ever needs to be enforced rather than encouraged,
+ *  the honest mechanism is a custom auth claim set by a function. */
+function isDependentUser() {
+  return S.boards.some(b => b.minor);
+}
 
 function renderPeople() {
   const list = $("#people-list");
@@ -1368,6 +1421,19 @@ function renderPeople() {
   ["people-email", "people-role", "people-add"].forEach(id => {
     const el = $("#" + id); if (el) el.disabled = !owner;
   });
+
+  // E38 — the rename row: owners only, and it shows the CURRENT name so the
+  // field is never a lying blank.
+  const nameInput = $("#ws-name");
+  if (nameInput && document.activeElement !== nameInput) {
+    nameInput.value = S.wsDoc?.name || "";
+  }
+  if (nameInput) nameInput.disabled = !owner;
+  $("#ws-rename").disabled = !owner;
+  $("#ws-rename-row").hidden = !owner;
+
+  // E38 — dependents don't get dependents. One block, one line.
+  $("#dep-block").hidden = isDependentUser();
   if (!owner && !list.querySelector(".hint")) {
     const p = document.createElement("p");
     p.className = "hint";
@@ -1395,6 +1461,18 @@ async function inviteMember() {
   } catch (err) { showPeopleError(err); }
 }
 
+async function renameBoard() {
+  const name = $("#ws-name").value.trim();
+  $("#people-msg").textContent = "";
+  if (!name) return showPeopleError(new Error("a board needs a name"));
+  try {
+    await saveWorkspace(activeWorkspaceId(), { name });
+    forgetWorkspaceCache(activeWorkspaceId());
+    $("#people-msg").textContent = `Renamed to "${name}".`;
+    renderBoards();
+  } catch (err) { showPeopleError(err); }
+}
+
 async function createDependentBoard() {
   const name = $("#dep-name").value.trim();
   const email = $("#dep-email").value.trim().toLowerCase();
@@ -1403,7 +1481,7 @@ async function createDependentBoard() {
   if (!email.includes("@")) return showPeopleError(new Error("their email address is required"));
   if (co && !co.includes("@")) return showPeopleError(new Error("that co-owner address doesn't look right"));
   try {
-    await createDependentWorkspace({ name: name || email.split("@")[0], minorEmail: email, coOwnerEmail: co || null });
+    await createDependentWorkspace({ name: name || niceNameFromEmail(email), minorEmail: email, coOwnerEmail: co || null });
     $("#dep-name").value = ""; $("#dep-email").value = ""; $("#dep-coowner").value = "";
     $("#people-msg").textContent =
       `Board created. You hold the deed${co ? `, ${co} is a co-owner` : ""}, and ${email} can use it but cannot remove either of you. ` +

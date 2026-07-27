@@ -1,6 +1,37 @@
 // ============================================================
 // Tentacalendar 2.0 (Octodo) — Cloud Functions
-// functions/index.js — Version 1.0.0 (E14, the multi-tenant work queue)
+// functions/index.js — Version 1.1.0 (E14 work queue + E37 calendar guard)
+//
+// 1.1.0 — ⚠️ CLOSES A REAL HOLE THAT 1.0.0 SHIPPED WITH, found by Jake
+// asking whether a colleague could end up with HIS calendar. He could have
+// ended up with worse: a colleague could have TAKEN it.
+//
+//   THE HOLE. The service account is PROJECT-WIDE. When Jake shares his
+//   calendar with the robot so his own poll works, he grants that robot
+//   access for EVERY workspace in the project — the grant lives on Google's
+//   side and knows nothing about workspaces. 1.0.0 then read whatever
+//   calendar id a tier happened to name, with no check that the workspace
+//   was entitled to it. So any signed-up user could type
+//   jacob.v.wilson@gmail.com into their own Home tier and pull his entire
+//   calendar into their queue. Firestore isolation (E1) is airtight and
+//   completely beside the point here: the leak is on the CALENDAR side.
+//
+//   THE GUARD (E37). A bare email address is somebody's primary calendar,
+//   and it is guessable — so it may only be polled by a workspace that
+//   person is a MEMBER of. Everything else (…@group.calendar.google.com and
+//   friends) is an opaque random id nobody can guess, so it passes; those
+//   are secondary calendars whose id is itself the secret.
+//
+//   WHAT THIS IS AND IS NOT. It is a real fix for the guessable case, which
+//   is the one that matters, and it is defence in depth rather than a proof
+//   of ownership — path A cannot prove ownership, because sharing a calendar
+//   with a robot leaves no record of WHO shared it. **The complete answer is
+//   path B (E13): per-user OAuth, where each person authorises their own
+//   calendar and no shared robot exists.** Until then this guard plus a
+//   trusted user base is the honest position, and it is written down here so
+//   nobody has to rediscover it.
+//
+// (prev) Version 1.0.0 (E14, the multi-tenant work queue)
 //
 // 1.0.0 — WHAT CHANGED FROM 1.x's 0.4.0, AND WHAT DELIBERATELY DID NOT.
 //
@@ -111,13 +142,38 @@ const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "1.0.0";
+const FUNCTIONS_VERSION = "1.1.0";
 
 // ---- E14: the work queue's dials ----
 const BATCH = 5;               // workspaces claimed per run. Raise as users grow.
 const SOFT_DEADLINE_MS = 45000; // stop claiming new work past this; the run ends
                                 // cleanly and the unclaimed are simply still due
                                 // next time. A partial pass is not a failure.
+
+// ---- E37: which calendars may a workspace poll? ----
+// Ids ending in these are Google-generated and effectively unguessable — a
+// secondary calendar's id IS its secret, so possessing it is the entitlement.
+const OPAQUE_CAL_SUFFIXES = [
+  "group.calendar.google.com",
+  "import.calendar.google.com",
+  "group.v.calendar.google.com",
+  "holiday.calendar.google.com"
+];
+
+/** A bare email is a PERSON'S PRIMARY calendar and is trivially guessable,
+ *  so only a workspace that person belongs to may poll it. Anything opaque
+ *  passes and Google's own sharing decides. Returns null if allowed, or a
+ *  human sentence explaining the refusal. */
+function calendarRefusal(calId, memberEmails) {
+  const id = String(calId || "").trim().toLowerCase();
+  if (!id) return "empty calendar id";
+  if (OPAQUE_CAL_SUFFIXES.some(s => id.endsWith(s))) return null;
+  if (!id.includes("@")) return null;
+  if (memberEmails.has(id)) return null;
+  return `refused: "${id}" is a personal calendar and nobody by that address ` +
+         `is a member of this workspace. Add them as a member, or use a ` +
+         `secondary calendar (its id ends in group.calendar.google.com).`;
+}
 
 // ---- The tag namespace. See point 2 in the header before changing these. ----
 const TC_APP = "octodo";
@@ -287,7 +343,20 @@ async function runWorkspace(cal, ws, job, force) {
 
     const tiersSnap = await db.collection(`workspaces/${wsId}/tiers`).get();
     const allTiers = tiersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const calTiers = allTiers.filter(t => t.kind === "anchor" && t.gcalCalendarId);
+
+    // E37 — the entitlement check. Member document ids ARE lowercased emails.
+    const memSnap = await db.collection(`workspaces/${wsId}/members`).get();
+    const memberEmails = new Set(memSnap.docs.map(d => d.id.toLowerCase()));
+
+    const calTiers = [];
+    const refused = {};
+    for (const t of allTiers) {
+      if (t.kind !== "anchor" || !t.gcalCalendarId) continue;
+      const why = calendarRefusal(t.gcalCalendarId, memberEmails);
+      if (why) refused[t.name || t.id] = why;   // reported, never silently dropped
+      else calTiers.push(t);
+    }
+    if (Object.keys(refused).length) out.refusedCalendars = refused;
 
     if (job === "poll" || job === "all") {
       // "skipped", not "warning": in a multi-user system most workspaces

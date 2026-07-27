@@ -1,6 +1,10 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.48.1  (banner and --tc-version move together, ALWAYS —
+   Version 0.49.0  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
+   0.49.0 (E38): #ws-rename-row aligns its button with the input instead of
+   with the label above it. Nothing else.
+   (prev) Version 0.48.1  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
    0.48.1: .person-tag replaces .person-row .badge. `.badge` ALREADY EXISTED
    and means DANGER — background: var(--danger), bold, near-black text. My
@@ -215,7 +219,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.48.1";
+  --tc-version: "0.49.0";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -332,6 +336,8 @@ button { cursor: pointer; font: inherit; }
   border: 1px solid var(--line); border-radius: 999px; padding: .1rem .5rem;
 }
 .person-tag.deed { color: var(--accent); border-color: var(--accent); }
+#ws-rename-row { align-items: flex-end; }
+#ws-rename-row label { flex: 1 1 14rem; min-width: 0; }   /* D66 */
 
 /* ---------- Header ---------- */
 header {
