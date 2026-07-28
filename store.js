@@ -1,6 +1,62 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.20.1 — repin to config 1.2.0 (it now carries CALENDAR_ROBOT).
+// Version 0.21.1 — WHOSE ORDER YOU SEE WHEN VISITING. Jake: "Visiting her
+// should give me a taste of EXACTLY what she looks at — zero differences.
+// Otherwise I wouldn't have an honest picture of her load."
+//
+// 0.21.0 got that right for a person's OWN tiers and wrong for the SHARED
+// one, and the shared one is the case he was asking about. A tier document's
+// `rank` is written by whoever has setup rights, so on a personal board it is
+// reliably the owner's opinion — but BOTH people write a shared tier's
+// document, and the last save wins. Visiting Katie could therefore have shown
+// Family at Jake's rank, sitting in the middle of her board looking like her
+// judgement about her own week.
+//
+// FIXED by putting each person's ordering of a shared tier on THEIR OWN
+// MEMBER ROW in that shared workspace. No rules change: a member row is
+// readable by everyone holding a key to the same workspace and writable only
+// by its own subject, which is exactly the shape this needs and is already
+// what the rules say. users/{email}.tierRanks stays the authority for YOUR
+// view (E7); the member row exists purely to be read by somebody else, which
+// is a thing a private profile can never be.
+//
+// And the person whose order you see when visiting is the RESIDENT, not the
+// deed-holder — on a dependent board (E32) those differ, and it is the
+// child's day that makes his board honest. See viewerEmail() and rankFor().
+//
+// (prev) Version 0.21.0 — ITEM 5: SHARED TIERS. This file now reads from SEVERAL
+// workspaces at once and writes to whichever one a document actually lives
+// on, and app.js's 6,500 lines still believe there is exactly one board.
+// That is E30 being spent a second time, and it is the whole point.
+//
+// FOUR NEW IDEAS, in the order you need them:
+//
+//   1. THE MERGE SET. Every subscription below fans out across a LIST of
+//      workspaces instead of one. The list is the active board plus every
+//      `kind:"shared"` workspace that belongs in this view — see mergeSet()
+//      for the rule, which is Jake's and not the one originally designed.
+//
+//   2. THE OWNERSHIP MAP (`_where`). Merged snapshots record which board
+//      each document came from, so a later write can be aimed at it.
+//      ⚠️ IT IS NEVER PRUNED. A deleted document keeps its entry, because
+//      restoreDoc resurrects by id and would otherwise put it back on the
+//      wrong board. Tombstones are the feature; a few thousand string pairs
+//      is not a memory problem.
+//
+//   3. PER-USER TIER RANK (E7). users/{me}.tierRanks maps "wsId:tierId" to
+//      a number, and subscribeTiers overlays it onto `rank` before app.js
+//      sees it. So app.js:6391 and queue.js:486 keep reading `.rank` and
+//      never learn it stopped being a property of the document.
+//
+//   4. SHARE / UNSHARE = A MOVE, AT THE SAME DOCUMENT IDS. shareTier lifts
+//      a tier and everything pointing at it into a new shared workspace;
+//      unshareTier brings it home. Ids are PRESERVED, which is what keeps
+//      parentTaskId chains, projectId references and the merged view's
+//      uniqueness intact. COPY, VERIFY, THEN DELETE — a failure anywhere
+//      leaves duplicates, which are visible and recoverable, and never
+//      leaves a hole, which is not (Principle 3).
+//
+// (prev) Version 0.20.1 — repin to config 1.2.0 (it now carries CALENDAR_ROBOT).
 // (prev) Version 0.20.0 — item 7 support. nextPollAt is now a NUMBER (0 = never
 // polled, poll now) rather than null: the work queue claims on
 // `nextPollAt <= now`, and null sorts before numbers in Firestore so it
@@ -132,7 +188,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.20.1";
+export const STORE_VERSION = "0.21.1";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -145,11 +201,20 @@ const db = getFirestore(app);
 // not a rewrite.
 let ACTIVE_WS = null;
 let ME = null;
+/** The board this user's own key opens — users/{me}.homeWorkspaceId. The
+ *  merge rule below needs to know when you are standing in your own house. */
+let HOME_WS = null;
+/** E7 — this user's cross-workspace tier ordering: "wsId:tierId" -> rank.
+ *  The ONLY place a user's opinion about tier order lives. Kept live by
+ *  subscribeMyProfile so a change on one device reorders the other. */
+let TIER_RANKS = {};
 
 /** The workspace every subscription and write below is scoped to. */
 export function activeWorkspaceId() { return ACTIVE_WS; }
 /** The signed-in user's lowercased email — the id used for users/ and members/. */
 export function currentEmail() { return ME; }
+/** This user's own board, regardless of which one they are looking at. */
+export function homeWorkspaceId() { return HOME_WS; }
 
 // The board switcher's memory. app.js reads its own localStorage key and
 // hands the value here BEFORE watchAuth runs, so a returning device opens on
@@ -166,6 +231,13 @@ export function setPreferredWorkspace(wsId) { PREFERRED_WS = wsId || null; }
 export function setActiveWorkspace(wsId) {
   if (!wsId || wsId === ACTIVE_WS) return false;
   ACTIVE_WS = wsId;
+  // The old board's member list is not the new board's, and the merge rule
+  // reads it. Clearing rather than keeping means the first paint of a new
+  // board merges too LITTLE and then grows, which is the safe direction:
+  // showing somebody else's tier for a beat is the failure mode worth
+  // avoiding (subscribeBoard's own comment makes the same argument).
+  _activeMembers = new Set();
+  refreshMerge();
   return true;
 }
 
@@ -181,6 +253,167 @@ const wsRef = () => doc(db, "workspaces", ws());
 const col = name => collection(db, "workspaces", ws(), name);
 const settingsRef = which => doc(db, "workspaces", ws(), "settings", which);
 
+// ============================================================
+// THE MERGE SET (item 5)
+//
+// ⚠️ THE RULE IS JAKE'S AND IT IS NOT THE OBVIOUS ONE. The first design
+// said shared tiers merge into your HOME board only, so visiting somebody
+// meant seeing strictly their world. He corrected it, and the correction is
+// better:
+//
+//   "If I'm sharing with a colleague and [I'm] in her house, then I won't
+//    see that tier — I'm in her house, after all — but I don't want OUR
+//    shared tier to disappear just because I'm in her house."
+//
+// So: A SHARED TIER FOLLOWS YOU INTO A HOUSE WHERE SOMEBODY WHO LIVES THERE
+// ALSO HOLDS A KEY TO IT. In Katie's house, Family merges (she is in it) and
+// the school tier you share with a colleague does not (she is not). In your
+// own house everything you hold merges, including things nobody else on your
+// board can see — which is why "my own house" is a separate arm of the test
+// rather than a special case of it.
+//
+// Every input to this is readable: you may list the members of any workspace
+// you are a member of (rules: `match /members/{email} { allow read: if
+// canRead(wsId) }`), and both workspaces qualify — the shared one and the one
+// you are looking at. Nothing here needs a rules change.
+// ============================================================
+
+/** Shared workspaces this user holds a key to: wsId -> {doc, members:Set}. */
+const _shared = new Map();
+/** Emails holding a key to the board currently being VIEWED. */
+let _activeMembers = new Set();
+/** Who the board being viewed BELONGS to, and who LIVES in it. On a personal
+ *  board those are the same person; on a dependent board (E32) they are not,
+ *  and it is the resident's day you are looking at, not the deed-holder's. */
+let _activeOwner = null;
+let _activeMinor = null;
+/** The workspaces every subscription below currently fans out across. */
+let MERGE = [];
+
+function mergeSet() {
+  const out = [ACTIVE_WS];
+  if (!ACTIVE_WS) return out;
+  const atHome = ACTIVE_WS === HOME_WS;
+  for (const [wsId, s] of _shared) {
+    if (wsId === ACTIVE_WS || s.hidden) continue;
+    // In my own house: everything I hold.
+    // Anywhere else: only what somebody who lives HERE also holds.
+    const shares = atHome || [..._activeMembers].some(e => e !== ME && s.members.has(e));
+    if (shares) out.push(wsId);
+  }
+  return out;
+}
+
+/** Recompute the merge set; rebind every live fan-out if it actually moved. */
+function refreshMerge() {
+  const next = mergeSet();
+  if (next.length === MERGE.length && next.every((w, i) => w === MERGE[i])) return false;
+  MERGE = next;
+  for (const f of _fanouts) f.bind();
+  return true;
+}
+
+/** The boards currently merged into the view. Exposed for the version
+ *  tooltip and for diagnostics; nothing in app.js needs to act on it. */
+export function mergedWorkspaceIds() { return [...MERGE]; }
+
+// ---------- Which board does this document live on? ----------
+// Populated by the merged snapshots themselves, so it is always a fact
+// rather than a guess.
+//
+// ⚠️ NEVER PRUNED, DELIBERATELY. When a document is deleted its snapshot
+// drops out, but restoreDoc (D116's undo) resurrects it AT ITS ORIGINAL ID
+// and has to put it back on the board it came from. An entry that vanished
+// with the document would send the resurrection to the active board instead
+// — silently, and only for shared tiers, which is the worst kind of bug to
+// go looking for. The map is a tombstone register; that is its job.
+const _where = {
+  tiers: new Map(), tasks: new Map(), projects: new Map(),
+  sessions: new Map(), eventsCache: new Map()
+};
+function noteWhere(coll, id, wsId) { _where[coll]?.set(id, wsId); }
+/** The board a document lives on, or the active board if we've never seen it
+ *  (a brand-new document, or one created in this same tick). */
+function wsOf(coll, id) { return _where[coll]?.get(id) || ws(); }
+
+const colIn = (wsId, name) => collection(db, "workspaces", wsId, name);
+/** A routed document reference: the id decides the board, not ACTIVE_WS. */
+const docIn = (coll, id) => doc(db, "workspaces", wsOf(coll, id), coll, id);
+/** The board a TIER lives on — the resolver for anything created against a
+ *  tier (tasks, projects), which is what makes a shared tier hold its own. */
+const wsOfTier = tierId => _where.tiers.get(tierId) || ws();
+
+// ---------- Fan-out ----------
+// One logical subscription, N Firestore listeners, one merged emit. The
+// shape is subscribeTasks's own trick from 0.17.0 (two listeners, one
+// composite unsub) raised one dimension.
+const _fanouts = new Set();
+
+/**
+ * @param coll   which ownership map to stamp
+ * @param build  (wsId, rows => void) => unsub[]   — listeners for ONE board
+ * @param emit   (mergedRows) => void
+ */
+function fanout(coll, build, emit) {
+  let unsubs = [];
+  const buckets = new Map();
+  const flush = () => {
+    const byId = new Map();
+    for (const wsId of MERGE) for (const r of (buckets.get(wsId) || [])) byId.set(r.id, r);
+    emit([...byId.values()]);
+  };
+  const bind = () => {
+    unsubs.forEach(u => u());
+    unsubs = [];
+    buckets.clear();
+    for (const wsId of MERGE) {
+      if (!wsId) continue;
+      unsubs.push(...build(wsId, rows => {
+        for (const r of rows) noteWhere(coll, r.id, wsId);
+        buckets.set(wsId, rows);
+        flush();
+      }));
+    }
+    flush();
+  };
+  const entry = { bind, flush };
+  _fanouts.add(entry);
+  bind();
+  return () => { _fanouts.delete(entry); unsubs.forEach(u => u()); };
+}
+
+/** Re-emit from the buckets already held, without touching any listener.
+ *  A change of WHOSE ORDER we are showing changes no document — it changes
+ *  how the same documents are sorted — so rebinding would be a round trip to
+ *  Firestore to learn nothing. */
+function renotifyAll() { for (const f of _fanouts) f.flush(); }
+
+/**
+ * ⚠️ WHOSE DAY AM I LOOKING AT? Jake, 2026-07-28: "Visiting her should give
+ * me a taste of EXACTLY what she looks at — zero differences. Otherwise I
+ * wouldn't have an honest picture of her load."
+ *
+ * On your own board that is you. On somebody else's it is the person who
+ * LIVES there, which is not always the person who holds the deed: a
+ * dependent board (E32) is owned by a parent and inhabited by a child, and
+ * it is the child's ordering that makes his board honest. The minor flag is
+ * already the marker for exactly that relationship, so it is read first.
+ */
+function viewerEmail() {
+  if (!ACTIVE_WS || ACTIVE_WS === HOME_WS) return ME;
+  return _activeMinor || _activeOwner || ME;
+}
+
+/** onSnapshot with an error handler that says something actionable. Every
+ *  fanned-out listener uses it, because a merged view that silently loses
+ *  one board looks like missing data rather than a failure (0.19.2's lesson,
+ *  which was exactly this shape one level down). */
+function watchCol(ref, cb, label) {
+  return onSnapshot(ref, cb, err => {
+    console.error(`[store] the ${label} listener failed on a merged board:`, err);
+  });
+}
+
 // ---------- Auth + workspace bootstrap ----------
 
 /**
@@ -191,9 +424,21 @@ const settingsRef = which => doc(db, "workspaces", ws(), "settings", which);
  * fires with reason "unverified" or "error"; app.js draws a sentence for each.
  * Passing it is optional so the signature stays backward-compatible (E30).
  */
+/** Everything the previous signed-in user left behind. Sign-out on a shared
+ *  device is the ONLY place two accounts meet in one page, and a stale
+ *  ownership map would route the second person's writes onto the first
+ *  person's boards. Cheap to clear, expensive to have missed. */
+function resetMergeState() {
+  ACTIVE_WS = null; ME = null; HOME_WS = null;
+  MERGE = []; _activeMembers = new Set();
+  _shared.clear(); _wsCache.clear();
+  TIER_RANKS = {};
+  for (const m of Object.values(_where)) m.clear();
+}
+
 export function watchAuth(onIn, onOut, onBlocked) {
   onAuthStateChanged(auth, async user => {
-    if (!user) { ACTIVE_WS = null; ME = null; return onOut(); }
+    if (!user) { resetMergeState(); return onOut(); }
     ME = (user.email || "").toLowerCase();
 
     // firestore.rules 1.0.0 requires email_verified on EVERY read and write.
@@ -207,6 +452,12 @@ export function watchAuth(onIn, onOut, onBlocked) {
 
     try {
       ACTIVE_WS = await resolveWorkspace(user);
+      // ⚠️ BEFORE onIn. app.js subscribes the moment this returns, and a
+      // fan-out binding against an EMPTY merge set creates no listeners and
+      // emits nothing — an app that boots blank and fills in a beat later
+      // once some other snapshot happens to refresh the set. Seeding it here
+      // means the first bind already has the active board in it.
+      refreshMerge();
       onIn(user);
     } catch (err) {
       ACTIVE_WS = null;
@@ -245,6 +496,15 @@ async function step(name, fn) {
 async function resolveWorkspace(user) {
   const uref = doc(db, "users", ME);
   const usnap = await step("1-read-user-profile", () => getDoc(uref));
+
+  // HOME_WS and the rank map are read here rather than lazily, because the
+  // merge rule (mergeSet) needs to know whether the board being opened is
+  // this user's own — and it needs to know it BEFORE the first subscription,
+  // or the first paint merges the wrong set and then corrects itself.
+  if (usnap.exists()) {
+    HOME_WS = usnap.data().homeWorkspaceId || null;
+    TIER_RANKS = usnap.data().tierRanks || {};
+  }
 
   // 1. Where they were last time (the switcher's memory).
   if (await canOpen(PREFERRED_WS)) return PREFERRED_WS;
@@ -300,6 +560,7 @@ async function resolveWorkspace(user) {
       photoURL: user.photoURL || "",
       homeWorkspaceId: dependent.wsId
     }, { merge: true });
+    HOME_WS = dependent.wsId;
     return dependent.wsId;
   }
 
@@ -371,6 +632,7 @@ async function createPersonalWorkspace(user, uref, userExists) {
   }
   await setDoc(uref, profile, { merge: true });
 
+  HOME_WS = ref.id;
   return ref.id;
 }
 
@@ -484,6 +746,7 @@ export function subscribeMyWorkspaces(cb) {
       minor: d.data().minor === true
     }));
     const out = [];
+    const seenShared = new Set();
     for (const r of rows) {
       if (!_wsCache.has(r.wsId)) {
         try {
@@ -492,8 +755,23 @@ export function subscribeMyWorkspaces(cb) {
         } catch { /* a board we cannot read is a board we do not list */ }
       }
       const w = _wsCache.get(r.wsId);
-      if (w) out.push({ id: r.wsId, ...w, myRole: r.role, hidden: r.hidden, minor: r.minor });
+      if (!w) continue;
+
+      // §6.2 — A SHARED TIER MERGES INTO YOUR QUEUE; A SHARED BOARD IS ONE
+      // YOU SWITCH TO. So a kind:"shared" workspace is deliberately NOT a
+      // switcher entry: it has no dashboard of its own to visit, it is one
+      // tier that turns up inside boards you already use. Listing it would
+      // offer a door into a house with one room in it.
+      if (w.kind === "shared") {
+        seenShared.add(r.wsId);
+        trackShared(r.wsId, { ...w, myRole: r.role, hidden: r.hidden });
+        continue;
+      }
+      out.push({ id: r.wsId, ...w, myRole: r.role, hidden: r.hidden, minor: r.minor });
     }
+    // A key taken back has to stop merging, not just stop being listed.
+    for (const wsId of [..._shared.keys()]) if (!seenShared.has(wsId)) untrackShared(wsId);
+    refreshMerge();
     // Your own house first, then alphabetical — so the switcher never
     // reorders under you when somebody else renames their board.
     out.sort((a, b) =>
@@ -525,15 +803,88 @@ export function subscribeMyWorkspaces(cb) {
 /** Forget a cached workspace document — call after renaming one. */
 export function forgetWorkspaceCache(wsId) { _wsCache.delete(wsId); }
 
-/** The board currently being viewed: name, colour, kind, ownerEmail. */
-export function subscribeWorkspaceDoc(cb) {
-  return onSnapshot(wsRef(), snap => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null));
+/**
+ * Start (or refresh) watching a shared workspace.
+ *
+ * The member list is LIVE rather than fetched once, because it is an input
+ * to the merge rule: the moment Katie is added to a shared tier, that tier
+ * has to start appearing when you visit her board — and the moment she is
+ * removed it has to stop. A one-shot read would make that correct only until
+ * somebody changed something.
+ */
+function trackShared(wsId, wsDoc) {
+  const prev = _shared.get(wsId);
+  if (prev) {
+    prev.doc = wsDoc;
+    prev.hidden = wsDoc.hidden === true;
+    return;
+  }
+  const entry = {
+    doc: wsDoc,
+    hidden: wsDoc.hidden === true,
+    members: new Set(),
+    // email -> { tierId: rank }. EVERY member's ordering of this shared tier,
+    // which is the whole reason it is stored here rather than only on the
+    // user profile: users/{email} is readable by nobody but its owner, so a
+    // rank kept only there can never make a VISITED board honest. A member
+    // row is readable by everyone who holds a key to the same workspace, and
+    // writable only by its own subject — the rules already say so, and no
+    // clause had to change.
+    ranks: new Map(),
+    unsub: null
+  };
+  _shared.set(wsId, entry);
+  entry.unsub = watchCol(colIn(wsId, "members"), snap => {
+    entry.members = new Set(snap.docs.map(d => d.id));
+    entry.ranks = new Map(snap.docs.map(d => [d.id, d.data().tierRanks || {}]));
+    refreshMerge();
+    renotifyAll();     // membership did not have to move for an ORDER to
+  }, `shared board ${wsId} member`);
 }
 
-/** Who else holds a key to the board being viewed. */
+function untrackShared(wsId) {
+  const e = _shared.get(wsId);
+  if (!e) return;
+  if (e.unsub) e.unsub();
+  _shared.delete(wsId);
+}
+
+/** Every shared tier this user holds a key to, for the sharing UI. Carries
+ *  the merge verdict so the tier editor can say "shared, and showing here"
+ *  versus "shared, and not on this board" without recomputing the rule. */
+export function sharedWorkspaces() {
+  return [..._shared.entries()].map(([id, e]) => ({
+    id,
+    ...e.doc,
+    members: [...e.members],
+    merged: MERGE.includes(id)
+  }));
+}
+
+/** The board currently being viewed: name, colour, kind, ownerEmail. */
+export function subscribeWorkspaceDoc(cb) {
+  return onSnapshot(wsRef(), snap => {
+    const w = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+    _activeOwner = (w?.ownerEmail || "").toLowerCase() || null;
+    renotifyAll();     // whose order we show may have just changed
+    cb(w);
+  });
+}
+
+/** Who else holds a key to the board being viewed.
+ *
+ *  Doubles as the merge rule's second input — "somebody who lives HERE" is
+ *  exactly this list. Deliberately the same listener rather than a private
+ *  one beside it: two subscriptions to the same query is two things that can
+ *  disagree about who is in the room. */
 export function subscribeMembers(cb) {
-  return onSnapshot(col("members"), snap =>
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  return watchCol(col("members"), snap => {
+    _activeMembers = new Set(snap.docs.map(d => d.id));
+    _activeMinor = snap.docs.find(d => d.data().minor === true)?.id || null;
+    refreshMerge();
+    renotifyAll();
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  }, "member");
 }
 
 /** Rename / recolour a board. Owner-role only, enforced by the rules. */
@@ -631,16 +982,377 @@ export async function createDependentWorkspace({ name, minorEmail, coOwnerEmail 
   return ref.id;
 }
 
+// ============================================================
+// SHARE A TIER / TAKE IT BACK  (E6, E8, item 5)
+//
+// E6: "a shared tier is a small shared workspace." There is no per-tier
+// permission anywhere and there must not be — E1 makes isolation a property
+// of the PATH, and a tier that stayed on your board while somebody else read
+// it would be a field-level boundary wearing a path-level app's clothes.
+//
+// So sharing MOVES the tier and everything pointing at it into a workspace
+// of its own, and both people hold keys to that workspace. Unsharing moves
+// it back. One mechanism, two directions, same as houses and keys.
+//
+// ⚠️ THREE PROPERTIES THIS DEPENDS ON. Change any of them and re-read this.
+//
+//   1. DOCUMENT IDS ARE PRESERVED. Not cosmetic: parentTaskId chains,
+//      projectId references and the sessions ledger all point BY ID, and the
+//      merged view keys by id too. A move that reassigned ids would sever
+//      every follow-up chain in the tier and silently orphan its time.
+//      setDoc-at-a-known-id is already proven here — it is what restoreDoc
+//      has done since D116.
+//
+//   2. COPY, VERIFY, THEN DELETE. Never the other order. A failure part-way
+//      leaves DUPLICATES, which are recoverable and — because the merged
+//      view keys by id — not even visible. A delete-first failure leaves a
+//      HOLE, which is not recoverable and is exactly what Principle 3 says
+//      must never happen.
+//
+//   3. UNSHARE IS ALSO THE REPAIR TOOL. If a share dies half-way, the
+//      originals are still on your board and a half-populated shared
+//      workspace exists; unshareTier brings back whatever made it across and
+//      removes the workspace. That is the whole reason it ships in the same
+//      increment rather than "later".
+//
+// eventsCache is NOT moved: it is a cache the hourly poll rebuilds from the
+// tier's own gcalCalendarId, so the entries are deleted from the source and
+// regenerate on the other side within the hour. Moving a cache is how a
+// cache becomes a second source of truth.
+// ============================================================
+
+const BATCH_LIMIT = 400;   // Firestore's hard limit is 500; leave headroom.
+
+/** Commit an array of {ref, data} as create-writes, in bounded batches. */
+async function writeAll(items) {
+  for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    for (const it of items.slice(i, i + BATCH_LIMIT)) batch.set(it.ref, it.data);
+    await batch.commit();
+  }
+}
+
+/** Delete an array of refs, in bounded batches. */
+async function deleteAll(refs) {
+  for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    for (const ref of refs.slice(i, i + BATCH_LIMIT)) batch.delete(ref);
+    await batch.commit();
+  }
+}
+
+/** Everything that travels with a tier, read from one board. */
+async function collectTier(wsId, tierId) {
+  const [tierSnap, taskSnap, projSnap, sessSnap, evSnap] = await Promise.all([
+    getDoc(doc(db, "workspaces", wsId, "tiers", tierId)),
+    getDocs(query(colIn(wsId, "tasks"), where("tierId", "==", tierId))),
+    getDocs(query(colIn(wsId, "projects"), where("tierId", "==", tierId))),
+    getDocs(colIn(wsId, "sessions")),
+    getDocs(query(colIn(wsId, "eventsCache"), where("tierId", "==", tierId)))
+  ]);
+  const projectIds = new Set(projSnap.docs.map(d => d.id));
+  // Sessions are matched client-side rather than by an `in` query: the whole
+  // collection is small (§5c), and `in` caps at 30 values, so a project-heavy
+  // tier would have needed chunking for no benefit.
+  const sessions = sessSnap.docs.filter(d => projectIds.has(d.data().projectId));
+  return { tier: tierSnap, tasks: taskSnap.docs, projects: projSnap.docs, sessions, events: evSnap.docs };
+}
+
+/** Move a tier and its contents from one board to another, ids intact. */
+async function moveTier(fromWs, toWs, tierId, tierPatch = {}) {
+  const got = await collectTier(fromWs, tierId);
+  if (!got.tier.exists()) throw new Error("that tier no longer exists");
+
+  const writes = [
+    { ref: doc(db, "workspaces", toWs, "tiers", tierId), data: { ...got.tier.data(), ...tierPatch } },
+    ...got.tasks.map(d => ({ ref: doc(db, "workspaces", toWs, "tasks", d.id), data: d.data() })),
+    ...got.projects.map(d => ({ ref: doc(db, "workspaces", toWs, "projects", d.id), data: d.data() })),
+    ...got.sessions.map(d => ({ ref: doc(db, "workspaces", toWs, "sessions", d.id), data: d.data() }))
+  ];
+  await writeAll(writes);
+
+  // VERIFY BEFORE DELETING. Counting the destination is a weak check and an
+  // honest one: it proves the writes landed and were not silently refused,
+  // which is the failure this ordering exists to survive.
+  const landed = await collectTier(toWs, tierId);
+  const expected = 1 + got.tasks.length + got.projects.length + got.sessions.length;
+  const actual = (landed.tier.exists() ? 1 : 0) + landed.tasks.length
+               + landed.projects.length + landed.sessions.length;
+  if (actual < expected) {
+    throw new Error(
+      `only ${actual} of ${expected} documents arrived — NOTHING has been deleted, ` +
+      `so your tier is still where it was. Undo the share to clear up.`);
+  }
+
+  try {
+    await deleteAll([
+      ...got.sessions.map(d => d.ref),
+      ...got.projects.map(d => d.ref),
+      ...got.tasks.map(d => d.ref),
+      ...got.events.map(d => d.ref),        // a cache; the poll rebuilds it
+      got.tier.ref
+    ]);
+  } catch (err) {
+    // The copies landed and the originals could not be removed — almost
+    // always because the mover is a helper on the source board, which the
+    // rules let create but not delete. Nothing is LOST, and the merged view
+    // keys by id so it does not even look doubled. Say what state it is in
+    // and name the way out, rather than surfacing a bare permission error
+    // after a successful copy, which reads like the whole thing failed.
+    console.error("[store] copied, but could not clear the originals:", err);
+    throw new Error(
+      "The tier was copied but the originals could not be removed — you may " +
+      "not have permission to delete on that board. Nothing was lost. Undo " +
+      "the share to put it back exactly as it was.");
+  }
+
+  // The ownership map is a fact about where documents live, and they have
+  // just moved. Writes queued between here and the next snapshot would
+  // otherwise be aimed at a board that no longer holds them.
+  noteWhere("tiers", tierId, toWs);
+  for (const d of got.tasks) noteWhere("tasks", d.id, toWs);
+  for (const d of got.projects) noteWhere("projects", d.id, toWs);
+  for (const d of got.sessions) noteWhere("sessions", d.id, toWs);
+  return expected;
+}
+
+/**
+ * Share a tier: lift it into a workspace of its own and hand out keys.
+ *
+ * E8 — NO ROLE PICKER, and it writes `editor`. Jake: "It's my damn app. If
+ * you're going to look at one another's shit, then you should share in the
+ * work that goes into it." The `role` field is still stored, so the door
+ * exists in the data if a viewer-only tier is ever wanted; it is simply not
+ * drawn on the wall. Note that editor is SAFE here in a way it is not on a
+ * whole board: the only gcalCalendarId an editor can repoint is this one
+ * tier's, because that is the only tier in the workspace.
+ */
+export async function shareTier(tierId, emails = []) {
+  const from = wsOf("tiers", tierId);
+  const tierSnap = await getDoc(doc(db, "workspaces", from, "tiers", tierId));
+  if (!tierSnap.exists()) throw new Error("that tier no longer exists");
+  if (_shared.has(from)) throw new Error("that tier is already shared");
+
+  const now = Date.now();
+  const ref = doc(collection(db, "workspaces"));
+
+  // Same load-bearing order as createPersonalWorkspace: the workspace
+  // document and the FIRST member document cannot share a batch, because the
+  // members rule does get() on a workspace that would not exist yet.
+  await setDoc(ref, {
+    name: tierSnap.data().name || "Shared",
+    kind: "shared",
+    ownerEmail: ME,
+    createdAt: now, createdBy: ME,
+    color: tierSnap.data().color || pickWorkspaceColor(tierId),
+    nextPollAt: 0,
+    pollIntervalMinutes: 60
+  });
+  await setDoc(doc(db, "workspaces", ref.id, "members", ME), {
+    email: ME, role: "owner", addedBy: ME, addedAt: now,
+    displayName: "", hidden: false
+  });
+
+  const batch = writeBatch(db);
+  for (const raw of emails) {
+    const e = String(raw || "").trim().toLowerCase();
+    if (!e || e === ME) continue;
+    batch.set(doc(db, "workspaces", ref.id, "members", e), {
+      email: e, role: "editor", addedBy: ME, addedAt: now,
+      displayName: "", hidden: false
+    });
+  }
+  // A shared workspace gets its own settings/config because the hourly
+  // function reads carryoverWriteHour and mirrorCalendarId from there. A
+  // shared tier that could not carry over would be a quieter tier than the
+  // one it replaced, which nobody asked for.
+  batch.set(doc(db, "workspaces", ref.id, "settings", "config"), {
+    carryoverWriteHour: 9, pollIntervalMinutes: 60,
+    sleepStart: 22, sleepEnd: 6, deadlineHour: 16,
+    decisionThresholdDays: 2, clearDeckThreshold: 0.6
+  });
+  await batch.commit();
+
+  const moved = await moveTier(from, ref.id, tierId);
+  return { wsId: ref.id, moved };
+}
+
+/**
+ * Take a shared tier back onto a board you own. The mirror image of the
+ * above, and the repair path for a share that failed part-way.
+ *
+ * The shared workspace document itself is deleted last and only if the move
+ * emptied it. A board that still holds something is left standing — deleting
+ * a workspace does not cascade to its subcollections, so removing one with
+ * documents still inside would orphan them where nothing can ever reach them
+ * again. That is the one shape Principle 3 cannot tolerate.
+ */
+export async function unshareTier(tierId, toWs = null) {
+  const from = wsOf("tiers", tierId);
+  if (!_shared.has(from)) throw new Error("that tier is not shared");
+  const dest = toWs || HOME_WS || ACTIVE_WS;
+  if (!dest) throw new Error("no board to bring it back to");
+  if (dest === from) throw new Error("a shared tier cannot be brought back to itself");
+
+  const moved = await moveTier(from, dest, tierId);
+
+  const leftovers = await Promise.all(
+    ["tiers", "tasks", "projects", "sessions"].map(c => getDocs(colIn(from, c))));
+  if (leftovers.every(s => s.empty)) {
+    // eventsCache is swept rather than counted. It is a cache the hourly
+    // poll writes on its own schedule, so it can appear in a shared board
+    // AFTER the tier left — and a workspace document deleted over the top of
+    // it would orphan documents at a path nothing can ever reach again.
+    // Deleting a workspace does not cascade; that is the one shape
+    // Principle 3 cannot tolerate.
+    const [members, cached] = await Promise.all([
+      getDocs(colIn(from, "members")),
+      getDocs(colIn(from, "eventsCache"))
+    ]);
+    await deleteAll([
+      ...cached.docs.map(d => d.ref),
+      ...members.docs.map(d => d.ref),
+      doc(db, "workspaces", from, "settings", "config"),
+      doc(db, "workspaces", from)
+    ]);
+    untrackShared(from);
+    refreshMerge();
+  } else {
+    console.warn(
+      `[store] shared board ${from} still holds documents, so it was left in ` +
+      `place rather than orphaning them. Nothing is lost; it simply has no ` +
+      `tier in it until you look.`);
+  }
+  return { movedTo: dest, moved };
+}
+
 // ---------- Live subscriptions ----------
 // Each returns an unsubscribe function; callback receives an array of
 // {id, ...data} (or a single object for config).
 
+/**
+ * Tiers, merged across every board in the view, with E7's per-user rank
+ * overlaid onto `rank` before app.js sees anything.
+ *
+ * ⚠️ THE OVERLAY IS WHY app.js DID NOT HAVE TO CHANGE. app.js:6391 writes
+ * `.rank`, app.js:2069 reads it to decide whether hiding a tier deserves a
+ * confirm, queue.js:486 breaks D43's ties with it, and two <select> builders
+ * print it. All five keep working on a field that stopped being a property
+ * of the document, because the substitution happens here.
+ *
+ * WHOSE ORDER YOU SEE, stated plainly because it is a real limitation and
+ * not a bug to be found later:
+ *
+ *   · ON YOUR OWN BOARD your tierRanks order everything — your tiers and
+ *     every shared tier merged into the view. That is E7 and it is the half
+ *     Jake asked for ("I'll see it at my priority in my house").
+ *   · VISITING SOMEBODY ELSE'S BOARD you see DOCUMENT ranks. Not a choice:
+ *     `users/{email}` is `allow read, write: if signedIn() && email == me()`,
+ *     so Katie's ordering is unreadable to anyone but Katie, correctly. The
+ *     honest approximation is the tier document's own rank — and because
+ *     saveTier writes rank back to the document wherever the writer has
+ *     setup rights, that value tracks the board owner's opinion on their own
+ *     board. Visiting Katie shows Katie's order because Katie set it.
+ *
+ * A tier absent from the map keeps its document rank rather than sorting to
+ * zero, so a newly shared tier lands where its owner put it instead of
+ * silently claiming the top of your day (§4.2).
+ */
 export function subscribeTiers(cb) {
-  return onSnapshot(col("tiers"), snap => {
-    const tiers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    tiers.sort((a, b) => a.rank - b.rank);
-    cb(tiers);
-  });
+  return fanout("tiers",
+    (wsId, push) => [watchCol(colIn(wsId, "tiers"), snap =>
+      push(snap.docs.map(d => ({
+        id: d.id, ...d.data(),
+        wsId,                                   // which house this tier is in
+        shared: _shared.has(wsId)               // …and whether that house is shared
+      }))), "tier")],
+    tiers => {
+      const viewer = viewerEmail();
+      const ranked = tiers.map(t => {
+        const r = rankFor(t, viewer);
+        return (r == null) ? t : { ...t, rank: r };
+      });
+      ranked.sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+      cb(ranked);
+    });
+}
+
+/**
+ * The one function that answers "what number does this tier wear right now."
+ * Everything about whose day you are looking at is decided here.
+ *
+ *   YOUR OWN BOARD — your profile map, for every tier in the view, yours and
+ *   shared alike. That is E7.
+ *
+ *   VISITING — the RESIDENT's ordering, so the board is an honest picture of
+ *   their load and not a picture of yours:
+ *     · their own tiers already carry it, because the tier document's rank is
+ *       written by whoever has setup rights and on a personal board that is
+ *       one person;
+ *     · a SHARED tier does not, because you BOTH write that document and the
+ *       last save wins. Their rank comes off their member row in the shared
+ *       workspace, which is readable by everyone holding that tier and
+ *       writable only by its subject.
+ *
+ * Falls through to the document rank whenever nobody has expressed an
+ * opinion, so a newly shared tier lands where its owner put it rather than
+ * silently claiming the top of somebody's day (§4.2).
+ */
+function rankFor(tier, viewer) {
+  if (viewer === ME && ACTIVE_WS === HOME_WS) {
+    const mine = TIER_RANKS[`${tier.wsId}:${tier.id}`];
+    if (mine != null) return mine;
+    return null;
+  }
+  const shared = _shared.get(tier.wsId);
+  if (shared) {
+    const theirs = shared.ranks.get(viewer)?.[tier.id];
+    if (theirs != null) return theirs;
+  }
+  return null;   // the document's own rank stands
+}
+
+/** E7 — record this user's opinion of where a tier belongs in THEIR day.
+ *  Written to the profile always; mirrored onto the document only where the
+ *  writer has setup rights, because the document rank is what a visitor and
+ *  a brand-new member see. One authority, one documented fallback. */
+/**
+ * Mirror this user's rank for a SHARED tier onto their own member row, so
+ * that somebody visiting their board sees their number rather than whoever
+ * saved the tier document last.
+ *
+ * A mirror, not a second authority — the same shape saveConfig already uses
+ * to put pollIntervalMinutes where the poll can query it. The profile map
+ * stays the truth for YOUR view; this copy exists purely to be READ BY
+ * SOMEBODY ELSE, which is a thing the profile map can never be.
+ *
+ * Only shared workspaces. On a personal board the tier document's own rank
+ * already carries the owner's opinion, because they are the only person who
+ * can write it.
+ */
+async function noteSharedRank(wsId, tierId, rank) {
+  if (!ME || rank == null || !_shared.has(wsId)) return;
+  try {
+    await updateDoc(doc(db, "workspaces", wsId, "members", ME),
+      { [`tierRanks.${tierId}`]: rank });
+  } catch (err) {
+    // Never fatal: your own ordering was already saved to your profile above.
+    // All that is lost is other people seeing it, on a board you may not
+    // have been allowed to write anyway.
+    console.warn("[store] could not publish your order for this shared tier:", err);
+  }
+}
+
+async function noteTierRank(wsId, tierId, rank) {
+  if (!ME || rank == null) return;
+  const key = `${wsId}:${tierId}`;
+  if (TIER_RANKS[key] === rank) return;
+  TIER_RANKS[key] = rank;
+  try {
+    await setDoc(doc(db, "users", ME), { tierRanks: { [key]: rank } }, { merge: true });
+  } catch (err) {
+    console.warn("[store] could not save your tier order:", err);
+  }
 }
 
 // ---------- D139: BOUNDED TASK WINDOW (Option A) ----------
@@ -680,43 +1392,39 @@ export function liveCompletedCutoff() {
   return _liveFloor ?? completedWindowFloor();
 }
 
+// ITEM 5: this is now TWO listeners PER MERGED BOARD, still one callback.
+// The per-board pair keeps D139's bounded window exactly as it was — the
+// window is a property of what a screen can show, not of how many boards
+// feed it — and the fan-out merges the pairs.
 export function subscribeTasks(cb) {
   _liveFloor = completedWindowFloor();
-  const active = new Map();   // completedAt == null
-  const recent = new Map();   // completedAt >= floor
-  let activeReady = false, recentReady = false;
-
-  // Emit the union on every snapshot from either listener. Before BOTH have
-  // delivered once we still emit — a half-set for a few ms is no worse than
-  // the old single listener's boot, and render() is a snapshot handler that
-  // expects to run repeatedly (D101).
-  const emit = () => {
-    const byId = new Map(recent);        // recent first…
-    for (const [id, t] of active) byId.set(id, t);  // …active wins on the impossible clash
-    cb([...byId.values()]);
-  };
-
-  const unsubActive = onSnapshot(
-    query(col("tasks"), where("completedAt", "==", null)),
-    snap => {
-      active.clear();
-      snap.docs.forEach(d => active.set(d.id, { id: d.id, ...d.data() }));
-      activeReady = true;
-      emit();
-    }
-  );
-  const unsubRecent = onSnapshot(
-    query(col("tasks"), where("completedAt", ">=", _liveFloor)),
-    snap => {
-      recent.clear();
-      snap.docs.forEach(d => recent.set(d.id, { id: d.id, ...d.data() }));
-      recentReady = true;
-      emit();
-    }
-  );
-
-  // One unsub that tears down both, so app.js's S.unsubs teardown is unchanged.
-  return () => { unsubActive(); unsubRecent(); };
+  return fanout("tasks",
+    (wsId, push) => {
+      const active = new Map();   // completedAt == null
+      const recent = new Map();   // completedAt >= floor
+      // Emit the union on every snapshot from either listener. Before BOTH
+      // have delivered once we still emit — a half-set for a few ms is no
+      // worse than the old single listener's boot, and render() is a
+      // snapshot handler that expects to run repeatedly (D101).
+      const emit = () => {
+        const byId = new Map(recent);                   // recent first…
+        for (const [id, t] of active) byId.set(id, t);  // …active wins on the impossible clash
+        push([...byId.values()]);
+      };
+      return [
+        watchCol(query(colIn(wsId, "tasks"), where("completedAt", "==", null)), snap => {
+          active.clear();
+          snap.docs.forEach(d => active.set(d.id, { id: d.id, ...d.data() }));
+          emit();
+        }, "active task"),
+        watchCol(query(colIn(wsId, "tasks"), where("completedAt", ">=", _liveFloor)), snap => {
+          recent.clear();
+          snap.docs.forEach(d => recent.set(d.id, { id: d.id, ...d.data() }));
+          emit();
+        }, "recent task")
+      ];
+    },
+    cb);
 }
 
 /**
@@ -726,21 +1434,31 @@ export function subscribeTasks(cb) {
  * and the caller caches by week so re-paging is free.
  */
 export async function fetchCompletedTasks(startMs, endMs) {
-  const q = query(
-    col("tasks"),
-    where("completedAt", ">=", startMs),
-    where("completedAt", "<", endMs)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // ITEM 5 — the deep past is merged too, or a shared tier's history would
+  // vanish the moment the week view paged behind the live window. One query
+  // per merged board, in parallel; ownership is stamped on the way through
+  // so a task fetched from history can still be written to.
+  const per = await Promise.all(MERGE.filter(Boolean).map(async wsId => {
+    const snap = await getDocs(query(
+      colIn(wsId, "tasks"),
+      where("completedAt", ">=", startMs),
+      where("completedAt", "<", endMs)
+    ));
+    return snap.docs.map(d => {
+      noteWhere("tasks", d.id, wsId);
+      return { id: d.id, ...d.data() };
+    });
+  }));
+  return per.flat();
 }
 
 export function subscribeEvents(cb) {
   // Phase 1: eventsCache is empty until pollCalendars ships (HANDOFF §5 build
   // order, phase 3). The code path is live so the queue logic never changes.
-  return onSnapshot(col("eventsCache"), snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  });
+  return fanout("eventsCache",
+    (wsId, push) => [watchCol(colIn(wsId, "eventsCache"), snap =>
+      push(snap.docs.map(d => ({ id: d.id, ...d.data() }))), "calendar event")],
+    cb);
 }
 
 export function subscribeConfig(cb) {
@@ -751,8 +1469,12 @@ export function subscribeConfig(cb) {
 
 // ---------- Task CRUD ----------
 
+// ITEM 5 — THE TIER DECIDES THE BOARD. A task typed into the shared Family
+// tier has to land in the Family workspace, or it is invisible to the person
+// you shared it with and the whole feature is a lie. wsOfTier is the routing
+// rule for everything born against a tier.
 export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null, recurrence = null }) {
-  return addDoc(col("tasks"), {
+  return addDoc(colIn(wsOfTier(tierId), "tasks"), {
     title, tierId, dueAt, escalation, notes,
     projectId,
     estimateMinutes,          // D100 — null = unestimated, NOT zero
@@ -772,7 +1494,9 @@ export async function addTask({ title, tierId, dueAt, escalation, notes = "", pr
 }
 
 export async function addFollowUp(parentTaskId, { title, offsetDays, tierId }) {
-  return addDoc(col("tasks"), {
+  // The follow-up joins its PARENT, not the active board — a chain split
+  // across two workspaces would break rewindFollowUps' single query.
+  return addDoc(colIn(wsOf("tasks", parentTaskId), "tasks"), {
     title, tierId,
     dueAt: null,               // materializes on parent completion (D4)
     escalation: { every: 1, unit: "hours" },
@@ -798,12 +1522,13 @@ export async function setTaskDone(taskId, done) {
   // E9 — completedAt has no actor, and §7.2 is right that the day a tier is
   // shared, Reflection starts counting a teammate's wins as yours. Writing the
   // actor at the moment of completion is the whole fix, and it is one key.
-  await updateDoc(doc(col("tasks"), taskId), {
+  const home = wsOf("tasks", taskId);
+  await updateDoc(docIn("tasks", taskId), {
     completedAt: done ? now : null,
     completedBy: done ? whoami() : null
   });
   if (!done) return;
-  const q = query(col("tasks"), where("parentTaskId", "==", taskId));
+  const q = query(colIn(home, "tasks"), where("parentTaskId", "==", taskId));
   const kids = await getDocs(q);
   const batch = writeBatch(db);
   let any = false;
@@ -828,12 +1553,12 @@ export async function setTaskDone(taskId, done) {
   // the spawn — simplest honest behavior, same words as follow-ups above;
   // revisit if it ever bites. Escalation (D3) is untouched: it nags THIS
   // instance; recurrence only sets the next one's due.
-  const snap = await getDoc(doc(col("tasks"), taskId));
+  const snap = await getDoc(docIn("tasks", taskId));
   const t = snap.exists() ? snap.data() : null;
   if (t?.recurrence?.every && !t.spawnedNextAt) {
     const r = t.recurrence;
     const base = (r.anchor === "due" && t.dueAt != null) ? t.dueAt : now;
-    await addDoc(col("tasks"), {
+    await addDoc(colIn(home, "tasks"), {
       title: t.title, tierId: t.tierId,
       dueAt: addInterval(base, r.every, r.unit),
       escalation: t.escalation || { every: 1, unit: "hours" },
@@ -848,7 +1573,7 @@ export async function setTaskDone(taskId, done) {
       createdBy: whoami(),
       createdAt: now
     });
-    await updateDoc(doc(col("tasks"), taskId), { spawnedNextAt: now });
+    await updateDoc(docIn("tasks", taskId), { spawnedNextAt: now });
   }
 }
 
@@ -883,7 +1608,8 @@ export function addInterval(ts, every, unit) {
  * Completed children are left alone: they really happened.
  */
 export async function rewindFollowUps(parentTaskId) {
-  const q = query(col("tasks"), where("parentTaskId", "==", parentTaskId));
+  const q = query(colIn(wsOf("tasks", parentTaskId), "tasks"),
+                  where("parentTaskId", "==", parentTaskId));
   const kids = await getDocs(q);
   const batch = writeBatch(db);
   let any = false;
@@ -898,7 +1624,7 @@ export async function rewindFollowUps(parentTaskId) {
 }
 
 export function deleteTask(taskId) {
-  return deleteDoc(doc(col("tasks"), taskId));
+  return deleteDoc(docIn("tasks", taskId));
 }
 
 /** Edit any task fields (title, tierId, dueAt, escalation, offsetDays...). */
@@ -925,7 +1651,7 @@ export function deleteTask(taskId) {
  * human moving a date does.
  */
 export async function updateTask(taskId, fields) {
-  const ref = doc(col("tasks"), taskId);
+  const ref = docIn("tasks", taskId);
   if (!("dueAt" in fields)) return updateDoc(ref, fields);   // nothing to count
 
   const snap = await getDoc(ref);
@@ -954,21 +1680,43 @@ export function taskFirstDue(t) { return t?.firstDueAt ?? t?.dueAt ?? null; }
 // end|null}; at most one open (end:null) session exists at a time — the
 // clockIn batch closes whatever is open in the same commit that opens the
 // new one, so the 9-project shuffle is one tap and can never double-run.
+// D112's ledger follows its projects. A project that moves into a shared
+// tier keeps its clocked time, and the Time Report keeps totalling it,
+// because the sessions merge alongside the projects they point at.
 export function subscribeSessions(cb) {
-  return onSnapshot(col("sessions"), snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-  });
+  return fanout("sessions",
+    (wsId, push) => [watchCol(colIn(wsId, "sessions"), snap =>
+      push(snap.docs.map(d => ({ id: d.id, ...d.data() }))), "session")],
+    cb);
 }
 
 /** Close whatever is open at `at`, open projectId at `at` — one commit.
  *  D116: returns everything undo needs — the ids it closed, the id and
  *  body of the session it opened, and the boundary. */
+// ⚠️ ITEM 5 — "AT MOST ONE OPEN SESSION" IS NOW A CROSS-BOARD INVARIANT.
+// D112's whole guarantee is that clocking into a project closes whatever was
+// running, in the same commit, so the 9-project shuffle can never double-run.
+// The moment a project can live on a shared board, an open session can too —
+// and a query scoped to the active board would have found nothing, opened a
+// second session, and quietly billed two projects at once. openSessions()
+// sweeps every merged board; writeBatch spans them all in one commit.
+async function openSessions() {
+  const per = await Promise.all(MERGE.filter(Boolean).map(async wsId => {
+    const snap = await getDocs(query(colIn(wsId, "sessions"), where("end", "==", null)));
+    snap.docs.forEach(d => noteWhere("sessions", d.id, wsId));
+    return snap.docs;
+  }));
+  return per.flat();
+}
+
 export async function clockIn(projectId, at = Date.now()) {
-  const open = await getDocs(query(col("sessions"), where("end", "==", null)));
+  const open = await openSessions();
   const batch = writeBatch(db);
   const closedIds = [];
   open.forEach(s => { closedIds.push(s.id); batch.update(s.ref, { end: Math.max(at, s.data().start) }); });
-  const ref = doc(col("sessions"));
+  // The ledger follows its project, so a shared project's time is visible to
+  // everybody who holds that tier.
+  const ref = doc(colIn(wsOf("projects", projectId), "sessions"));
   const body = {
     projectId, start: at, end: null,
     createdBy: whoami(), createdAt: Date.now()
@@ -981,7 +1729,7 @@ export async function clockIn(projectId, at = Date.now()) {
 /** End the open session (whichever project holds it) at `at`, clamped so a
  *  backdated end can never precede its own start. */
 export async function clockOut(at = Date.now()) {
-  const open = await getDocs(query(col("sessions"), where("end", "==", null)));
+  const open = await openSessions();
   const batch = writeBatch(db);
   const closed = [];
   open.forEach(s => { closed.push({ id: s.id, end: Math.max(at, s.data().start) }); batch.update(s.ref, { end: Math.max(at, s.data().start) }); });
@@ -995,11 +1743,11 @@ export async function clockOut(at = Date.now()) {
  *  A session that began INSIDE the manual window is left alone — v1 keeps
  *  overlap surgery simple; revisit if it ever bites. */
 export async function logSession(projectId, start, end) {
-  const open = await getDocs(query(col("sessions"), where("end", "==", null)));
+  const open = await openSessions();
   const batch = writeBatch(db);
   const truncatedIds = [];
   open.forEach(s => { if (s.data().start < start) { truncatedIds.push(s.id); batch.update(s.ref, { end: start }); } });
-  const ref = doc(col("sessions"));
+  const ref = doc(colIn(wsOf("projects", projectId), "sessions"));
   const body = {
     projectId, start, end,
     createdBy: whoami(), createdAt: Date.now()
@@ -1010,26 +1758,33 @@ export async function logSession(projectId, start, end) {
 }
 
 export function deleteSession(sessionId) {
-  return deleteDoc(doc(col("sessions"), sessionId));
+  return deleteDoc(docIn("sessions", sessionId));
 }
 
 /** D116 — set (or null-out, i.e. reopen) a session's end. Undo machinery. */
 export function setSessionEnd(sessionId, end) {
-  return updateDoc(doc(col("sessions"), sessionId), { end });
+  return updateDoc(docIn("sessions", sessionId), { end });
 }
 
 /** D116 — resurrect a deleted doc at its ORIGINAL id, so references
  *  (parentTaskId chains, session ledgers) keep pointing at the truth. */
 export function restoreDoc(collName, id, data) {
-  return setDoc(doc(col(collName), id), data);
+  // ⚠️ THIS is why _where is never pruned. The document is already gone, so
+  // its snapshot has dropped out — and without a tombstone the resurrection
+  // would land on the ACTIVE board instead of the one it was deleted from.
+  // Undoing a delete on a shared tier would silently move the task to your
+  // own board and look, to the other person, like it never came back.
+  return setDoc(docIn(collName, id), data);
 }
 
 export function subscribeProjects(cb) {
-  return onSnapshot(col("projects"), snap => {
-    const projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    projects.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-    cb(projects);
-  });
+  return fanout("projects",
+    (wsId, push) => [watchCol(colIn(wsId, "projects"), snap =>
+      push(snap.docs.map(d => ({ id: d.id, ...d.data() }))), "project")],
+    projects => {
+      projects.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
+      cb(projects);
+    });
 }
 
 export function subscribeStageTemplate(cb) {
@@ -1065,7 +1820,7 @@ export async function addProject({ name, color, startDate, endDate, tierId, work
     const [dir, anc] = s.direction && s.anchor ? [s.direction, s.anchor] : (legacy[s.phase] || legacy.during);
     return { name: s.name, direction: dir, anchor: anc, offsetDays: s.offsetDays || 0, completedAt: null, dueAt: null };
   });
-  return addDoc(col("projects"), {
+  return addDoc(colIn(wsOfTier(tierId), "projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null, completedBy: null,   // E9
     createdBy: whoami(),
@@ -1080,7 +1835,7 @@ export async function addProject({ name, color, startDate, endDate, tierId, work
  * NOT consulted and one-off stage surgery survives the duplication).
  */
 export function addProjectWithStages({ name, color, startDate, endDate, tierId, workload = 2, stages = [] }) {
-  return addDoc(col("projects"), {
+  return addDoc(colIn(wsOfTier(tierId), "projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null, completedBy: null,   // E9
     createdBy: whoami(),
@@ -1089,14 +1844,14 @@ export function addProjectWithStages({ name, color, startDate, endDate, tierId, 
 }
 
 export function deleteProject(projectId) {
-  return deleteDoc(doc(col("projects"), projectId));
+  return deleteDoc(docIn("projects", projectId));
 }
 
 /** Edit project fields (name, color, tierId, startDate, endDate). Stage
  *  activations are COMPUTED from dates, so moving a project reflows its
  *  pipeline automatically — no stage cleanup needed. */
 export function updateProject(projectId, fields) {
-  return updateDoc(doc(col("projects"), projectId), fields);
+  return updateDoc(docIn("projects", projectId), fields);
 }
 
 /**
@@ -1104,7 +1859,7 @@ export function updateProject(projectId, fields) {
  * caller can detect project completion (all stages done) for celebration level 3.
  */
 export async function setStageDone(projectId, stageIndex, done) {
-  const ref = doc(col("projects"), projectId);
+  const ref = docIn("projects", projectId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
   const stages = (snap.data().stages || []).map(s => ({ ...s }));
@@ -1133,7 +1888,7 @@ export async function setStageDone(projectId, stageIndex, done) {
  *  surviving stages. Auto-recomputes project completion. */
 export async function setProjectStages(projectId, stages) {
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
-  return updateDoc(doc(col("projects"), projectId), {
+  return updateDoc(docIn("projects", projectId), {
     stages,
     completedAt: allDone ? Date.now() : null,
     completedBy: allDone ? whoami() : null                       // E9
@@ -1141,7 +1896,7 @@ export async function setProjectStages(projectId, stages) {
 }
 
 export async function setStageDue(projectId, stageIndex, dueAt) {
-  const ref = doc(col("projects"), projectId);
+  const ref = docIn("projects", projectId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
   const stages = (snap.data().stages || []).map(s => ({ ...s }));
@@ -1152,13 +1907,42 @@ export async function setStageDue(projectId, stageIndex, dueAt) {
 
 // ---------- Tier CRUD (settings) ----------
 
-export function saveTier(tierId, data) {
-  if (tierId) return updateDoc(doc(col("tiers"), tierId), data);
-  return addDoc(col("tiers"), data);
+/**
+ * Save a tier. E7 splits what this used to do in one write:
+ *
+ *   · `rank` is YOUR opinion and goes to users/{me}.tierRanks.
+ *   · everything else is the tier itself and goes to the document.
+ *   · `rank` ALSO goes to the document where you have setup rights, because
+ *     the document rank is what a VISITOR and a brand-new member see. It is
+ *     a documented fallback, not a second authority — see subscribeTiers.
+ *
+ * A viewer or helper on a shared tier can still reorder it in their own day:
+ * the profile write is theirs and the document write is allowed to fail.
+ */
+export async function saveTier(tierId, data) {
+  const { rank, ...rest } = data || {};
+  if (!tierId) {
+    // Born on the board you are looking at. Sharing it is a separate,
+    // deliberate act (shareTier) rather than a property of creation.
+    const ref = await addDoc(colIn(ws(), "tiers"), { ...rest, rank });
+    noteWhere("tiers", ref.id, ws());
+    await noteTierRank(ws(), ref.id, rank);
+    return ref;
+  }
+  const home = wsOf("tiers", tierId);
+  await noteTierRank(home, tierId, rank);
+  await noteSharedRank(home, tierId, rank);
+  try {
+    await updateDoc(docIn("tiers", tierId), { ...rest, rank });
+  } catch (err) {
+    // Expected for a helper/viewer on somebody else's tier. Their own order
+    // was already saved above, which is the part that belongs to them.
+    console.warn("[store] tier saved to your own ordering only (no setup rights here):", err);
+  }
 }
 
 export function deleteTier(tierId) {
-  return deleteDoc(doc(col("tiers"), tierId));
+  return deleteDoc(docIn("tiers", tierId));
 }
 
 // ---------- Config ----------
