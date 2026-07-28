@@ -1,8 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.51.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.52.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
-   0.51.0 (E40): #mirror-connect shares #cal-connect's rules rather than
+   0.52.0 (helper role + D142): .pane-locked / .locked-note dim a pane the
+   current role cannot write while leaving it legible, .role-matrix styles
+   the four-role table in People, and .est-label puts Est. min on one line
+   with its field beside it instead of stacked under a squeezed column.
+   (prev) 0.51.0 (E40): #mirror-connect shares #cal-connect's rules rather than
    growing a second dialect for the same object (D104).
    (prev) Version 0.50.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
@@ -228,7 +232,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.51.0";
+  --tc-version: "0.52.0";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -469,6 +473,13 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 .esc-label { line-height: 1.7; }
 .esc-inputs { display: flex; gap: .4rem; }
 .esc-inputs input { width: 4.2rem; }
+
+/* D142 — Est. min on its own line, label left and field right. Beats
+   "#task-form label { flex-direction: column }" on specificity (0,2,1 vs
+   0,1,1) rather than with !important, and the input beats the global
+   width:100% on type selectors the same way. */
+#task-form label.est-label { flex-direction: row; align-items: center; gap: .5rem; }
+#task-form .est-label input { width: 5.5rem; flex: none; }
 
 .primary {
   background: var(--accent); color: #06282a;
@@ -1816,3 +1827,27 @@ header, .dash-split { transition: opacity 1.2s ease; }
   #week-view.l-clock .cb-title { font-size: .55rem; }
   .wv-span { grid-column: auto !important; }
 }
+/* ---------- Role gating (firestore.rules 1.2.1) ---------- */
+/* A class on the container, never a sweep of el.disabled — the pipeline pane
+   disables its own Rename and Delete for the default pipeline, and a blanket
+   re-enable would silently undo that. Everything stays READABLE: the point is
+   that a helper can see where the board is at, which is the whole reason the
+   role exists. */
+.pane-locked > *:not(.locked-note) { opacity: .5; pointer-events: none; }
+.locked-note { display: none; }
+.pane-locked > .locked-note {
+  display: block;
+  border-left: 2px solid var(--line);
+  padding-left: .6rem;
+  margin-bottom: .8rem;
+}
+
+/* ---------- Role matrix (People tab) ---------- */
+.role-matrix { border-collapse: collapse; width: 100%; font-size: .78rem; margin: .6rem 0 .8rem; }
+.role-matrix th, .role-matrix td { padding: .3rem .35rem; border-bottom: 1px solid var(--line); text-align: center; }
+.role-matrix th:first-child, .role-matrix td:first-child { text-align: left; color: var(--ink-dim); width: 45%; }
+.role-matrix thead th { color: var(--ink-dim); font-weight: 600; border-bottom: 1px solid var(--ink-dim); font-size: .72rem; }
+/* ● present, · absent. Two characters that differ in weight as well as shape,
+   so the table still parses at a glance in greyscale or at arm's length. */
+.role-matrix td { color: var(--accent); }
+.role-matrix td:first-child { color: var(--ink-dim); }
