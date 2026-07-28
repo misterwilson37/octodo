@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.46.1 (banner and data-html-version move together, always)
+     Version 0.47.1 (banner and data-html-version move together, always)
+     0.47.1 — Z: repin app.js to 1.29.1. Markup unchanged.
+     0.47.0 — item 5 (shared tiers). NO MARKUP CHANGE: the share strip is
+     built by app.js under whichever tier row asked for it, because tier
+     rows are themselves JS-built and a single markup panel would have to be
+     moved around the DOM (D37 has already taught this project what moving a
+     container costs). Pins only.
      0.46.1: app.js ?v= -> 1.28.0 (D143). No markup change; the pin and the
      banner move anyway, because a stale pin serves a stale file.
      0.46.0 (helper role + D141/D142): "Can help" joins the invite dropdown,
@@ -294,9 +300,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.52.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.53.0">
 </head>
-<body data-html-version="0.46.1">
+<body data-html-version="0.47.1">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1114,6 +1120,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.28.0"></script>
+  <script type="module" src="app.js?v=1.29.1"></script>
 </body>
 </html>
