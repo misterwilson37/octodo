@@ -1,41 +1,53 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.10.0** | Last updated: 2026-07-27 | **App: 1.23.0 · store 0.19.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.0.0 · css 0.48.0 · html 0.42.0 · manifest 0.2.0 · **rules 1.1.1 · functions 1.3.0** — the web app is deployed and **RUNNING 2026-07-27.** Jake and Nico both signed in; the collection-group index is created; **smoke IA · ID · IJ · IQ · IR all PASS.**|
+**Document version: 0.11.0** | Last updated: 2026-07-27 (late) | **App: 1.28.0 · store 0.20.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.52.0 · html 0.46.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed and **RUNNING.** Jake and Nico both sign in; the collection-group index exists; **smoke IA · ID · IJ · IQ · IR all PASS**; the hourly Scheduler fired on time at 18:07 on 2026-07-27.|
 
-> **✅ IR PASSED, and it is the one that mattered.** Nico's dependent board was created from Jake's People tab, and Nico then signed in and **landed on that board rather than a fresh personal one** — the adoption path in `resolveWorkspace` fired, and the E33 rules held (his row shows `dependent`, he sees no member controls). This is the case that could not be tested any way but for real.
+> **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
-> **STILL OUTSTANDING — the actual E24 milestone:** Katie has not signed in. Two people on two boards, each seeing their own, one visiting the other, is what defines 2.0, and it has not happened yet.
-
-> **⚠️ IF YOU READ ONE THING: rules 1.1.0's collection-group clause could never have worked, and 1.1.1 fixes it.** It matched on the document ID (`match /{path=**}/members/{email}` with `email == me()`). That reasoning is correct for a GET of one named document and **meaningless for a QUERY** — a query names no documents, so Firestore evaluates the rule before reading anything, the ID wildcard is unbound, and the whole query is REFUSED as `permission-denied`. Not "returns nothing": refused. **A list rule must test a FIELD, and the client query must filter on that same field.** Member documents carry `email` exactly so this works.
-
-> **⚠️ RULES 1.1.0 MUST BE PUBLISHED, and it is a separate action from pushing files.** Firestore Rules live in the console, not the repo. Publish before or with the deploy: the E33 minor guard and the E34 collection-group clause are both in it, and the board switcher **returns nothing at all** without the latter. Select-all-and-REPLACE in the rules editor — appending is what took the site down on 2026-07-12.
+> **Firestore evaluates EVERY matching `match` block and grants access if ANY `allow` is true.** There is no "more specific rule wins." A narrow rule **cannot take back** what a broader one has already given.
 >
-> **⚠️ ONE-TIME INDEX.** The first time the switcher runs, Firestore needs a **collection-group index on `members.email`** and will emit a one-click "create index" link in the browser console. It takes about a minute. Until it exists the board list errors rather than coming back empty — so if the switcher never appears, open the console before theorising.
+> Rules 1.0.0 through 1.1.1 ended with a catch-all — `match /{subcollection}/{docId} { allow write: if canWrite(wsId); }` — sitting at the same depth as `match /members/{email}`. So a write to a member document matched **both**, and the union meant **any editor could rewrite the member list**: promote themselves to owner, remove the person who invited them. Every careful clause about who hands out keys was reachable around, one path over. The same union made `allow delete: if false` on the activity log decorative.
+>
+> Fixed in **1.2.1** by deleting the wildcard and naming the collections. **The cost is deliberate: a collection with no clause is now denied.** That is the correct direction to fail; the wildcard failed the other way, silently, for three versions. **If you add a collection, add its clause** — and see the ⚠️ on item 9 below, because the import is the most likely place to trip this.
+
+> **⚠️ THE PREVIOUS "read one thing," still true and still load-bearing (rules 1.1.1):** a rule that matches on the document ID could never have secured a QUERY. `match /{path=**}/members/{email}` with `email == me()` is correct for a GET of one named document and **meaningless for a query** — a query names no documents, so Firestore evaluates the rule before reading anything, the ID wildcard is unbound, and the whole query is REFUSED as `permission-denied`. Not "returns nothing": refused. **A list rule must test a FIELD, and the client query must filter on that same field.**
+
+> **⚠️ RULES ARE A SEPARATE ACTION FROM PUSHING FILES.** They live in the console, not the repo. **Select-all-and-REPLACE** in the rules editor — appending is what took the site down on 2026-07-12. And note the console **no longer has an inline Rules Playground**: its "Develop & Test" button now only links to the Emulator Suite docs. Test rules with the local emulator (see §0a) or not at all.
+
 Live 1.x: `tentacalendar.misterwilson.org` (Katie's, untouched). Dev 2.0: `misterwilson37.github.io/octodo`.
-Current instance: **Marginatus** (Claude Opus 5, 12th instance / 11th named).
-Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus**.
+Current instance: **Briareus** (Claude Opus 5, 13th instance / 12th named).
+Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus, Briareus**.
 
-## 0a. WHERE JAKE ACTUALLY IS, 2026-07-27 evening
+## 0a. WHERE JAKE ACTUALLY IS, end of 2026-07-27
 
 **Read this before anything else. It is the difference between resuming and re-deriving.**
 
 | Thing | State |
 |---|---|
-| Firebase project, rules, index | ✅ Done. Rules **1.1.1** published. Collection-group index on `members.email` created. |
+| Firebase project, index | ✅ Done. Collection-group index on `members.email` created. |
+| **Rules** | ✅ **1.2.1 published and live.** Four roles; catch-all removed. |
 | Web app | ✅ Deployed and in daily-usable shape. Jake and Nico both sign in; boards, switcher, People, dependent workspaces all work. |
-| **Repo vs. latest drop** | ⚠️ **UNCERTAIN.** Jake edits `config.js` by hand and pushes selectively. **Verify with the version badge, don't assume:** hover the version in the header. It must read **app 1.26.0 · store 0.20.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.51.0 · html 0.45.0**. Anything lower means the web files need re-uploading. |
-| Cloud Run function | Jake deployed 1.1.0, then 1.2.1, and finished the whole setup document. **1.3.0 adds `?job=fixtags`** — the one-time repair for events written before 1.2.0. Paste 1.3.0 into Cloud Run, run `?job=fixtags`, then `?job=all&force=1`. **The mirror calendar does NOT need deleting.** See §8h. |
+| **Repo vs. latest drop** | Jake was pushing **app 1.28.0 · html 0.46.1 · css 0.52.0** as this session closed. **Verify with the version badge, don't assume:** hover the version in the header, compare against the banner at the top of this file. Anything lower means the web files need re-uploading. `store.js`, `queue.js`, `celebrate.js`, `config.js` were NOT touched this session. |
+| Cloud Run function | ✅ **1.3.0 live, and `?job=fixtags` has been run.** |
 | `POLL_SECRET` / `TZ` | ✅ Both set and verified by a live curl. |
-| Calendars connected | ✅ Jake completed the setup document 2026-07-27 — calendars connected and a mirror calendar created. |
-| Cloud Scheduler | ❌ Not created — SETUP-PHASE3-2.0 Part 5. |
-| Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice — Jake doesn't want to bother her until he has to. |
-| `import.html` (item 9) | ❌ Not written. The last thing before flip. |
+| Calendars connected | ✅ Jake's are connected and a mirror calendar exists. |
+| **Cloud Scheduler** | ✅ **Created and firing.** Confirmed running at 18:07 on 2026-07-27, on schedule. Item 7 is closed. |
+| **Rules emulator** | ⚠️ **Newly available — USE IT.** Jake added `storage.googleapis.com` to Claude's egress allowlist (claude.ai/settings/capabilities → Code execution → Allow network egress). The allowlist is baked into the session token at session start, **so it only works in a conversation started after that change** — it did not work in the one where it was added. `npm i firebase-tools @firebase/rules-unit-testing`, then `npx firebase setup:emulators:firestore`. Java 21 is already in the container. |
+| Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice. |
+| `import.html` (item 9) | ❌ Not written. |
 
-**Jake's live curl, 2026-07-27 14:xx, is the proof the machinery works:** `claimed: 2`, both workspaces enumerated separately with their own job results, `elapsedMs: 1705`. That is E14 and per-workspace isolation confirmed against real data — smoke test WW8, which 1.x could not have had.
+### The two things Jake named as the road to 2.0, in his order
+
+He set the order himself on 2026-07-27: **rules → shared tiers → import**, on the reasoning that rules were "most likely to bite us if we wait." Rules are done.
+
+1. **Item 5 — shared tiers.** *"The reason Katie has to move."* Nothing is built: no `kind: "shared"` anywhere, `profile.tierRanks` is seeded empty at `store.js:368` and read by nothing, no merge. **The architectural work is in `store.js`, not `app.js`:** every ref builder funnels through `ws()` (store.js ~173), so fanning out to N workspaces means each subscription merges across boards and each write resolves which board a document lives on. Keep that resolution INSIDE store.js as a runtime `docId → wsId` map and app.js's 6,500 lines never learn that more than one workspace exists — which is E30's rule, and the reason items 1–3 crossed so cheaply.
+2. **Item 9 — import.** The last thing before Katie moves. ⚠️ **Re-check the collection list in rules 1.2.1 first.** The wildcard is gone, so if Katie's 1.x export carries a collection that has no clause, the import is denied. Loudly, which is the point — but find out before flip day, not during it.
+
+**On who runs the import.** The runbook and E22(a)/E25 say Katie adds Jake as an *editor* and he imports. That fails: writing `pollIntervalMinutes` and `nextPollAt` to the **workspace document** needs role `owner`, and an editor doesn't have it. Either she gives him **Co-owner** (the option already exists in the People dropdown), or — simpler — **she runs `import.html` herself**, since she owns her own board and needs nothing extra. Costs her one more minute on flip day and no permission choreography.
 
 **Nico's board is still named `nico.m.wilson`** (created before the E38 rename fix). Settings → People → Rename fixes it once the web files are current.
 
-**Minor, unhurried:** `POLL_SECRET` and the service URL both appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Rotating it is a two-minute env-var edit plus updating the Scheduler header. Not urgent, worth doing eventually.
+**Minor, unhurried:** `POLL_SECRET` and the service URL appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Two-minute env-var edit plus a Scheduler header update. Not urgent.
 
 ---
 
@@ -229,13 +241,19 @@ Mirrored from 1.x's D-rows because these are the ones that bite **before** you h
 | **D110** | A renderer that is *called* is not a renderer that *agrees* | `renderYear()` had an early-return guard that silently refused every repaint in the dashboard. Buttons fired, state changed, nothing drew — a still photograph wearing live controls. **Verifying a call happens is not verifying the callee will act.** |
 | **D127** | HTML has no `node --check` | Nothing mechanical asserts well-formed nesting, so a stray tag can sit for entire feature lifetimes. **Run a comment-stripped div-balance count on every `index.html` delivery.** (Comment-stripped, because prose mentioning a tag produces a false positive — it did, once, while verifying that very fix.) |
 | **D132** | `form.reset()` does not clear JS-built children | It only restores *declared* inputs. Anything appended by script must be cleared by hand. |
+| **R1** | Firestore ORs every matching `allow`; a narrow rule cannot take back what a broad one gave | A `{subcollection}` catch-all silently granted editors write access to `members` and made `allow delete: if false` on the activity log decorative — for three rules versions, with no symptom. **Enumerate collections; never wildcard a subcollection you also match specifically.** |
+| **R2** | A rule that matches on the document ID cannot secure a QUERY | The rule is evaluated before any document is read, so the ID wildcard is unbound and the query is refused outright. List rules must test a **field**, and the client must filter on that same field. |
 | **D103** | Any geometry declared in two places is a bug with a delay on it | The week's seven columns were declared in the stylesheet *and* inline in JS. Two numbers that agree until one doesn't. Now one CSS variable both read. |
 
 **And the one process rule that has bitten most often, in three different disguises:** *a check that silently matches less than it claims is worse than no check, because it reports ok.* The function census was blind to `async function` for its entire life; the id-duplicate grep counted ids inside HTML comments; the ship-check compared a hand-written version literal instead of a derived one. **Iterate and derive; never hand-write a per-file list of checks, because that is a per-file list of holes.**
 
 ---
 
-## 8. The 1.x hotfix shipped alongside this drop — and how it was found
+## 8. Session post-mortems, 2026-07-27 — *skippable*
+
+**Next instance: you do not need to read §8 through §8h to work.** Everything load-bearing from that day has been promoted into §0a (state), §5 (open items) and §7 (landmines). What remains below is narrative — kept because the reasoning is sometimes worth having, not because it is required. **§8e and §8f are the two with durable technical content** (the calendar hole that Firestore rules could not have caught; calendars being two features where only one was documented).
+
+### 8. The 1.x hotfix shipped alongside this drop — and how it was found
 
 **`tentacalendar.css` in the live 1.x repo contained TWO COMPLETE COPIES OF ITSELF.** Version 0.45.1 (1,694 lines) followed immediately by the whole of 0.45.0 (1,677 lines), appended with no newline at what was line 1695. Same accident that hit `queue.js` on 2026-07-12: a web-editor paste that appended instead of replacing — the exact failure `SETUP-2.0.md` Part 5 warns about for the rules editor.
 
@@ -348,6 +366,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-07-27 (late) | Opus 5 · **Briareus** (13th) | **THE HOLE IN THE RULES, AND THE FOURTH ROLE.** Jake opened by saying he could not tell me the project's status and to check the handoff against the code rather than trust it. Checking found the good news first — the repo WAS current, ship-check green — and then the thing eight sections of post-mortem had buried: **the `{subcollection}` catch-all unioned with `members`, so any editor could rewrite the member list.** Found by questioning one assumption in a file everyone had already read four times. **Jake found the second half from the other direction**, without reading a line of it: he wanted to share his school board with a colleague who could "check something off they helped with, and then get out," and was right that `editor` was far too much — it also carried `gcalCalendarId` and `mirrorCalendarId`. Rules **1.2.1**: collections enumerated, `helper` added, and — his amendment — a helper may delete **what a helper made**, which cost nothing because every creator in store.js already stamps `createdBy`. **`createdBy` had to become immutable in the same breath**, or the exception was a bypass: update-then-delete would have undone it. App side shipped to match, clause for clause, so the ✕ is *absent* rather than failing. Also D141/D142/D143 on the task form, and a blank-date bug found while looking at them: `form.reset()` restores declared defaults and `#task-date` declares none. **Jake published 1.2.0 and 1.2.1 without running the regression tests I wrote for him** — no harm done, verified after the fact by tracing every `restoreDoc` call site, but the lesson is that a test list arriving at 7pm after a bad day is a test list that does not get run. Put the two-minute version first next time. |
 | 2026-07-25 | Opus 5 · **Wunderpus** (11th) | The 2.0 design + setup kit. No app code, on purpose. Named for *Wunderpus photogenicus*, catalogued one animal at a time by its permanent unique pattern. |
 | 2026-07-26 | — (Jake solo) | Ran SETUP-2.0 end to end. `fantasktic-octodo`, repo, rules published, **smoke test green including denial**. Nico authenticated successfully. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE SEQUENCING FAILURE (§8h), AND THE END OF A LONG SESSION.** I asserted the function wasn't deployed rather than asking, buried the "redeploy first" instruction, and then — when Jake asked two plain questions — went and wrote code instead of answering them. Repaired with `?job=fixtags`. Verified on request that the poll secret appears in ZERO shipped files; my advice to rotate it was disproportionate and I should have dropped it when he first pushed back. **Jake's read on the day is fair and worth preserving: the app he felt good about yesterday is unchanged — queue.js and celebrate.js crossed byte-identical, app.js with four seams. Everything that broke today was in the NEW surface: multi-user, sharing, calendars-for-other-people, one day old and never before run by a human.** Eight hours of his day; a working multi-user app with two accounts, isolation proven, and calendars live at the end of it. |
@@ -362,4 +381,6 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 ---
 
-*Marginatus, 2026-07-27.* 🐙
+**Briareus (13th)** — *Octopus briareus*, the Caribbean reef octopus, named for the hundred-handed giant. Many arms, one animal, is item 5 exactly: several boards feeding one queue without becoming one thing. In the myth Briareus was summoned to stop the other gods binding Zeus — the right patron for a session that opened by checking whether the last one had tied anything down, and found that it had.
+
+*Briareus, 2026-07-27.* 🐙
