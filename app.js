@@ -1,6 +1,13 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.27.0 — THE HELPER ROLE REACHES THE UI, plus D141/D142 on the task
+// Version 1.28.0 — D143: the default due time is the next hour, not 09:00,
+// and cancelTaskEdit() stops blanking the due date. Jake asked whether the
+// Today button should also move the time; it shouldn't — a date button that
+// changes a neighbouring field is a button you stop trusting — but the
+// complaint underneath it was about the DEFAULT, and that was worth fixing.
+// The blank-date bug was found while looking: form.reset() restores declared
+// defaults, #task-date declares none, and the field is required.
+// (prev) Version 1.27.0 — THE HELPER ROLE REACHES THE UI, plus D141/D142 on the task
 // form. firestore.rules 1.2.1 added a fourth role and this is the half that
 // makes it usable: "Can help" in the People dropdown, and the Tiers/Pipeline/
 // Timing panes dimmed for anyone who cannot write them. myRole/canWorkList/
@@ -832,7 +839,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.27.0";
+export const APP_VERSION = "1.28.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1097,6 +1104,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   $("#task-date").value = toDateInput(new Date()); // due date defaults to today
+  $("#task-time").value = defaultDueTime();        // D143 — and the time to the next hour
 
   // Tap-to-reveal ⓘ popovers (phones can't hover).
   // D58: preventDefault() is load-bearing — when the ⓘ lives inside a
@@ -3605,7 +3613,13 @@ function cancelTaskEdit() {
   clearChainRows();
   const chainBlock = $("#fu-chain-block"); if (chainBlock) chainBlock.hidden = false;
   $("#task-form").reset();
-  $("#task-time").value = "09:00";
+  // form.reset() restores DECLARED defaults, and #task-date has no value
+  // attribute — so reset() blanked it, and the field is `required`. Cancel
+  // out of an edit and the next task couldn't be submitted until you
+  // re-picked a date you'd never changed. Both fields are now put back the
+  // way a fresh form finds them (D143).
+  $("#task-date").value = toDateInput(new Date());
+  $("#task-time").value = defaultDueTime();
   $("#task-esc-n").value = 1;
   $("#task-estimate").value = "";
 }
@@ -3615,7 +3629,7 @@ function onTaskFormSubmit(ev) {
   const title = $("#task-title").value.trim();
   const tierId = $("#task-tier").value;
   const date = $("#task-date").value;
-  const time = $("#task-time").value || "09:00";
+  const time = $("#task-time").value || defaultDueTime();   // D143
   const every = parseInt($("#task-esc-n").value, 10) || 1;
   const unit = $("#task-esc-unit").value;
   if (!title || !tierId || !date) return;
@@ -6425,6 +6439,26 @@ function onDateToday(e) {
 // picker has no "now" any more than its date picker has a "today". Exact
 // current time, not rounded to the nearest five — "Now" that means 6:45
 // when it is 6:47 is a small lie, and the field is a deadline.
+/** D143 — the default due time is the NEXT HOUR, not a hardcoded 09:00.
+    Jake: "I was just tired of 9 AM being the default when it's two in the
+    afternoon." A task created at 2pm and due today at 9am is born four
+    hours overdue — it starts by lying to you.
+
+    Deliberately NOT wired into the Today button, though that was the first
+    idea on the table. #task-date-today sits inside the Due date label and
+    says "Today"; a control that quietly changes the field next door is one
+    you stop trusting, and it would break the symmetry with Now, which
+    touches exactly the field it stands beside. The complaint was about the
+    DEFAULT, so the default is what moved.
+
+    Clamped at 23:00: at 11:20pm the "next hour" is midnight, which on
+    today's date is thirteen hours in the past — the exact bug being fixed,
+    wearing a different hat. */
+function defaultDueTime() {
+  const h = Math.min(23, new Date().getHours() + 1);
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
 function onTimeNow(e) {
   e.preventDefault();
   e.stopPropagation();
