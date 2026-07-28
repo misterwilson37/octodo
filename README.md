@@ -11,6 +11,24 @@ This repository is the multi-user rebuild of [Tentacalendar 1.x](https://github.
 
 ---
 
+## Sharing, at two sizes
+
+There is **one** sharing mechanism, offered at two sizes, and it is worth knowing which you want.
+
+**Share a whole board.** ⚙️ ▸ People. You hand somebody a key to your workspace and they can switch to it from the header chip. They see everything: your tiers, your tasks, your projects, your calendars. This is how a colleague looks at your school board, and how a parent looks at a child's.
+
+**Share one tier.** ⚙️ ▸ Tiers ▸ 🤝. That tier — and its tasks, its projects and their clocked time — moves onto a small workspace of its own that you both hold, and it then appears **inside both of your queues** alongside your own tiers. Nobody switches anywhere; it is simply part of both days.
+
+The split matters more than it looks. Without it, the day somebody shares a busy work calendar, eighty of their tasks interleave into your today list and you stop opening the app. With it: *a shared **tier** merges into your queue; a shared **board** is somewhere you visit.*
+
+A shared tier follows you into a house where somebody who lives there also holds a key to it — so the tier you share with Katie is still there when you are looking at Katie's board, and the one you share with a colleague is not. And each person ranks it in their own day: the tier is shared, the priority is not.
+
+Visiting somebody's board shows you **their** ordering, including of the tier you share — because the point of looking at someone's board is an honest picture of their load, and a priority that is secretly yours is not that.
+
+Bringing a tier back is the same machinery pointed the other way, and it is one button.
+
+---
+
 ## The permission model, in two words
 
 Everything in this app's sharing model is **owner** and **member**. It is worth understanding before reading any code, because there is no third *concept* — only four sizes of key.
@@ -108,9 +126,9 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 
 ## Status
 
-**Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and the four roles, dependent workspaces, and calendar sync in both directions.
+**Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and the four roles, dependent workspaces, calendar sync in both directions, and **shared tiers with per-person priority**.
 
-**Not built yet:** shared *tiers* (as opposed to shared whole boards), the activity feed and kudos, onboarding, and the migration of the 1.x data.
+**Not built yet:** the activity feed and kudos, onboarding, and the migration of the 1.x data.
 
 Version 2.0.0 arrives when two people can sign in separately, see separate boards, and visit each other's. Until then the app carries 1.x's continuing version numbers, and the badge in the header reports exactly what is running.
 
