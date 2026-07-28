@@ -1,7 +1,18 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.45.0 (banner and data-html-version move together, always)
+     Version 0.46.0 (banner and data-html-version move together, always)
+     0.46.0 (helper role + D141/D142): "Can help" joins the invite dropdown,
+     and the four roles are now a TABLE in the People tab rather than a
+     sentence — four of them is one more than prose carries, and every row
+     of that table is a clause in firestore.rules 1.2.1. Four .locked-note
+     paragraphs added (Tiers, Pipeline, Timing, #form-panel); each shows
+     only when app.js puts .pane-locked on its container, so the pane reads
+     as deliberately closed rather than mysteriously broken. D141: a "Now"
+     button beside Time, twin to D140's "Today". D142: the three-across row
+     becomes two-across and Est. min moves to its own line, label left and
+     field right — two native pickers plus a number box could not share a
+     340px panel, which is what made the first two look squeezed.
      0.45.0 (E40): #mirror-connect — the OUTBOUND half of the calendar
      story finally explained in the app. The inbound walkthrough (0.44.0)
      covers "show me my appointments"; this covers "put my tasks on my
@@ -281,9 +292,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.51.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.52.0">
 </head>
-<body data-html-version="0.45.0">
+<body data-html-version="0.46.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -411,6 +422,7 @@
 
       <!-- ===== Forms column ===== -->
       <section id="form-panel">
+        <p class="hint locked-note">Your key to this board is <b>Can view</b> — you can read everything and send a 👏, but not add or change things. Ask for <b>Can help</b> if you need to pitch in.</p>
         <h3 id="task-form-title">New task</h3>
         <form id="task-form">
           <input id="task-title" type="text" placeholder="What needs doing?" required>
@@ -418,11 +430,18 @@
           <label>Tier
             <select id="task-tier"></select>
           </label>
+          <!-- D142 — two across, not three. A native date input and a native
+               time input each refuse to shrink below roughly 120px, so at
+               three-to-a-row in a 340px panel both were squeezed to the point
+               of hiding their own text. Est. min moved out, below. -->
           <div class="form-row">
             <label>Due date <input id="task-date" type="date" required><button id="task-date-today" class="mini" type="button" title="Snap the due date back to today (the native calendar has no 'today' button — Chrome draws that picker, not us)">Today</button></label>
-            <label>Time <input id="task-time" type="time" value="09:00"></label>
-            <label title="How long it takes — NOT when to start. The due time is a deadline, so this is the runway BEFORE it (D93). Leave blank if you don't know; the clock grid draws those dashed at 30 min and doesn't pretend otherwise. You can also just drag a block's top edge in the Clock layout.">Est. min <input id="task-estimate" type="number" min="5" max="720" step="5" placeholder="—"></label>
+            <label>Time <input id="task-time" type="time" value="09:00"><button id="task-time-now" class="mini" type="button" title="Snap the time to right now (the native clock has no 'now' button either)">Now</button></label>
           </div>
+          <!-- D142 — label left, field right, on one line. The three-across row
+               stacked it above a full-width box, which read as an unfinished
+               third column rather than a deliberate field. -->
+          <label class="est-label" title="How long it takes — NOT when to start. The due time is a deadline, so this is the runway BEFORE it (D93). Leave blank if you don't know; the clock grid draws those dashed at 30 min and doesn't pretend otherwise. You can also just drag a block's top edge in the Clock layout.">Est. min <input id="task-estimate" type="number" min="5" max="720" step="5" placeholder="—"></label>
           <label class="esc-label">If ignored, nag again every
             <span class="esc-inputs">
               <input id="task-esc-n" type="number" min="1" value="1">
@@ -710,13 +729,30 @@
         </div>
 
         <h3>Who holds a key to this board</h3>
-        <p class="hint">A shared board is <b>one set of lists, not a copy</b> — everyone with a key is looking at the same thing, so a task checked off here disappears from their screen too. <b>Co-owner</b> can also hand out and take back keys. <b>Can edit</b> is full use. <b>Can view</b> is read-only (they can still send a 👏). Only an owner sees these controls.</p>
+        <p class="hint">A shared board is <b>one set of lists, not a copy</b> — everyone with a key is looking at the same thing, so a task checked off here disappears from their screen too. Only an owner sees these controls.</p>
+        <!-- Four roles is one more than a tooltip can hold, so it is a table.
+             Every row here is a clause in firestore.rules 1.2.1: if you change
+             one, change both, or this becomes a promise the server breaks. -->
+        <table class="role-matrix">
+          <thead><tr><th></th><th>Can&nbsp;view</th><th>Can&nbsp;help</th><th>Can&nbsp;edit</th><th>Co-owner</th></tr></thead>
+          <tbody>
+            <tr><td>See everything on this board</td><td>●</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Send a 👏</td><td>●</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Add and check off tasks and projects</td><td>·</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Delete things they added themselves</td><td>·</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Delete anything on the board</td><td>·</td><td>·</td><td>●</td><td>●</td></tr>
+            <tr><td>Change tiers, pipelines, timing, calendars</td><td>·</td><td>·</td><td>●</td><td>●</td></tr>
+            <tr><td>Rename the board, hand out and take back keys</td><td>·</td><td>·</td><td>·</td><td>●</td></tr>
+          </tbody>
+        </table>
+        <p class="hint"><b>Can help</b> is the one to reach for when someone is pitching in rather than running the place — they can work the list and tidy up after themselves, and cannot repoint your calendars or empty a tier.</p>
         <div id="people-list"></div>
         <div class="form-row">
           <label>Invite by email <input id="people-email" type="email" placeholder="name@gmail.com" autocomplete="off"></label>
           <label>Access
             <select id="people-role">
               <option value="editor">Can edit</option>
+              <option value="helper">Can help</option>
               <option value="viewer">Can view</option>
               <option value="owner">Co-owner</option>
             </select>
@@ -741,6 +777,7 @@
       </div>
 
       <div class="tab-pane" data-pane="tiers">
+        <p class="hint locked-note">Tiers are part of this board's setup, and your access here is <b>Can help</b> or <b>Can view</b>. You can read all of it; changing it needs <b>Can edit</b>. Ask whoever gave you the key.</p>
         <h3>Tiers (priority queue)</h3>
         <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
         <!-- E39 — the six clicks, next to the field they fill. -->
@@ -769,6 +806,7 @@
       </div>
 
       <div class="tab-pane" data-pane="pipeline" hidden>
+        <p class="hint locked-note">Pipelines are part of this board's setup. Yours is a working key, not a setup one — you can read this, and <b>Can edit</b> is needed to change it. Adding or removing stages on an <i>individual</i> project still works.</p>
         <h3>Project pipelines</h3>
         <p class="hint">Build a LIBRARY of pipelines and pick one when you create a project (e.g. an actuarial default, a "Holiday Card", a "Taiko Performance"). <em>Default</em> is the standard template copied into a new project when you don't choose another. Existing projects keep their own copy whatever you change here.</p>
         <div class="form-row" id="pipeline-picker-row">
@@ -787,6 +825,7 @@
       </div>
 
       <div class="tab-pane" data-pane="timing" hidden>
+        <p class="hint locked-note">Timing settings belong to the board rather than to you, so changing them needs <b>Can edit</b>. What you see here is what the board is doing.</p>
         <h3>Timing</h3>
         <div class="form-row">
           <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
@@ -1073,6 +1112,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.26.0"></script>
+  <script type="module" src="app.js?v=1.27.0"></script>
 </body>
 </html>
