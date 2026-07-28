@@ -1,34 +1,115 @@
 rules_version = '2';
 // ============================================================
 // Tentacalendar 2.0 — firestore.rules
-// Version 1.1.1 — E34 FIX: a rule that matched on the document ID could
-// never have secured a QUERY. Symptom was "Missing or insufficient
-// permissions" on every first sign-in. Detail in the E34 block below.
-// (prev) Version 1.1.0 — dependent workspaces + the lockout fix (E32, E33, E34)
+// Version 1.2.1 — A HELPER MAY DELETE WHAT A HELPER MADE. Jake, on 1.2.0's
+// blanket no-delete: "I make something for Katie, but it's dumb, so I need
+// to delete it." Correct, and it cost nothing: every creator in store.js
+// already stamps createdBy: whoami(), so the rule had a field to stand on
+// and no app change was needed. See note 2a.
+// (prev) Version 1.2.0 — THE CATCH-ALL WAS GRANTING MORE THAN IT LOOKED
+// LIKE, and a fourth role ("helper") now exists. Both are explained below.
+// (prev) Version 1.1.1 — E34 FIX: a rule matching on the document ID could
+// never have secured a QUERY. (prev) 1.1.0 — dependent workspaces (E32/E33/E34).
 //
-// WHAT CHANGED FROM 1.0.0 — three things, all found by walking Jake's own
-// description of Nico through the 1.0.0 file rather than by reading it:
+// ⚠️ WHAT CHANGED FROM 1.1.1 — READ BOTH, THE FIRST IS A HOLE
 //
-//   1. A MINOR CANNOT HAND BACK THEIR KEY (E33). 1.0.0 let anyone remove
-//      THEMSELVES from a workspace. Nico could not remove his parents — but
-//      he could remove himself from his own board, and the app would then
-//      cheerfully build him a fresh one his parents do NOT hold. Same
-//      lockout, different door. A member document may now carry minor:true,
-//      which blocks self-removal AND blocks that member from clearing the
-//      flag on their own row.
+//   1. THE `{subcollection}` CATCH-ALL ALSO MATCHED `members` AND
+//      `activity`, AND FIRESTORE UNIONS ITS ALLOW RULES.
 //
-//   2. YOU CAN NOW LIST THE HOUSES YOU HOLD KEYS TO (E34). The board
-//      switcher has to ask "which workspaces am I a member of," and a rule
-//      nested under /workspaces/{wsId} cannot answer a collectionGroup
-//      query. The new top-level clause permits exactly one question — "show
-//      me member documents whose id is MY email" — which can only ever
-//      return rows about the asker.
+//      1.1.1 ended with:
 //
-//   3. Nothing about ownership changed, because nothing needed to. Katie
-//      owning her own house and Jake owning Nico's are the SAME mechanism
-//      aimed in opposite directions (E32). ownerEmail was already the
-//      permanent root of trust; on a dependent workspace that permanence
-//      stops being a caveat and becomes the entire point.
+//        match /{subcollection}/{docId} {
+//          allow write: if canWrite(wsId);      // owner OR editor
+//        }
+//
+//      That block sits at the same depth as `match /members/{email}` and
+//      `match /activity/{docId}`, so a write to a member document matched
+//      BOTH blocks. Firestore does not resolve that by specificity — there
+//      is no "more specific rule wins". Every matching allow expression is
+//      evaluated and access is granted if ANY of them is true. A narrow
+//      rule can never take back what a broad one has already given.
+//
+//      Consequences, both live in 1.1.1:
+//        · An EDITOR could write member documents. Not just their own row —
+//          any row. Promote themselves to owner. Remove the person who
+//          invited them. Every careful clause about who may hand out keys
+//          was reachable around, one path over.
+//        · `allow delete: if false` on activity was decorative. The
+//          catch-all granted write, and write includes delete, so the
+//          append-only log an owner would rely on for "who checked that
+//          off" could be edited by anyone who could check things off.
+//
+//      FIXED by deleting the wildcard and naming the collections. The cost
+//      is real and is accepted deliberately: a NEW collection now has no
+//      rule and is denied by default until one is written for it. That is
+//      the correct direction to fail. The wildcard failed the other way,
+//      silently, and this is what it cost.
+//
+//      ⚠️ ITEM 9 (Katie's import) MUST RE-CHECK THIS LIST. If her export
+//      carries a collection not named below, the import will be denied —
+//      loudly, which is the point, but check before flip day rather than
+//      during it.
+//
+//   2. A FOURTH ROLE: `helper`. Jake, 2026-07-27, on sharing his school
+//      board with a colleague: "I'm going to want that person to be able
+//      to see where I'm at, maybe check something off they helped with,
+//      and then get out. That's very very different than being an owner."
+//
+//      It was also very different from being an EDITOR, which is what he
+//      would have had to grant. An editor writes `tiers` and `settings`,
+//      and those are where gcalCalendarId and mirrorCalendarId live — so
+//      "can edit" included "can repoint this board at a different Google
+//      Calendar." Nobody intended that; it was just the shape of one
+//      catch-all covering documents of two very different kinds.
+//
+//      The split is now by WHAT A DOCUMENT IS, not by one blanket verb:
+//
+//        THE LIST      tasks, projects, sessions     helper and above
+//        THE SETUP     tiers, settings, eventsCache  editor and above
+//        THE PEOPLE    members, the workspace doc    owner only
+//
+//   2a. A HELPER MAY DELETE WHAT A HELPER MADE — and nothing else.
+//
+//      1.2.0 refused helpers delete outright, on the grounds that delete is
+//      the only unrecoverable action in the app (restoreDoc replays from
+//      the undo registry, which lives in one browser tab's memory and is
+//      gone when they close it). That reasoning still holds for OTHER
+//      PEOPLE'S documents. It never held for their own: someone who adds a
+//      dumb task to your board and cannot take it back has to ask you to
+//      clean up after them, which is worse for you than the delete was.
+//
+//      The rule is `resource.data.createdBy == me()`, and it required no
+//      app change at all — addTask, addFollowUp, addProject,
+//      addProjectWithStages, clockIn and logSession all already write
+//      createdBy: whoami(), which is a lowercased email.
+//
+//      ⚠️ THE GUARD THAT MAKES IT SAFE, AND WITHOUT WHICH IT IS A BYPASS:
+//      helpers can UPDATE. So without further care a helper could take any
+//      task on the board, rewrite its createdBy to their own address, and
+//      then delete it as "theirs" — the delete restriction undone by the
+//      permission sitting next to it. createdBy is therefore IMMUTABLE on
+//      update, for every role. Nothing legitimate rewrites it: restoreDoc
+//      replays the original document, so the value it writes is the value
+//      already there and the comparison passes.
+//
+//      Read with a default, so documents that predate the field are
+//      handled correctly rather than crashing: a helper's address never
+//      equals '', so legacy documents — including everything in Katie's
+//      1.x export that was created before createdBy existed — are not
+//      deletable by a helper. That is the right answer; they did not make
+//      them.
+//
+//      PROJECT STAGES ARE ALREADY COVERED and need nothing here: a stage
+//      is an element in the project document's stages[] array, so adding
+//      or removing one is an UPDATE to that document, which helpers have.
+//      The Pipeline TEMPLATE in Settings is a different thing and stays at
+//      editor level — it is the mould every future project is cast from,
+//      which is setup, not list work.
+//
+//   3. The workspace document's update rule now also admits isWsOwner().
+//      Grants nothing new — that person can already DELETE the whole board
+//      — and it removes a lockout shape where the holder of the deed has
+//      no member row and therefore cannot rename their own house.
 //
 // (prev) Version 1.0.0 — the multi-workspace rules (design doc E1, E5, E19)
 //
@@ -39,7 +120,8 @@ rules_version = '2';
 //     of a workspace cannot construct a query that touches it.
 //   · Membership documents ARE the security boundary. Their existence
 //     grants read; their `role` grants write.
-//   · The activity log is append-only IN THE RULES, not by convention.
+//   · The activity log is append-only IN THE RULES — true as of 1.2.0,
+//     and NOT true in 1.0.0–1.1.1, per note 1 above.
 //   · secrets/ denies everything, always, so an OAuth refresh token can
 //     never be read by any client — including its own owner's browser.
 //
@@ -55,8 +137,11 @@ rules_version = '2';
 //    walks exactly this sequence and proves it before any real code.
 //
 // Paste into: Firebase Console → Firestore Database → Rules → Publish
+//             SELECT ALL AND REPLACE. Appending is what took the site down
+//             on 2026-07-12.
 // Test in:    the Rules Playground, on that same screen, BEFORE Publish
 // ============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -92,8 +177,38 @@ service cloud.firestore {
     function roleIn(wsId, roles) {
       return isMember(wsId) && get(memberDoc(wsId)).data.role in roles;
     }
+
     function canRead(wsId)  { return isMember(wsId) || isWsOwner(wsId); }
-    function canWrite(wsId) { return roleIn(wsId, ['owner', 'editor']) || isWsOwner(wsId); }
+
+    // THE PEOPLE — keys and the house itself.
+    function canAdmin(wsId) { return roleIn(wsId, ['owner']) || isWsOwner(wsId); }
+
+    // THE SETUP — tiers, settings, the calendar ids. Configuration.
+    function canSetUp(wsId) {
+      return roleIn(wsId, ['owner', 'editor']) || isWsOwner(wsId);
+    }
+
+    // THE LIST — tasks, projects, sessions. The daily work of the board.
+    function canWorkList(wsId) {
+      return roleIn(wsId, ['owner', 'editor', 'helper']) || isWsOwner(wsId);
+    }
+
+    // Did I make this document? Read with a default so documents written
+    // before createdBy existed — everything old in Katie's 1.x export —
+    // answer no rather than erroring.
+    function iMadeThis() {
+      return resource.data.get('createdBy', '') == me();
+    }
+
+    // createdBy may never change, for anyone. Not bookkeeping: it is what
+    // stops a helper relabelling somebody else's document as their own in
+    // order to delete it (header note 2a). Nothing legitimate rewrites it —
+    // restoreDoc replays the original document, so the value it writes is
+    // the value already there.
+    function creatorIntact() {
+      return request.resource.data.get('createdBy', '')
+          == resource.data.get('createdBy', '');
+    }
 
     // ---- user profiles: yours and only yours ----
     match /users/{email} {
@@ -133,6 +248,10 @@ service cloud.firestore {
     // rows describing the asker. Asking for somebody else's memberships
     // (where email == 'katie@…') is denied, because the rule compares
     // against the CALLER, not against the filter.
+    //
+    // READ ONLY, deliberately. It is the one clause that reaches across the
+    // whole database, so it grants the smallest verb that answers the
+    // question.
     match /{path=**}/members/{memberId} {
       allow read: if signedIn() && resource.data.email == me();
     }
@@ -142,16 +261,21 @@ service cloud.firestore {
       allow create: if signedIn()
                     && request.resource.data.ownerEmail == me();
       // ownerEmail is LOCKED after creation — otherwise an owner-role member
-      // could rewrite it and seize the root of trust.
-      allow update: if roleIn(wsId, ['owner'])
+      // could rewrite it and seize the root of trust. isWsOwner is admitted
+      // alongside owner-role because the holder of the deed can already
+      // delete this document outright; refusing them a rename was a lockout
+      // shape, not a protection.
+      allow update: if canAdmin(wsId)
                     && request.resource.data.ownerEmail == resource.data.ownerEmail;
       allow delete: if isWsOwner(wsId);
+
+      // ---------- THE PEOPLE ----------
 
       match /members/{email} {
         allow read:   if canRead(wsId);
         // The workspace owner adds and removes anyone — including the very
         // first member (themselves), which is the deadlock fix.
-        allow write:  if isWsOwner(wsId) || roleIn(wsId, ['owner']);
+        allow write:  if canAdmin(wsId);
 
         // Anyone may remove THEMSELVES from a workspace they were added to —
         // UNLESS they are flagged as a minor on that workspace (E33).
@@ -173,27 +297,79 @@ service cloud.firestore {
                          == resource.data.get('minor', false);
       }
 
+      // ---------- THE LOG ----------
+
       match /activity/{docId} {
         allow read:   if canRead(wsId);
         // Viewers may write here and NOWHERE else — that is how kudos work
         // (E10): a viewer can cheer, and cannot check anything off.
         allow create: if canRead(wsId)
                       && request.resource.data.actor == me();
-        // Append-only: only `reactions` may change after the fact.
+        // Append-only: only `reactions` may change after the fact. As of
+        // 1.2.0 this is actually true — see note 1 in the header.
         allow update: if canRead(wsId)
                       && request.resource.data.diff(resource.data)
                            .affectedKeys().hasOnly(['reactions']);
         allow delete: if false;
       }
 
-      // tasks, tiers, projects, sessions, eventsCache, settings.
-      // ⚠️ ONE LEVEL DEEP, exactly like 1.x. If anything in 2.0 ever grows a
-      // sub-subcollection this silently stops covering it and must become
-      // {path=**}. Carried verbatim from 0.2.0 because it is still true.
-      match /{subcollection}/{docId} {
-        allow read:  if canRead(wsId);
-        allow write: if canWrite(wsId);
+      // ---------- THE LIST ----------
+      // A helper works these: create, update, and delete their OWN. See
+      // header notes 2 and 2a. The three clauses are deliberately identical
+      // — a difference between them would be a difference nobody meant.
+
+      match /tasks/{docId} {
+        allow read:   if canRead(wsId);
+        allow create: if canWorkList(wsId);
+        allow update: if canWorkList(wsId) && creatorIntact();
+        allow delete: if canSetUp(wsId)
+                      || (canWorkList(wsId) && iMadeThis());
       }
+
+      match /projects/{docId} {
+        allow read:   if canRead(wsId);
+        allow create: if canWorkList(wsId);
+        allow update: if canWorkList(wsId) && creatorIntact();
+        allow delete: if canSetUp(wsId)
+                      || (canWorkList(wsId) && iMadeThis());
+      }
+
+      match /sessions/{docId} {
+        allow read:   if canRead(wsId);
+        allow create: if canWorkList(wsId);
+        allow update: if canWorkList(wsId) && creatorIntact();
+        allow delete: if canSetUp(wsId)
+                      || (canWorkList(wsId) && iMadeThis());
+      }
+
+      // ---------- THE SETUP ----------
+      // tiers carry gcalCalendarId; settings/config carries mirrorCalendarId,
+      // the carryover hour and the poll interval. These are the board's
+      // wiring, and changing them changes what the hourly function does to
+      // somebody's actual Google Calendar. Editor and above.
+
+      match /tiers/{docId} {
+        allow read:  if canRead(wsId);
+        allow write: if canSetUp(wsId);
+      }
+
+      match /settings/{docId} {
+        allow read:  if canRead(wsId);
+        allow write: if canSetUp(wsId);
+      }
+
+      // Written by the function through the Admin SDK, which bypasses rules
+      // entirely; the client only ever subscribes. Kept writable at editor
+      // level rather than denied outright so a future client-side refresh
+      // does not need a rules change to exist.
+      match /eventsCache/{docId} {
+        allow read:  if canRead(wsId);
+        allow write: if canSetUp(wsId);
+      }
+
+      // ⚠️ NO CATCH-ALL, ON PURPOSE. See header note 1. A collection that is
+      // not named above is denied. If you add one, add its clause here and
+      // decide deliberately which of the three tiers it belongs to.
     }
   }
 }
