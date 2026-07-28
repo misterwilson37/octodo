@@ -1,6 +1,24 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.28.0 — D143: the default due time is the next hour, not 09:00,
+// Version 1.29.1 — Z: repin to store 0.21.1 (whose tier order you see when
+// visiting somebody's board). No app-side change; the pin has to move or D49
+// bites — a ?v= on a <script> tag does not cache-bust the imports inside it.
+// (prev) Version 1.29.0 — ITEM 5, THE UI HALF. Almost nothing here changed, which
+// is the report: store.js 0.21.0 merges N boards and routes every write to
+// whichever one a document lives on, and the 6,500 lines below still believe
+// there is exactly one workspace. That is E30 spent a second time.
+//   · tierEditorRow gains a 🤝 and toggleSharePanel — an inline strip under
+//     one tier row. Built in JS rather than in index.html because tier rows
+//     are themselves JS-built and there may be any number of them; a single
+//     markup panel would have to be MOVED around the DOM, and D37 has
+//     already taught this project what moving a container costs.
+//   · Everything in that panel writes IMMEDIATELY, not on Settings ▸ Save.
+//     Sharing moves documents between boards. Letting it look undoable by
+//     closing a modal would be a lie about what just happened.
+//   · The version badge names every merged board, because "which workspaces
+//     am I actually reading?" is the first question when a shared tier
+//     misbehaves — and ?ws= takes an id straight off that line.
+// (prev) Version 1.28.0 — D143: the default due time is the next hour, not 09:00,
 // and cancelTaskEdit() stops blanking the due date. Jake asked whether the
 // Today button should also move the time; it shouldn't — a date button that
 // changes a neighbouring field is a button you stop trusting — but the
@@ -827,8 +845,10 @@ import {
   activeWorkspaceId, setActiveWorkspace, setPreferredWorkspace,   // E1/E34
   subscribeMyWorkspaces, subscribeWorkspaceDoc, subscribeMembers, // E34
   addMember, removeMember, setMemberRole, createDependentWorkspace, // E5/E32
-  saveWorkspace, forgetWorkspaceCache                              // E38 rename
-} from "./store.js?v=0.20.1";
+  saveWorkspace, forgetWorkspaceCache,                             // E38 rename
+  shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
+  mergedWorkspaceIds                                               // item 5
+} from "./store.js?v=0.21.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -839,7 +859,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.28.0";
+export const APP_VERSION = "1.29.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1191,8 +1211,14 @@ function reportVersions() {
     `app.js ${APP_VERSION} · store.js ${STORE_VERSION} · queue.js ${QUEUE_VERSION} · ` +
     `celebrate.js ${CELEBRATE_VERSION} · config.js ${CONFIG_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
   $("#version").textContent = "v" + APP_VERSION;
+  // ITEM 5 — the badge has to name every board feeding the view, not just
+  // the one you are standing on. When a shared tier misbehaves, "which
+  // workspaces am I actually merging?" is the first question, and ?ws= takes
+  // an id from this list.
+  const merged = mergedWorkspaceIds().filter(w => w && w !== activeWorkspaceId());
   $("#version").title = report +
     "\n\nworkspace " + (activeWorkspaceId() || "—") +   // E1 — which board am I on?
+    (merged.length ? "\n+ shared " + merged.join(", ") : "") +
     "\n" + censusLine();   // D136
   const line = $("#versions-line");
   if (line) line.textContent = report + " — " + censusLine();   // D136
@@ -6194,6 +6220,7 @@ function tierEditorRow(t, isNew) {
     </select>
     <label class="t-carry-label" title="If tasks in this tier are still unchecked at midnight, they get written onto tomorrow's Google Calendar with a ❗ at the carryover hour below. (Phase 3 feature.)"><input class="t-carry" type="checkbox" ${t.midnightCarryover ? "checked" : ""}> ❗ carryover</label>
     <label class="t-timeless-label" title="Projects on this tier need no start/end date — a parking lot for someday ideas (D126's want-tos). Only ONE tier may be timeless; checking this one unchecks any other." ${t.kind === "anchor" ? "hidden" : ""}><input class="t-timeless" type="checkbox" ${t.timeless ? "checked" : ""}> ⏳ timeless</label>
+    <button class="t-share" title="Share this tier with somebody">🤝</button>
     <button class="t-del" title="Delete tier">✕</button>
     <span class="t-days" title="Working days for this tier: reschedules land on these days, project dates outside them get intercepted, and pipeline offsets only count them. Weekend jobs? Check Sa/Su." ${t.kind === "anchor" ? "hidden" : ""}>${dayToggles}</span>
     <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
@@ -6221,8 +6248,125 @@ function tierEditorRow(t, isNew) {
     }
     row.remove();
   });
+
+  // ---- ITEM 5: share this tier ----
+  // A tier that already lives in a shared workspace wears a badge, because
+  // "who else can see this" is not something anybody should have to open a
+  // panel to discover. E38's lesson, one control over: a field that looks
+  // filled in and isn't, and a state that looks private and isn't, are the
+  // same mistake.
+  const share = row.querySelector(".t-share");
+  if (t.shared) {
+    share.textContent = "🤝";
+    share.classList.add("is-shared");
+    share.title = "Shared — click to see who holds it";
+  }
+  share.addEventListener("click", ev => {
+    ev.preventDefault();
+    toggleSharePanel(row, t);
+  });
+
   box.append(row);
   if (isNew) row.querySelector(".t-name").focus();
+}
+
+/**
+ * The share panel — an inline strip under one tier row. Built here rather
+ * than in index.html because tier rows are themselves JS-built and there may
+ * be any number of them; a single markup panel would have to be moved around
+ * the DOM, and D37 has already taught this project what moving a container
+ * costs.
+ *
+ * Everything in it writes IMMEDIATELY rather than on Settings ▸ Save. Sharing
+ * moves documents between boards; that is a structural act, not a field edit,
+ * and pretending it is undoable by closing a modal would be a lie.
+ */
+function toggleSharePanel(row, t) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("tier-share")) { existing.remove(); return; }
+  document.querySelectorAll(".tier-share").forEach(p => p.remove());
+
+  const panel = document.createElement("div");
+  panel.className = "tier-share";
+  const tierId = row.dataset.id;
+  if (!tierId) {
+    panel.innerHTML = `<div class="share-note">Save this tier first, then you can share it.</div>`;
+    row.after(panel);
+    return;
+  }
+
+  const board = t.shared ? sharedWorkspaces().find(w => w.id === t.wsId) : null;
+  const others = board ? board.members.filter(e => e !== currentEmail()) : [];
+
+  panel.innerHTML = `
+    <div class="share-note">${t.shared
+      ? `<b>${esc(t.name)}</b> is a shared tier. Everyone below sees the same tasks — a completion lands on both screens within a second.`
+      : `Sharing moves <b>${esc(t.name)}</b> and everything in it onto a board you both hold. Your tasks, projects and clocked time come with it, and you can bring it back at any time.`}</div>
+    <div class="share-row">
+      <input class="share-email" type="email" placeholder="Their email address" autocomplete="off">
+      <button class="share-go">${t.shared ? "Give them a key" : "Share this tier"}</button>
+    </div>
+    ${others.length ? `<ul class="share-people">${others.map(e =>
+      `<li><span>${esc(e)}</span><button class="share-drop" data-email="${esc(e)}" title="Take the key back">✕</button></li>`).join("")}</ul>` : ""}
+    ${t.shared ? `<button class="share-back">Bring it back to my board</button>` : ""}
+    <div class="share-status" hidden></div>`;
+  row.after(panel);
+
+  const status = panel.querySelector(".share-status");
+  const say = (msg, bad) => {
+    status.hidden = false;
+    status.textContent = msg;
+    status.classList.toggle("is-bad", !!bad);
+  };
+  const busy = on => panel.querySelectorAll("button, input")
+    .forEach(el => { el.disabled = on; });
+
+  panel.querySelector(".share-go").addEventListener("click", async () => {
+    const email = panel.querySelector(".share-email").value.trim().toLowerCase();
+    if (!email) return say("Type their email address first.", true);
+    if (email === currentEmail()) return say("That's you — you already hold this one.", true);
+    busy(true);
+    try {
+      if (t.shared) {
+        await addMember(t.wsId, email, "editor");
+        say(`${email} holds a key now. Nothing for them to accept.`);
+      } else {
+        say("Moving the tier — don't close this yet…");
+        const res = await shareTier(tierId, [email]);
+        say(`Done. ${res.moved} document${res.moved === 1 ? "" : "s"} moved, and ${email} can see them.`);
+      }
+      panel.querySelector(".share-email").value = "";
+    } catch (err) {
+      console.error("[share]", err);
+      say(err.message || "That didn't work — nothing was deleted.", true);
+    }
+    busy(false);
+  });
+
+  panel.querySelectorAll(".share-drop").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      const email = btn.dataset.email;
+      if (!confirm(`Take the key back from ${email}? This tier leaves their app on reload.`)) return;
+      busy(true);
+      try { await removeMember(t.wsId, email); say(`${email} no longer holds this tier.`); }
+      catch (err) { say(err.message || "Couldn't take that key back.", true); }
+      busy(false);
+    }));
+
+  const back = panel.querySelector(".share-back");
+  if (back) back.addEventListener("click", async () => {
+    if (!confirm(`Bring "${t.name}" back to your own board? Everyone else loses sight of it.`)) return;
+    busy(true);
+    say("Bringing it back — don't close this yet…");
+    try {
+      const res = await unshareTier(tierId);
+      say(`Done. ${res.moved} document${res.moved === 1 ? "" : "s"} came home.`);
+    } catch (err) {
+      console.error("[unshare]", err);
+      say(err.message || "That didn't work — nothing was deleted.", true);
+    }
+    busy(false);
+  });
 }
 
 function wireTmplRow(row, box) {
