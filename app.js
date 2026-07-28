@@ -1,6 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.26.0 — E40: the OUTBOUND calendar walkthrough. 1.25.0 explained
+// Version 1.27.0 — THE HELPER ROLE REACHES THE UI, plus D141/D142 on the task
+// form. firestore.rules 1.2.1 added a fourth role and this is the half that
+// makes it usable: "Can help" in the People dropdown, and the Tiers/Pipeline/
+// Timing panes dimmed for anyone who cannot write them. myRole/canWorkList/
+// canSetUp/canDeleteDoc mirror the rules clause for clause — the ✕ on a task
+// is now ABSENT rather than failing when a helper looks at somebody else's
+// task, because a button that errors after the click reads as a bug.
+// D141: a "Now" button beside Time, the twin of D140's "Today" beside Due
+// date — Chrome's native picker has neither. D142: Est. min moved off the
+// three-across row onto its own line with the input beside the label; two
+// native date/time inputs and a number field could not share 340px, which is
+// why the first two looked squeezed.
+// (prev) Version 1.26.0 — E40: the OUTBOUND calendar walkthrough. 1.25.0 explained
 // how to see your appointments; nothing explained how to get your tasks onto
 // a calendar, which is the half that actually makes a phone buzz — this app
 // sends no notifications of its own and never has (§5, "Expectation set with
@@ -820,7 +832,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.26.0";
+export const APP_VERSION = "1.27.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -997,6 +1009,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wirePipelineManager();   // D124 — the project-type library controls (once)
   $("#settings-save").addEventListener("click", onSaveSettings);  $("#cfg-poll").addEventListener("input", updatePollCostHint);
   $("#task-date-today").addEventListener("click", onDateToday);       // D140
+  $("#task-time-now").addEventListener("click", onTimeNow);           // D141
   $("#alert-test").addEventListener("click", testAlert);              // D137 — a click is also the audio unlock
   $("#cfg-alert-notify").addEventListener("change", onNotifyToggle);  // D137 — permission must be asked from a gesture
   $("#due-save").addEventListener("click", dueSave);
@@ -1302,8 +1315,54 @@ function iOwnThisBoard() {
   return me?.role === "owner";
 }
 
-// "yours" is true of a board you hold the deed to for somebody else, and
-// misleading — it is their list. Say what you actually are to it.
+/** My role on the board I'm looking at, as firestore.rules sees it — the
+    deed outranks the member row, because the rules admit isWsOwner()
+    everywhere they admit role 'owner'.
+
+    Returns null while members are still in flight. Callers treat null as
+    "allowed", so a board opens with its controls live and gates a moment
+    later if it turns out they shouldn't be, rather than flashing
+    read-only at its own owner on every load. renderPeople() re-runs the
+    gate on every members snapshot, so null never sticks. */
+function myRole() {
+  if (ownsBoard(S.wsDoc)) return "owner";
+  if (!S.members.length) return null;
+  return S.members.find(m => m.id === myEmail())?.role || "viewer";
+}
+
+// These three mirror canWorkList / canSetUp / the delete clause in
+// firestore.rules 1.2.1. If you change one, change the other — a UI that
+// offers a button the server refuses is worse than no button at all,
+// because the failure lands after the click and reads as a bug.
+function canWorkList() {                       // tasks, projects, sessions
+  const r = myRole();
+  return r === null || r === "owner" || r === "editor" || r === "helper";
+}
+function canSetUp() {                          // tiers, pipeline, timing
+  const r = myRole();
+  return r === null || r === "owner" || r === "editor";
+}
+/** May I delete THIS document? A helper may bin only what they made
+    (rules 1.2.1 note 2a), so the answer depends on the document, not just
+    on the role — which is why this takes an argument and the other two
+    don't. Reads createdBy with a default so 1.x documents that predate the
+    field answer "no" for a helper, exactly as the rules do. */
+function canDeleteDoc(raw) {
+  if (canSetUp()) return true;
+  return canWorkList() && (raw?.createdBy || "") === myEmail();
+}
+
+/** Dim what this role cannot use, and say why. Deliberately a class on a
+    container rather than a sweep of el.disabled = false: the pipeline pane
+    disables its own Rename and Delete when the default pipeline is
+    selected, and a blanket re-enable would quietly undo that. */
+function applyRoleGating() {
+  const lock = (el, locked) => { if (el) el.classList.toggle("pane-locked", locked); };
+  const setup = canSetUp();
+  ["tiers", "pipeline", "timing"].forEach(name =>
+    lock(document.querySelector(`.tab-pane[data-pane="${name}"]`), !setup));
+  lock($("#form-panel"), !canWorkList());
+}
 function boardWho(b) {
   if (b.minor) return "yours";                       // you live here
   if (!ownsBoard(b)) return esc(b.ownerEmail || "");
@@ -1398,7 +1457,7 @@ async function copyRobot(btn) {
 }
 
 // Plain words for the roles. "editor" is a database value, not a sentence.
-const ROLE_WORD = { owner: "co-owner", editor: "can edit", viewer: "can view" };
+const ROLE_WORD = { owner: "co-owner", editor: "can edit", helper: "can help", viewer: "can view" };
 
 /** "nico.m.wilson@gmail.com" -> "Nico". The old fallback used the whole local
  *  part, which is how a board ended up called "nico.m.wilson". */
@@ -1422,6 +1481,7 @@ function isDependentUser() {
 }
 
 function renderPeople() {
+  applyRoleGating();   // members just changed, so my own role may have too
   const list = $("#people-list");
   if (!list) return;
   const owner = iOwnThisBoard();
@@ -1448,7 +1508,7 @@ function renderPeople() {
       if (owner && !isDeed) {
         const sel = document.createElement("select");
         sel.className = "mini";
-        [["owner", "Co-owner"], ["editor", "Can edit"], ["viewer", "Can view"]]
+        [["owner", "Co-owner"], ["editor", "Can edit"], ["helper", "Can help"], ["viewer", "Can view"]]
           .forEach(([v, label]) => {
             const o = document.createElement("option");
             o.value = v; o.textContent = label; o.selected = (m.role === v);
@@ -2372,12 +2432,16 @@ function renderQueue(items, now) {
       // absent otherwise rather than disabled: a control that can't do
       // anything is clutter, and the ↻ badge already says which is which.
       ...(it.raw?.recurrence ? [iconBtn("✋", "Last one — finish this, don't plant the next", () => endRecurrence(it))] : []),
-      iconBtn("✕", "Delete", () => {
+      // A helper may bin only what they made (rules 1.2.1, note 2a), so the
+      // ✕ is absent on everyone else's tasks rather than present and
+      // failing. Same reasoning as D133's ✋ above: a control that can't do
+      // anything is clutter, and a control that LOOKS like it can is worse.
+      ...(canDeleteDoc(it.raw) ? [iconBtn("✕", "Delete", () => {
         if (!confirm(`Delete "${it.title}"?`)) return;
         const { id, ...data } = structuredClone(it.raw);   // D116: full body, id stripped
         pushUndo("task delete", () => restoreDoc("tasks", it.id, data), () => deleteTask(it.id));
         deleteTask(it.id);
-      })
+      })] : [])
     ] : it.kind === "stage" ? [
       iconBtn("⏰", "Set/change this stage's hard due date", () =>
         openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex }, `Hard due date — ${it.title}`, it.dueAt))
@@ -6355,6 +6419,19 @@ function onDateToday(e) {
   const el = $("#task-date");
   el.value = toDateInput(new Date());
   el.dispatchEvent(new Event("change", { bubbles: true }));   // whatever listens to the field still hears it
+}
+
+// D141 — the twin of the above, for the same reason: Chrome's native time
+// picker has no "now" any more than its date picker has a "today". Exact
+// current time, not rounded to the nearest five — "Now" that means 6:45
+// when it is 6:47 is a small lie, and the field is a deadline.
+function onTimeNow(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const d = new Date();
+  const el = $("#task-time");
+  el.value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function toDateInput(d) {
