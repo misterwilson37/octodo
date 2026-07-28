@@ -1,8 +1,15 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.52.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.53.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
-   0.52.0 (helper role + D142): .pane-locked / .locked-note dim a pane the
+   0.53.0 (item 5, shared tiers): .t-share is the handshake on every tier
+   row and .tier-share is the strip that opens under it. Deliberately built
+   from the SAME vocabulary as .person-row / .person-tag — this is the same
+   idea (who holds a key) at tier size rather than board size, and D104 says
+   one grammar. NOT reusing .person-row itself: that block is a flex row
+   inside a list, and this is a panel. Borrowing a class for its shape while
+   inheriting its meaning is exactly what cost 0.48.1 a round trip.
+   (prev) 0.52.0 (helper role + D142): .pane-locked / .locked-note dim a pane the
    current role cannot write while leaving it legible, .role-matrix styles
    the four-role table in People, and .est-label puts Est. min on one line
    with its field beside it instead of stacked under a squeezed column.
@@ -232,7 +239,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.52.0";
+  --tc-version: "0.53.0";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -670,6 +677,43 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
 .tier-row .t-cal { flex-basis: 100%; font-size: .8rem; }
 .t-carry-label { font-size: .75rem; white-space: nowrap; }
 .t-timeless-label { font-size: .75rem; white-space: nowrap; }   /* D126 */
+
+/* ---------- Item 5: sharing a tier ---------- */
+.tier-row .t-share { background: none; border: none; cursor: pointer;
+  font-size: .95rem; line-height: 1; padding: .2rem .25rem; opacity: .45; }
+.tier-row .t-share:hover { opacity: 1; }
+/* A shared tier says so without being opened. Same reasoning as .person-tag:
+   a statement of fact about access, so it takes the accent, never --danger. */
+.tier-row .t-share.is-shared { opacity: 1; filter: none; }
+.tier-row .t-share.is-shared::after {
+  content: ""; display: inline-block; width: .35rem; height: .35rem;
+  border-radius: 50%; background: var(--accent);
+  vertical-align: top; margin-left: -.15rem;
+}
+
+.tier-share {
+  flex-basis: 100%; margin: -.15rem 0 .7rem;
+  border: 1px solid var(--line); border-left: 2px solid var(--accent);
+  border-radius: var(--radius); padding: .6rem .75rem;
+  background: var(--panel-2);
+}
+.share-note { font-size: .82rem; color: var(--ink-dim); margin-bottom: .5rem; }
+.share-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+/* D66 — a flex item will not shrink below its content's min-width, and an
+   email input's is wide enough to push the button off a phone. */
+.share-row .share-email { flex: 1 1 10rem; min-width: 0; }
+.share-people { list-style: none; margin: .55rem 0 0; padding: 0; }
+.share-people li {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: .82rem; padding: .2rem 0; border-top: 1px solid var(--line);
+}
+.share-people li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.share-drop { background: none; border: none; color: var(--ink-dim);
+  cursor: pointer; padding: .1rem .3rem; }
+.share-drop:hover { color: var(--danger); }
+.share-back { margin-top: .55rem; font-size: .8rem; }
+.share-status { margin-top: .5rem; font-size: .82rem; color: var(--accent); }
+.share-status.is-bad { color: var(--danger); }
 
 .info-dot {
   display: inline-flex; align-items: center; justify-content: center;
