@@ -13,12 +13,27 @@ This repository is the multi-user rebuild of [Tentacalendar 1.x](https://github.
 
 ## The permission model, in two words
 
-Everything in this app's sharing model is **owner** and **member**. It is worth understanding before reading any code, because there is no third concept.
+Everything in this app's sharing model is **owner** and **member**. It is worth understanding before reading any code, because there is no third *concept* — only four sizes of key.
 
 A workspace is **a house, not a photocopy.** There is one house. Everything in it — tasks, tiers, projects — exists exactly once. People holding keys walk into the *same* house, so a task checked off vanishes from every screen watching it within a second. There is never a second copy to fall out of sync.
 
 - **Owner** holds the deed. Only an owner hands out and takes back keys.
-- **Member** holds a key. `editor` is full use; `viewer` is read-only (a viewer may still react on the activity feed — that is how kudos work).
+- **Member** holds a key, in one of four sizes.
+
+The four are split by *what a document is*, not by one blanket verb — which was the bug in rules 1.1.1, where a single catch-all clause meant "can edit this board's tasks" and "can repoint this board at a different Google Calendar" were the same permission:
+
+| | `viewer` | `helper` | `editor` | `owner` |
+|---|---|---|---|---|
+| Read everything; react on the activity feed (kudos) | ● | ● | ● | ● |
+| **The list** — tasks, projects, sessions | | ● | ● | ● |
+| Delete from the list — *only what they created* | | ● | ● | ● |
+| Delete anything on the list | | | ● | ● |
+| **The setup** — tiers, settings, calendar ids | | | ● | ● |
+| **The people** — members, the workspace document | | | | ● |
+
+`helper` exists for the person pitching in rather than running the place: they can work the list and tidy up after themselves, and cannot reconfigure the board. `createdBy` is immutable on update for every role — without that, a helper could relabel someone else's task as their own and delete it, and the restriction would be undone by the permission next to it.
+
+The role table rendered in the app's People tab is the same table. **If you change one, change both**, or the UI becomes a promise the server breaks.
 
 Every case is that model pointed one of two directions:
 
@@ -38,12 +53,13 @@ A *dependent* workspace is not a special code path — it is an ordinary workspa
 | File | Role |
 |---|---|
 | `index.html` | The whole UI. One page, no templating. |
-| `app.js` | Rendering, interaction, views. ~5,900 lines, ported from 1.x with four seams changed. |
+| `app.js` | Rendering, interaction, views. ~6,500 lines, ported from 1.x with four seams changed. |
 | `store.js` | **Every** Firebase call. Auth, workspace bootstrap, subscriptions, CRUD. Nothing here touches the DOM. |
 | `queue.js` | Pure scheduling logic — priority, pipelines, week/clock geometry, holidays. Has never known Firestore exists. |
 | `celebrate.js` | The confetti, the parade, the fireworks. |
 | `config.js` | The only hand-edited file. Firebase identifiers. |
 | `tentacalendar.css` | One stylesheet. |
+| `functions/` | The hourly Cloud Run job: pulls Google Calendar into `eventsCache`, mirrors tasks out. Deployed separately; the Admin SDK bypasses the rules below. |
 | `firestore-2.0.rules` | **The security model.** Lives in the Firebase console; kept here so the two cannot drift. |
 | `manifest.json`, `icon-*.png` | PWA install. |
 
@@ -69,7 +85,7 @@ Deliberately small and dependency-free.
 | Data | Firebase Firestore (web SDK v11.6.1, from CDN) |
 | Auth | Firebase Auth, Google sign-in. **No allowlist** — anyone may sign up and gets their own workspace. |
 | Hosting | GitHub Pages |
-| Calendar sync | Google Cloud Run (Node), deployed separately, not yet built for 2.0 |
+| Calendar sync | Google Cloud Run (Node) on an hourly Cloud Scheduler trigger. Built; see `functions/`. |
 
 **There is no `npm install` and no build.** The files you edit are the files that ship. That is a design choice, not an omission: it means the app can be maintained from a browser on a locked-down school laptop, which is the environment it was built in.
 
@@ -84,15 +100,17 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 3. Publish `firestore-2.0.rules` in the Firebase console. **Do not skip this** — a project in test mode is a public database.
 4. Serve the files from anywhere static. GitHub Pages needs no configuration beyond enabling it.
 
+**Testing the rules.** `firestore-2.0.rules` is the one file where a mistake is silent and expensive, and the Firebase console no longer carries an inline simulator — its "Develop & Test" button now just points at the Emulator Suite docs. Run the emulator locally (`firebase emulators:start --only firestore`) and assert against it before publishing. The two rules bugs this project has shipped were both of a kind a three-line test would have caught.
+
 ⚠️ **Every path in this project must be relative** (`./store.js`, never `/store.js`). It is served from a subpath during development and a domain root in production; an absolute path works in one and 404s in the other, which makes it broken only *in between* — the worst possible timing for a bug.
 
 ---
 
 ## Status
 
-**Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and roles, dependent workspaces.
+**Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and the four roles, dependent workspaces, and calendar sync in both directions.
 
-**Not built yet:** shared tiers (as opposed to shared whole boards), the activity feed and kudos, calendar sync, onboarding, and the migration of the 1.x data.
+**Not built yet:** shared *tiers* (as opposed to shared whole boards), the activity feed and kudos, onboarding, and the migration of the 1.x data.
 
 Version 2.0.0 arrives when two people can sign in separately, see separate boards, and visit each other's. Until then the app carries 1.x's continuing version numbers, and the badge in the header reports exactly what is running.
 
