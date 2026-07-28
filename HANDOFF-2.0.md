@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.11.0** | Last updated: 2026-07-27 (late) | **App: 1.28.0 · store 0.20.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.52.0 · html 0.46.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed and **RUNNING.** Jake and Nico both sign in; the collection-group index exists; **smoke IA · ID · IJ · IQ · IR all PASS**; the hourly Scheduler fired on time at 18:07 on 2026-07-27.|
+**Document version: 0.13.0** | Last updated: 2026-07-28 | **App: 1.29.1 · store 0.21.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.53.0 · html 0.47.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed and **RUNNING.** Jake and Nico both sign in; the collection-group index exists; **smoke IA · ID · IJ · IQ · IR all PASS**; the hourly Scheduler fires on time. **Item 5 (shared tiers) is BUILT and awaiting its smoke list (IS–JA).**|
 
 > **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
@@ -15,8 +15,8 @@
 > **⚠️ RULES ARE A SEPARATE ACTION FROM PUSHING FILES.** They live in the console, not the repo. **Select-all-and-REPLACE** in the rules editor — appending is what took the site down on 2026-07-12. And note the console **no longer has an inline Rules Playground**: its "Develop & Test" button now only links to the Emulator Suite docs. Test rules with the local emulator (see §0a) or not at all.
 
 Live 1.x: `tentacalendar.misterwilson.org` (Katie's, untouched). Dev 2.0: `misterwilson37.github.io/octodo`.
-Current instance: **Briareus** (Claude Opus 5, 13th instance / 12th named).
-Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus, Briareus**.
+Current instance: **Argonauta** (Claude Opus 5, 14th instance / 13th named).
+Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus, Briareus, Argonauta**.
 
 ## 0a. WHERE JAKE ACTUALLY IS, end of 2026-07-27
 
@@ -27,20 +27,22 @@ Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy,
 | Firebase project, index | ✅ Done. Collection-group index on `members.email` created. |
 | **Rules** | ✅ **1.2.1 published and live.** Four roles; catch-all removed. |
 | Web app | ✅ Deployed and in daily-usable shape. Jake and Nico both sign in; boards, switcher, People, dependent workspaces all work. |
-| **Repo vs. latest drop** | Jake was pushing **app 1.28.0 · html 0.46.1 · css 0.52.0** as this session closed. **Verify with the version badge, don't assume:** hover the version in the header, compare against the banner at the top of this file. Anything lower means the web files need re-uploading. `store.js`, `queue.js`, `celebrate.js`, `config.js` were NOT touched this session. |
+| **`firestore-2.0.rules` in the repo** | ⚠️ **WAS STALE AT 1.1.1 — the version WITH the catch-all hole — while 1.2.1 was live in the console.** Jake pasted 1.2.1 into the repo on 2026-07-28. **Check this file's declared version against the console every session;** a rules file that lives in two places is a rules file that will disagree with itself, and the stale copy is the one a new instance reads and believes. |
+| **Repo vs. latest drop** | Jake was pushing **app 1.29.1 · store 0.21.1 · html 0.47.1 · css 0.53.0** as this session closed. ⚠️ **An earlier drop in the same session carried 1.29.0/0.21.0/0.47.0 and may already be pushed — those numbers are SUPERSEDED, not equivalent.** **Verify with the version badge, don't assume:** hover the version in the header, compare against the banner at the top of this file. Anything lower means the web files need re-uploading. `store.js`, `queue.js`, `celebrate.js`, `config.js` were NOT touched this session. |
 | Cloud Run function | ✅ **1.3.0 live, and `?job=fixtags` has been run.** |
 | `POLL_SECRET` / `TZ` | ✅ Both set and verified by a live curl. |
 | Calendars connected | ✅ Jake's are connected and a mirror calendar exists. |
 | **Cloud Scheduler** | ✅ **Created and firing.** Confirmed running at 18:07 on 2026-07-27, on schedule. Item 7 is closed. |
 | **Rules emulator** | ⚠️ **Newly available — USE IT.** Jake added `storage.googleapis.com` to Claude's egress allowlist (claude.ai/settings/capabilities → Code execution → Allow network egress). The allowlist is baked into the session token at session start, **so it only works in a conversation started after that change** — it did not work in the one where it was added. `npm i firebase-tools @firebase/rules-unit-testing`, then `npx firebase setup:emulators:firestore`. Java 21 is already in the container. |
 | Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice. |
-| `import.html` (item 9) | ❌ Not written. |
+| **Item 5 — shared tiers** | ✅ **BUILT** (store 0.21.1 / app 1.29.1 / css 0.53.0 / html 0.47.1). No rules change was needed. **Untested by a human — smoke list IS–JA in §5b.** |
+| `import.html` (item 9) | ❌ Not written. **The last thing before Katie moves.** |
 
 ### The two things Jake named as the road to 2.0, in his order
 
 He set the order himself on 2026-07-27: **rules → shared tiers → import**, on the reasoning that rules were "most likely to bite us if we wait." Rules are done.
 
-1. **Item 5 — shared tiers.** *"The reason Katie has to move."* Nothing is built: no `kind: "shared"` anywhere, `profile.tierRanks` is seeded empty at `store.js:368` and read by nothing, no merge. **The architectural work is in `store.js`, not `app.js`:** every ref builder funnels through `ws()` (store.js ~173), so fanning out to N workspaces means each subscription merges across boards and each write resolves which board a document lives on. Keep that resolution INSIDE store.js as a runtime `docId → wsId` map and app.js's 6,500 lines never learn that more than one workspace exists — which is E30's rule, and the reason items 1–3 crossed so cheaply.
+1. ~~**Item 5 — shared tiers.**~~ **BUILT 2026-07-28 (5a).** The plan in this row turned out to be exactly right and was followed to the letter: the work was all in `store.js`, the resolution is a runtime `docId → wsId` map, and **`app.js` gained no knowledge that more than one workspace exists.** Details in §3a. What is NOT built is 5b — the activity feed and kudos on a shared tier (that is item 6 anyway), and a role picker.
 2. **Item 9 — import.** The last thing before Katie moves. ⚠️ **Re-check the collection list in rules 1.2.1 first.** The wildcard is gone, so if Katie's 1.x export carries a collection that has no clause, the import is denied. Loudly, which is the point — but find out before flip day, not during it.
 
 **On who runs the import.** The runbook and E22(a)/E25 say Katie adds Jake as an *editor* and he imports. That fails: writing `pollIntervalMinutes` and `nextPollAt` to the **workspace document** needs role `owner`, and an editor doesn't have it. Either she gives him **Co-owner** (the option already exists in the People dropdown), or — simpler — **she runs `import.html` herself**, since she owns her own board and needs nothing extra. Costs her one more minute on flip day and no permission choreography.
@@ -154,6 +156,81 @@ Two words carry the whole permission model. **Owner** holds the deed and is the 
 
 **Ship-check run, all green:** banner === declaration for all seven versioned files (iterated, not hand-listed — meta-rule 6); **every `?v=` pin === the target file's own declaration** (this closes the gap Wunderpus named in 1.x's header, where nothing asserted that the URL requesting a file matched what that file said it was); function census on `store.js` (48 definitions, 0 duplicates, 0 unresolved calls, comments stripped first); all 39 names `app.js` imports from `store.js` are exported; all **236** ids `app.js` reaches for exist in the markup; **div balance 135/135**, 0 duplicate ids (D127).
 
+
+---
+
+## 3a. Item 5 — SHARED TIERS (built 2026-07-28)
+
+**The whole feature is in `store.js`. `app.js` gained a button.** That is E30 spent a second time and it is the headline: 6,500 lines still believe there is exactly one workspace.
+
+### The merge rule, which is Jake's and is not the obvious one
+
+The first design said shared tiers merge into your **home** board only, so visiting somebody meant seeing strictly their world. Jake corrected it:
+
+> *"If I'm sharing with a colleague and \[I'm\] in her house, then I won't see that tier — I'm in her house, after all — but I don't want OUR shared tier to disappear just because I'm in her house."*
+
+So the rule is: **a shared tier follows you into a house where somebody who lives there also holds a key to it.** In your own house, everything you hold merges. Anywhere else, only what a resident other than you also holds. Both inputs are readable without a rules change — you may list the members of any workspace you are a member of, and both qualify.
+
+**This is the third time a design was fixed by the human re-describing it in his own words** (E25 reversed who owns Katie's board, E32 invented the dependent workspace). The pattern is now well enough evidenced to state as a rule: *when Jake re-describes the problem, walk the code through HIS version, not yours.*
+
+### The five pieces
+
+| Piece | Where | Why it is the way it is |
+|---|---|---|
+| **The merge set** | `mergeSet()` / `refreshMerge()` | Recomputed whenever the active board, its member list, or your shared boards change. Rebinds every live fan-out. |
+| **Fan-out** | `fanout(coll, build, emit)` | One logical subscription → N Firestore listeners → one merged emit. It is `subscribeTasks`'s own 0.17.0 trick (two listeners, one composite unsub) raised a dimension. |
+| **The ownership map** | `_where` | `docId → wsId`, stamped by the merged snapshots themselves, so a write is aimed at a fact rather than a guess. **⚠️ NEVER PRUNED** — see below. |
+| **Per-user rank (E7)** | `TIER_RANKS` + the overlay in `subscribeTiers` | `rank` is substituted before `app.js` sees a tier, so `app.js:6391`, `app.js:2069` and `queue.js:486` all keep reading a field that stopped being a property of the document. |
+| **Share = a move** | `shareTier` / `unshareTier` / `moveTier` | E6: a shared tier is a small shared workspace. Documents move; **ids are preserved.** |
+
+### Four things a successor must not undo
+
+1. **`_where` IS NEVER PRUNED, AND THAT IS THE FEATURE.** A deleted document keeps its entry because `restoreDoc` (D116's undo) resurrects by id and has to put it back on the board it came from. Prune it and undoing a delete on a shared tier silently moves the task to your own board — and to the other person it looks like it never came back. Tombstones, deliberately.
+
+2. **IDS ARE PRESERVED ACROSS A MOVE.** `parentTaskId` chains, `projectId` references and the sessions ledger all point *by id*, and the merged view keys by id too. A move that reassigned ids would sever every follow-up chain in the tier and orphan its clocked time. `setDoc`-at-a-known-id is already proven here; it is what `restoreDoc` has done since D116.
+
+3. **COPY, VERIFY, THEN DELETE. NEVER THE OTHER ORDER.** A failure part-way leaves duplicates — recoverable, and because the merged view keys by id, not even visible. A delete-first failure leaves a hole, which is not recoverable and is precisely what Principle 3 forbids.
+
+4. **"AT MOST ONE OPEN SESSION" BECAME A CROSS-BOARD INVARIANT.** D112's guarantee is that clocking in closes whatever was running *in the same commit*. The moment a project can live on a shared board, so can an open session — and the old query, scoped to the active board, would have found nothing, opened a second session, and quietly billed two projects at once. `openSessions()` sweeps every merged board; `writeBatch` spans them all.
+
+### Whose tier order you see — and the mistake that was corrected mid-session
+
+Jake, on being told visiting would show document ranks: *"Visiting her should give me a taste of **exactly** what she looks at — zero differences. Otherwise I wouldn't have an honest picture of her load. I'm pretty sure that's what you said, so we're good."*
+
+**It was not what I had built, and saying so was the whole value of that exchange.** 0.21.0 was right for a person's own tiers and wrong for the shared one — which is the only tier he was actually asking about.
+
+- **A personal tier's document `rank` is reliably its owner's opinion**, because on a personal board exactly one person has setup rights to write it. Visiting Katie shows Katie's order for Katie's tiers. That part always worked.
+- **A SHARED tier's document rank is contested.** Both people hold `editor` on that workspace, so both write that document, and **the last save wins.** Visiting Katie could have shown Family at *Jake's* rank, sitting in the middle of her board looking exactly like her judgement about her own week. A number that looks like somebody's priority and is somebody else's is worse than no number.
+
+**Fixed in 0.21.1 by putting each person's ordering of a shared tier on THEIR OWN MEMBER ROW** — `workspaces/{sharedWs}/members/{email}.tierRanks`. No rules change: a member row is readable by everyone holding a key to that workspace and writable only by its own subject, which is precisely the shape this needs and is already what 1.2.1 says.
+
+So the resolution now is:
+
+| Where you are | Whose numbers you see | Read from |
+|---|---|---|
+| Your own board | Yours, for every tier including shared | `users/{me}.tierRanks` (E7 — the authority) |
+| Visiting | **The resident's**, for their tiers *and* the shared one | tier document rank / that person's member row |
+
+**`users/{email}.tierRanks` remains the authority for YOUR view; the member-row copy exists purely to BE READ BY SOMEBODY ELSE, which is a thing a private profile can never be.** That is a mirror, not D103's two competing numbers — the same shape `saveConfig` already uses to put `pollIntervalMinutes` where the poll can query it.
+
+**And "the resident" is not "the owner."** On a dependent board (E32) a parent holds the deed and a child lives there, and it is the *child's* ordering that makes his board an honest picture. `viewerEmail()` reads the `minor` flag first and falls back to `ownerEmail` — the flag that already marks exactly that relationship, doing a second job it turns out to fit.
+
+**The durable lesson, and it is a small one worth keeping:** *"we're saying the same thing"* is worth checking rather than accepting. He was right about the requirement and wrong that it was met, and the difference lived in one sentence about one field.
+
+### Three defects found in review, all in failure paths
+
+Same shape as §8c, and worth recording because the ratio held: **the feature worked; the error handling did not.**
+
+1. The merge set was empty at the first bind, so the app booted blank and filled in a beat later once some unrelated snapshot refreshed it. Seeded before `onIn`.
+2. A share that copied successfully and then failed to delete the originals surfaced a bare `permission-denied` — which reads like the whole thing failed, when in fact nothing was lost. Now says so, and names unshare as the way out. (This is the helper-on-a-source-board case: the rules let a helper create and not delete.)
+3. `unshareTier` counted four collections before deleting the shared workspace document and **did not count `eventsCache`** — which the hourly poll can write *after* the tier has left. Deleting a workspace does not cascade, so that would have orphaned documents at a path nothing can ever reach again. Swept rather than counted, because it is a cache.
+
+### What is deliberately NOT built
+
+- **The activity feed and kudos on a shared tier.** That is item 6, and it is where E9/E10/E11 land. Until then a completion by the other person appears live and silently — correct per E11 (no confetti for someone else's win), but with no catch-up bar to notice it.
+- **A role picker.** E8 stands: the UI writes `editor` and offers no choice. Note that editor is *safe* here in a way it is not on a whole board — the only `gcalCalendarId` an editor can repoint is that one tier's, because it is the only tier in the workspace. That is the E-row's reasoning surviving contact with the `helper` role that arrived after it.
+- **Live cross-device rank sync.** `tierRanks` is read once at sign-in. Reorder on your phone and your laptop catches up on reload. Three lines to fix with a profile listener; nobody has asked.
+
 ---
 
 ## 4. Deploying this drop
@@ -197,7 +274,20 @@ There is **no CNAME** and there should not be one yet — the custom domain gets
 - **IM. Your settings stay yours.** In her house you keep *your* view, *your* hidden tiers, *your* week layout. Those are per-device, not per-board, and that is deliberate.
 - **IN. It remembers.** Reload while on her board → you land back on her board. Switch to your own → reload → your own.
 - **IO. She can take the key back.** Katie removes you in ⚙️ ▸ People → her board leaves your switcher on reload, and opening it directly fails.
-- **IP. A shared TIER is different from a shared BOARD, on purpose.** Not yet built (item 5). Today sharing is whole-board only; the tier-sized version is the next increment.
+- **IP. A shared TIER is different from a shared BOARD, on purpose.** ✅ Built 2026-07-28 — see IS–JA below.
+
+**Item 5 — shared tiers. NONE OF THIS HAS BEEN RUN BY A HUMAN.** Jake's plan is to test it as himself and as Nico, the only two accounts that exist. Run them in order; IS and JA are the two that can lose data if they are wrong, and JA is the one nothing else exercises.
+
+- **IS. A tier becomes a shared tier.** ⚙️ ▸ Tiers ▸ 🤝 on a tier that has real tasks in it ▸ type Nico's address ▸ *Share this tier*. It reports how many documents moved. **Your queue should look identical afterwards** — same tasks, same order, same colour. Firebase console: a **third** workspace exists, `kind: "shared"`, holding that tier and its tasks.
+- **IT. The switcher did NOT gain an entry.** A shared tier is not a board you visit (§6.2). If it appears in the header chip menu, the `kind === "shared"` filter in `subscribeMyWorkspaces` is not firing.
+- **IU. THE IMPORTANT ONE — he sees it, and it is the same document.** Sign in as Nico. The shared tier is in his queue beside his own tiers. Check something off on his screen; **it leaves yours within a second**, with no confetti on yours (E11).
+- **IV. It went in whole.** Projects on that tier came across, and so did their clocked sessions — the Time Report still totals them. This is the one most likely to be half-done, because sessions are matched to projects client-side.
+- **IW. New work lands on the right board.** Add a task to the shared tier from your app. Console: it is in the **shared** workspace, not yours. If it lands in yours, `wsOfTier` is not resolving and the feature is cosmetic.
+- **IX. Ranks are per person.** Put the shared tier at rank 1 for you and somewhere else for Nico. **Both hold.** `users/{you}.tierRanks` gains a `"wsId:tierId"` entry, and your row in `workspaces/{shared}/members/` gains a `tierRanks` map.
+- **IX-b. THE ONE 0.21.0 GOT WRONG — visiting is an honest picture.** With the shared tier ranked differently by each of you, **save yours LAST**, then switch to Nico's board. **It must show at HIS number, not yours.** Saving last is the whole point: it is what made the old version wrong, and a test run in the other order passes either way and proves nothing.
+- **IY. Jake's merge rule.** Switch to Nico's board: the tier you share **with him** is still there. Now share a *different* tier with a third address and go back to Nico's board — **that one must not appear.** This is the rule he corrected and nothing else tests it.
+- **IZ. Bring it back.** 🤝 ▸ *Bring it back to my board*. Everything returns, the shared workspace **disappears from the console**, and Nico can no longer see any of it.
+- **JA. Undo lands on the right board.** On the shared tier, delete a task, then undo. **It must come back to the SHARED workspace, not yours.** This is the only test of the tombstone map, and the failure is silent — the task reappears on your screen looking correct while the other person never sees it again.
 - **IQ. Nico's board.** ⚙️ ▸ People ▸ *A board for someone who doesn't own it* → name, his address, Katie as co-owner. It appears in your switcher and in hers. **He can use it fully and cannot remove either of you, cannot delete it, and cannot leave it.** In his row you should see a **dependent** badge and no ✕.
 - **IR. THE ONE THAT MATTERS MOST — he signs in and lands in the right house.** Nico signs in for the first time *after* his board exists. He must land on **that** board, not on a fresh one of his own. If he lands somewhere with three starter tiers and no sign of you, the adoption path in `resolveWorkspace` did not fire — check the console for the missing collection-group index first, because that query is how adoption finds his key.
 
@@ -366,6 +456,8 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-07-28 | Opus 5 · **Argonauta** (14th, cont.) | **"WE'RE SAYING THE SAME THING" — WE WEREN'T.** Jake read back the visiting rule to confirm agreement and was right about the requirement (zero differences; an honest picture of her load) and wrong that 0.21.0 met it. **Personal tiers were fine and the SHARED tier was not**, because both people write that one document and the last save wins — so visiting Katie could have shown Family at Jake's rank while looking like hers. Fixed in **0.21.1** with per-member ranks on the member row, which the rules already permit exactly (readable by co-holders, writable only by its subject) and which needed no clause. **Also found while fixing it: the person whose order you see is the RESIDENT, not the deed-holder** — E32's `minor` flag already marks that relationship and now does a second job. Version cascade store 0.21.1 → app 1.29.1 → html 0.47.1, bumped rather than reused because the earlier drop may already be pushed and two different files must never wear one number. **Two false positives in my own ship-check this round** (a div-balance regex eaten by a heredoc; a census widened until `const stages` in three scopes read as a redefinition) — §7's rule cuts both ways: a check that flags legal code stops being read, exactly as one that misses stops being worth running. |
+| 2026-07-28 | Opus 5 · **Argonauta** (14th) | **ITEM 5 — SHARED TIERS, BUILT.** Opened by ship-checking the drop against §0a and finding the one thing that mattered: **`firestore-2.0.rules` in the repo was still 1.1.1 — the version WITH the catch-all hole — while 1.2.1 was live in the console.** Stopped and asked for the published text rather than writing against the file in hand, which would have handed back the hole inside a document that looked authoritative. Everything else green: banners, pins, div balance 148/148, no absolute paths. **No rules change was needed for item 5** and confirming that was most of the value of asking. **Jake corrected the merge rule and the correction is better** — a shared tier follows you into a house where somebody who lives there also holds a key to it, rather than merging only at home. That is the THIRD design fixed by him re-describing it in his own words (E25, E32, now this), which is enough evidence to call it a rule. **Told him one thing he asked for could not be built:** "her priority in her house" needs to read Katie's profile, which the rules correctly forbid; shipped the honest approximation and wrote down what the stronger version would cost. Three defects found in review, **all in failure paths and none in the feature** — empty merge set at first bind (app booted blank), a copy-succeeded-delete-failed message that read like total failure, and an `unshareTier` that would have orphaned an `eventsCache` the poll wrote after the tier left. **The ship-check earned its keep again:** `APP_VERSION` moved to 1.29.0 while the banner above it still said 1.28.0 — §8g's exact complaint, caught mechanically rather than by me. |
 | 2026-07-27 (late) | Opus 5 · **Briareus** (13th) | **THE HOLE IN THE RULES, AND THE FOURTH ROLE.** Jake opened by saying he could not tell me the project's status and to check the handoff against the code rather than trust it. Checking found the good news first — the repo WAS current, ship-check green — and then the thing eight sections of post-mortem had buried: **the `{subcollection}` catch-all unioned with `members`, so any editor could rewrite the member list.** Found by questioning one assumption in a file everyone had already read four times. **Jake found the second half from the other direction**, without reading a line of it: he wanted to share his school board with a colleague who could "check something off they helped with, and then get out," and was right that `editor` was far too much — it also carried `gcalCalendarId` and `mirrorCalendarId`. Rules **1.2.1**: collections enumerated, `helper` added, and — his amendment — a helper may delete **what a helper made**, which cost nothing because every creator in store.js already stamps `createdBy`. **`createdBy` had to become immutable in the same breath**, or the exception was a bypass: update-then-delete would have undone it. App side shipped to match, clause for clause, so the ✕ is *absent* rather than failing. Also D141/D142/D143 on the task form, and a blank-date bug found while looking at them: `form.reset()` restores declared defaults and `#task-date` declares none. **Jake published 1.2.0 and 1.2.1 without running the regression tests I wrote for him** — no harm done, verified after the fact by tracing every `restoreDoc` call site, but the lesson is that a test list arriving at 7pm after a bad day is a test list that does not get run. Put the two-minute version first next time. |
 | 2026-07-25 | Opus 5 · **Wunderpus** (11th) | The 2.0 design + setup kit. No app code, on purpose. Named for *Wunderpus photogenicus*, catalogued one animal at a time by its permanent unique pattern. |
 | 2026-07-26 | — (Jake solo) | Ran SETUP-2.0 end to end. `fantasktic-octodo`, repo, rules published, **smoke test green including denial**. Nico authenticated successfully. |
@@ -378,6 +470,12 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST DEPLOY, FIRST FAILURE.** Nico's sign-in died on permission-denied. Cause was mine: rules 1.1.0's collection-group clause matched the document ID, which cannot secure a query. **The clause carried a paragraph of confident reasoning for why it was safe, and that reasoning was about the wrong operation** — the surest sign a comment needs checking is that it argues rather than states. Fixed in 1.1.1 (match the field, filter on the field). Two things fixed alongside that were not the bug but made it expensive: the E17 screen blamed the network for a refusal that retrying can never fix, and the console said "bootstrap failed" without naming which of four steps. **Also made the failing query non-fatal — it was an optional lookup that could strand every new user, which is not optional.** Filled in SETUP-2.0's Part 0 and Part 9 blanks, which Jake caught: the real values were in the completion block at the top, so the document disagreed with itself and read as unfinished work. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 4 — houses and keys.** Jake stopped the deploy, said the permission description was more technical than he could follow, and re-described the target audiences himself. **He was right to stop, and the re-description contained a correction I had got wrong:** E25 had Jake owning Katie's board, which made her a guest in her own practice. Reversed — she owns hers, he owns Nico's, same mechanism opposite directions. He then improved on it, inventing the dependent workspace and the minor flag unprompted. **Two bugs came out of walking HIS description through MY rules rather than re-reading them:** Nico could have left his own board through a door marked "leave" (E33), and Nico's first sign-in would have built him a second board his parents never held (the adoption path). Neither was findable by reading the file; both were obvious the moment a real person's Tuesday was traced through it. **Lesson worth keeping: when the human re-describes the problem in their own words, walk the code through THEIR version, not yours.** Also declined to hotfix a latent 1.x tab-selector bug — no symptom, so E27 doesn't fire; a dual-fix window that covers every shared imperfection stops being paid. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th) | **Named for *Amphioctopus marginatus*, the coconut octopus — the only one that carries its shelter with it, disassembled, and rebuilds it somewhere else, never exposed in between.** That is §11 and §15 exactly. The other half: *marginatus* means "bordered," and E1 is the whole design — the boundary is a path, not a field. **Built items 1→3.** Jake's answers from the day became E23–E31; the two biggest are E24 (2.0.0 = the board switcher, his own definition, D67's shape) and E30 (store.js absorbs the workspace so 7,100 lines of app.js + queue.js cross unchanged). **Found the doubled 1.x stylesheet** while reading it to port it, measured the blast radius instead of assuming it, and explicitly ruled it OUT as an explanation for Katie's phone — the finding that would have been most tempting to over-claim. Caught the manifest's absolute `id` by running E4a's sweep rather than trusting that a byte-identical carry is a safe carry. **Process note for successors: the 1.x repo did not arrive in the first upload and I said so instead of inferring the missing files** — three of the four documents I needed were in hand, and the fourth was one sentence away. |
+
+---
+
+**Argonauta (14th)** — *Argonauta argo*, the paper nautilus. Two things about it are item 5. Her shell is not part of her: it is secreted by two specialised arms and **held**, and she can let go of it — which is the ownership question in a shared tier exactly, where the documents sit in a house somebody holds the deed to and everyone else holds a key. And argonauts **raft in chains**, individuals gripping one another's shells and drifting as one unit, each still its own animal with its own shell. Briareus took *many arms, one animal*; this is the other half, several animals holding on.
+
+*Argonauta, 2026-07-28.* 🐙
 
 ---
 
