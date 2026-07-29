@@ -1,11 +1,42 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.23.0 — E41: ONBOARDING STATE. Workspace documents now carry a
-// nested onboardingState object tracking firstVisit, completedTours, and
-// dismissedHints. This is the foundation for the new in-app tutorial system:
-// splash screens, step-by-step tours, contextual popovers, and expandable
-// help panels. Three new exports (markTourCompleted, dismissHint, markFirstVisitDone)
-// sync state back to Firestore.
+// Version 0.23.1 — E41 REPAIR. 0.23.0 shipped four defects, two of them in
+// code that had nothing to do with onboarding. Fixed here:
+//
+//   1. saveConfig() WAS DECAPITATED. 0.23.0's edit landed between its first
+//      line and the rest of its body, so the E14 mirror of
+//      pollIntervalMinutes onto the WORKSPACE DOCUMENT silently disappeared.
+//      That is the value the Cloud Run claim query sorts on, so the hourly
+//      calendar poll stopped following the setting the moment 0.23.0 shipped.
+//      Item 7 was closed on 2026-07-27; this reopened it without saying so.
+//   2. THAT ORPHANED BODY LANDED INSIDE markFirstVisitDone(), where it
+//      referenced an undeclared `data` — a ReferenceError on every Skip.
+//   3. STORE_VERSION still read "0.22.0" while this banner read 0.23.0.
+//      The badge is how Jake knows what he is running; a banner that moves
+//      without the constant is worse than no bump at all, because it makes
+//      the badge lie confidently.
+//   4. ONBOARDING STATE WAS ON THE WRONG DOCUMENT. It was written to the
+//      workspace, and firestore.rules 1.2.1 gates workspace-document update
+//      behind canAdmin() — OWNER ONLY. So a helper, an editor, a viewer, and
+//      Nico on his own dependent board all got permission-denied, which made
+//      their welcome splash undismissable on every single load. Worse, the
+//      writes used dot-path keys inside setDoc({merge:true}), and dot paths
+//      are only honoured by updateDoc — setDoc treats them as LITERAL field
+//      names, so even an owner never actually cleared the flag.
+//
+// Onboarding belongs to the PERSON, not the board — you do not re-learn the
+// app because you opened a second workspace. It now lives on users/{email},
+// following E7's tierRanks pattern exactly: a module-level cache hydrated
+// from the profile read that sign-in ALREADY performs, mutated in memory,
+// written back with nested objects rather than dot paths. No new read path,
+// no new subscription, no new rules clause — users/{email} is a document
+// this user is already allowed to write.
+//
+// It also HONOURS the field E16/§10.2 already put there for this exact job:
+// `onboardingDone` gates the splash. 0.23.0 invented a parallel mechanism
+// and ignored the one that was seeded and commented for it.
+//
+// (prev) Version 0.23.0 — E41: onboarding state. Superseded above.
 //
 // (prev) Version 0.22.0 — A STAGE NOW RECORDS WHO MADE IT, NOT JUST WHO FINISHED
 // IT. Jake: "Each person should get credit for what each person checks off,
@@ -242,7 +273,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.22.0";
+export const STORE_VERSION = "0.23.1";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -262,6 +293,17 @@ let HOME_WS = null;
  *  The ONLY place a user's opinion about tier order lives. Kept live by
  *  subscribeMyProfile so a change on one device reorders the other. */
 let TIER_RANKS = {};
+
+/** E41 — this user's onboarding progress, hydrated from users/{email} at
+ *  sign-in and written back through the three helpers at the foot of this
+ *  file. Deliberately the SAME SHAPE as TIER_RANKS (E7): a plain cache on a
+ *  document this user always owns, not a subscription, because onboarding
+ *  changes a handful of times in a lifetime and never from another device
+ *  mid-session.
+ *
+ *  `splashDone` mirrors the profile's own `onboardingDone` (E16/§10.2) —
+ *  that field was seeded for exactly this and is the authority. */
+let ONBOARDING = { splashDone: false, tours: {}, hints: {} };
 
 /** The workspace every subscription and write below is scoped to. */
 export function activeWorkspaceId() { return ACTIVE_WS; }
@@ -487,6 +529,7 @@ function resetMergeState() {
   MERGE = []; _activeMembers = new Set();
   _shared.clear(); _wsCache.clear();
   TIER_RANKS = {};
+  ONBOARDING = { splashDone: false, tours: {}, hints: {} };   // E41
   for (const m of Object.values(_where)) m.clear();
 }
 
@@ -558,6 +601,15 @@ async function resolveWorkspace(user) {
   if (usnap.exists()) {
     HOME_WS = usnap.data().homeWorkspaceId || null;
     TIER_RANKS = usnap.data().tierRanks || {};
+    // E41 — free ride on a read that was already happening. `onboardingDone`
+    // is E16/§10.2's own field and outranks the newer sub-object: anyone who
+    // finished onboarding under the old flag is not asked to do it again.
+    const ob = usnap.data().onboarding || {};
+    ONBOARDING = {
+      splashDone: usnap.data().onboardingDone === true || ob.splashDone === true,
+      tours: ob.tours || {},
+      hints: ob.hints || {}
+    };
   }
 
   // 1. Where they were last time (the switcher's memory).
@@ -660,16 +712,13 @@ async function createPersonalWorkspace(user, uref, userExists) {
     createdBy: ME,
     color: pickWorkspaceColor(ME),
     nextPollAt: 0,                  // E14 — 0 = never polled; the first run claims it
-    pollIntervalMinutes: 60,        // E14 — AUTHORITATIVE as of item 7: the claim
+    pollIntervalMinutes: 60         // E14 — AUTHORITATIVE as of item 7: the claim
                                     // query reads it, so it has to live here.
                                     // saveConfig mirrors the UI's value onto it.
-    // E41 — onboarding state, per-workspace. Tracks first visit, completed tours,
-    // dismissed hints. One boolean here; the rest are maps. Persists across sessions.
-    onboardingState: {
-      firstVisit: true,
-      completedTours: {},           // tourId -> true
-      dismissedHints: {}            // hintId -> true
-    }
+    // E41 NOTE: onboarding state does NOT live here, and 0.23.0's attempt to
+    // put it here is why it never worked. Workspace-document update is
+    // canAdmin() — owner only — so every helper, editor, viewer and dependent
+    // was refused. It lives on users/{email} instead; see ONBOARDING above.
   });
 
   await setDoc(doc(db, "workspaces", ref.id, "members", ME), {
@@ -2032,26 +2081,59 @@ export async function saveConfig(data) {
   // field. The settings form still edits settings/config, so the value is
   // written to both rather than left to drift: a UI that edits a field the
   // engine never reads is a setting that silently does nothing.
-}
-
-/** E41 — mark a tour as completed in this workspace. */
-export async function markTourCompleted(tourId) {
-  const update = { [`onboardingState.completedTours.${tourId}`]: true };
-  await setDoc(wsRef(), update, { merge: true });
-}
-
-/** E41 — dismiss a hint in this workspace (never show again). */
-export async function dismissHint(hintId) {
-  const update = { [`onboardingState.dismissedHints.${hintId}`]: true };
-  await setDoc(wsRef(), update, { merge: true });
-}
-
-/** E41 — mark first visit as done (splash screen won't show again). */
-export async function markFirstVisitDone() {
-  await setDoc(wsRef(), { "onboardingState.firstVisit": false }, { merge: true });
+  //
+  // ⚠️ 0.23.0 LOST THESE SIX LINES and nothing said so. The setting kept
+  // saving, the form kept looking right, and the hourly poll quietly stopped
+  // following it. If you are editing near here, the test is item 7's: change
+  // the interval, then confirm the WORKSPACE document changed too.
   const mins = Number(data?.pollIntervalMinutes);
   if (mins > 0) {
     try { await updateDoc(wsRef(), { pollIntervalMinutes: mins }); }
     catch (err) { console.warn("[store] could not update the workspace poll interval (a viewer cannot):", err); }
   }
+}
+
+// ---------- E41: onboarding progress (users/{email}) ----------
+// Three writers, one shape. Each mutates the in-memory cache FIRST so the UI
+// can act on it synchronously, then persists. A failed write is logged and
+// swallowed: being asked to dismiss a tooltip twice is a nuisance, and a
+// thrown promise inside a click handler is a bug report.
+//
+// ⚠️ NESTED OBJECTS, NEVER DOT PATHS. setDoc({merge:true}) treats "a.b" as a
+// field literally named "a.b"; only updateDoc walks the path. 0.23.0 used dot
+// paths with setDoc, which is why the splash never stopped appearing even for
+// the one person whose write the rules allowed.
+
+/** Read-only view of this user's onboarding progress. */
+export function onboardingState() {
+  return { splashDone: ONBOARDING.splashDone, tours: { ...ONBOARDING.tours }, hints: { ...ONBOARDING.hints } };
+}
+
+async function writeOnboarding(patch) {
+  if (!ME) return;
+  try { await setDoc(doc(db, "users", ME), patch, { merge: true }); }
+  catch (err) { console.warn("[store] could not save onboarding progress:", err); }
+}
+
+/** A tour ran to its last step. */
+export async function markTourCompleted(tourId) {
+  if (!tourId || ONBOARDING.tours[tourId]) return;
+  ONBOARDING.tours[tourId] = true;
+  await writeOnboarding({ onboarding: { tours: { [tourId]: true } } });
+}
+
+/** A contextual hint was dismissed. Never shown again, on any board. */
+export async function dismissHint(hintId) {
+  if (!hintId || ONBOARDING.hints[hintId]) return;
+  ONBOARDING.hints[hintId] = true;
+  await writeOnboarding({ onboarding: { hints: { [hintId]: true } } });
+}
+
+/** The welcome splash was answered, either way. Writes BOTH the new flag and
+ *  E16's `onboardingDone`, because that field is the one the design document
+ *  names and a future reader will look for it. */
+export async function markFirstVisitDone() {
+  if (ONBOARDING.splashDone) return;
+  ONBOARDING.splashDone = true;
+  await writeOnboarding({ onboardingDone: true, onboarding: { splashDone: true } });
 }
