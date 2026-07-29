@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.17.0** | Last updated: 2026-07-28 | **App: 1.31.0 · store 0.22.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.54.0 · html 0.48.2 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed and **RUNNING.** **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
+**Document version: 0.18.0** | Last updated: 2026-07-29 | **App: 1.32.0 · store 0.23.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.0 · html 0.49.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed. **E41 ONBOARDING SYSTEM COMPLETE** (welcome splash, step-by-step tours, contextual popovers, help panels). All state persists to workspace doc. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
 
 > **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
@@ -50,6 +50,55 @@ He set the order himself on 2026-07-27: **rules → shared tiers → import**, o
 **Nico's board is still named `nico.m.wilson`** (created before the E38 rename fix). Settings → People → Rename fixes it once the web files are current.
 
 **Minor, unhurried:** `POLL_SECRET` and the service URL appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Two-minute env-var edit plus a Scheduler header update. Not urgent.
+
+### E41 — ONBOARDING SYSTEM (new 2026-07-29)
+
+**COMPLETE AND DEPLOYED.** A four-layer onboarding system is now live in the app:
+
+**Layer 1 — Welcome splash.** Shows once per workspace on first visit (tracked in `onboardingState.firstVisit`). Offers "Let's go" (start a tour) or "Skip" (tinker mode). Housed in `#welcome-splash` (index.html 0.49.0).
+
+**Layer 2 — Step-by-step tours** (replayable from Settings). Five tours defined in app.js, each with 1–4 steps:
+- `firstTask` — create and due-date a task (4 steps)
+- `firstTier` — add and rank tiers (3 steps)
+- `escalation` — the "nag this thing" feature (1 step)
+- `sharing` — one board vs. one tier (1 step)
+
+Each step highlights a UI element, shows an instruction popover, and provides next/prev navigation. Completion tracked in `onboardingState.completedTours[tourId]`.
+
+**Layer 3 — Contextual popovers** (dismiss once, never again). Appear on first interaction at key UI points:
+- "Start here: add a tier" (`#tier-add` first click)
+- "Create a task here" (`#jump-add` first click)
+- "Due dates drive order" (`#task-date` first focus)
+- "This is the power move" (`#task-escalate` first click)
+
+Dismissal tracked in `onboardingState.dismissedHints[hintId]`. All hints respect the "dismiss once" contract; no popup survives a close.
+
+**Layer 4 — Expandable help panels.** Inline collapsible sections in Settings > Tiers and Settings > Pipeline for progressive disclosure:
+- "What are tiers?" (expanded/collapsed by user click)
+- "Calendar tiers" (settings > tiers)
+- "What are project pipelines?" (settings > pipeline)
+
+Panels use `.help-panel` class (css 0.55.0), toggled with `.help-panel-toggle` clicks, no persistence (toggles on-page only, not stored).
+
+**State persistence:**
+- All state lives in workspace doc field `onboardingState: { firstVisit: bool, completedTours: {}, dismissedHints: {} }`
+- Synced via three new store.js 0.23.0 exports: `markTourCompleted(tourId)`, `dismissHint(hintId)`, `markFirstVisitDone()`
+- Survives tab close, board switches, re-login — one workspace, one onboarding state
+
+**Architecture notes:**
+- Markup skeleton lives in index.html; app.js builds and wires the UI
+- Splash triggers on subscribeWorkspaceDoc callback (app.js line ~1645)
+- Popovers wired at specific event listeners (`#tier-add` click, `#task-date` focus, etc.)
+- Help panels wired in `openSettings()` when modal opens
+- Tours callable from Settings (future: add "Replay tutorial" link)
+- Zero cost if user skips: no polling, no subscriptions, no rendering until triggered
+
+**Maintenance checklist** (next instance updates):
+- If GUIDE.md changes its section on tiers/projects/escalation, review and update corresponding tour text in `TOURS` object (app.js ~line 948–1012)
+- If UI elements move (e.g., `#tier-add` relocates), update tour/popover selectors in `TOURS` and `POPOVER_HINTS`
+- If new tier/project features added, consider new tour steps or help panels (extend TOURS or add .help-panel divs in index.html)
+- **Never change tour step order or IDs without migrating existing `completedTours` records** (breaking change for active users; do it only on major version bump)
+- Help panels (Layer 4) have no persistence, so text can be edited freely without state concern
 
 ---
 
