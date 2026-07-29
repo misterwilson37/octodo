@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.16.0** | Last updated: 2026-07-28 | **App: 1.31.0 · store 0.22.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.54.0 · html 0.48.2 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed and **RUNNING.** **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
+**Document version: 0.17.0** | Last updated: 2026-07-28 | **App: 1.31.0 · store 0.22.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.54.0 · html 0.48.2 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed and **RUNNING.** **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
 
 > **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
@@ -225,6 +225,22 @@ Same shape as §8c, and worth recording because the ratio held: **the feature wo
 2. A share that copied successfully and then failed to delete the originals surfaced a bare `permission-denied` — which reads like the whole thing failed, when in fact nothing was lost. Now says so, and names unshare as the way out. (This is the helper-on-a-source-board case: the rules let a helper create and not delete.)
 3. `unshareTier` counted four collections before deleting the shared workspace document and **did not count `eventsCache`** — which the hourly poll can write *after* the tier has left. Deleting a workspace does not cascade, so that would have orphaned documents at a path nothing can ever reach again. Swept rather than counted, because it is a cache.
 
+### Shared projects with per-stage assignment — Jake's spec, 2026-07-28, NOT built
+
+His description, which is a good one: *"stage 1 is mine, stage 2 is Tomlinson's, stage 3 is mine — so if I finish stage 1, the next thing I see is stage 3, not that I can't sign off on Tomlinson's, but it's not the next thing on MY list."*
+
+That decomposes cleanly:
+
+- A stage gains an `assignedTo` (an email, or blank for "anybody"). A stage is an array element in a project document, so this is a schema addition with **no rules implication** — rules cannot see inside arrays.
+- The queue surfaces *your* stages first and still shows other people's, demoted rather than hidden, so signing off on somebody else's remains one click. **That is a queue.js change,** which is the right place: it has never known Firestore exists.
+- Provenance is already there as of store 0.22.0 — a stage records who created it and who completed it, so "assigned to Leah, finished by Jake" is expressible.
+
+**⚠️ ONE PART OF THE SPEC DOES NOT WORK, AND IT IS THE PART THAT SOUNDS EASIEST.** Jake added: *"regardless of whether or not we have a shared tier (which would mean the other user would have to assign their own tier to the project)."*
+
+There is no such thing. **A project lives in a tier's workspace — the tier is not a label on the project, it is the project's address.** If the other person cannot see the tier they cannot read the project document at all, and there is no second tier to assign because a document has one path (E1). So per-stage assignment is a refinement **on top of** shared tiers, not an alternative to them. That is arguably the better answer — one sharing mechanism instead of two — but it means this feature inherits everything item 5 is still waiting to have verified.
+
+**Build it after TIER-4…10 pass, not before.**
+
 ### What is deliberately NOT built
 
 - **The activity feed and kudos on a shared tier.** That is item 6, and it is where E9/E10/E11 land. Until then a completion by the other person appears live and silently — correct per E11 (no confetti for someone else's win), but with no catch-up bar to notice it.
@@ -298,6 +314,29 @@ Kept as history because each one records a failure mode, not a task.
 - **The rank collision.** *"it came in as 4/4. I changed it to 3 without changing my 3, and it just… stayed there?"* A typed rank worked for four years because **one person authored every number**; item 5 ended that. app 1.30.0: ▲▼, rank assigned **1..N from position on save**, which answers *"it should kick back an error"* by making the state unconstructible. Opening ⚙️ ▸ Tiers and saving **normalises collisions already in the data**.
 - **KEYS-1 — one key, no switcher.** ✅ Confirmed by Jake's colleague, who holds her own board plus a shared tier and correctly sees **no switcher chip**: a shared tier is not a board, so it does not count toward the one that would summon the menu.
 - **The whole IA…JA lettering scheme.** `IS`, `IT` and `IN` are English words; the list ran past IZ into JA; and item 5's block, inserted where item 5 was *discussed*, made the file read IS…JA **then IQ, IR** — doubling back to two already-passed tests. Jake had to hand-decode the mapping before he could report anything. **Do not re-letter it.**
+
+### 5b-ii. Onboarding — started 2026-07-28, NOT finished
+
+**The problem, in Jake's words:** he handed the link to two people in one day. *"The first had zero context… He didn't know what it was or where to start. That's a problem for any new user, as I'm not always around. The second person has ready access to me multiple hours a day, but she does not necessarily want to bother me all the time."*
+
+Two different failures needing two different fixes:
+
+| Who | Needs | Where |
+|---|---|---|
+| **Cold link, no context** | *what is this, should I care* — **before** signing in | the sign-in screen |
+| **Has Jake, won't interrupt** | *how do I do X* — at the moment of confusion | in the app, in context |
+
+**Done:** `GUIDE.md` in the repo root. The full explanation — tiers, escalation, the queue's refusal to be reordered, projects and stages, the clock, both sizes of sharing, and a "things that surprise people" section. Written deliberately as **source material**, not just a document: every later surface draws its wording from it.
+
+**Not done, and this is the next instance's job:**
+
+1. **The sign-in screen says nothing.** Somebody who arrives cold sees a Google button and no reason to press it. Two or three sentences and a link to `GUIDE.md` would have saved Jake's first colleague entirely.
+2. **`.info-dot` already exists in the stylesheet and is barely used.** It is the obvious carrier for contextual help — one beside *escalation*, *tier kind*, *hurrah*, *stretch until done*, *workload*, *the four roles*. The chrome is built; the content is now written; somebody has to connect them.
+3. **First-run.** A brand-new board arrives with three tiers and no explanation of what a tier IS. The highest-value single sentence in the app is whatever greets someone on an empty board.
+
+⚠️ **DO NOT PUT THE GUIDE'S TEXT IN THE CODE.** Two copies of an explanation is D103 with prose instead of numbers, and the copy in the code is the one that will be wrong. Info-dots get a sentence and a link; `GUIDE.md` stays the one authority.
+
+⚠️ **THE GUIDE WILL GO STALE AND NOTHING WILL DETECT IT.** No ship-check can tell that a paragraph now describes a control that was replaced — the tier-rank paragraph already had to be written against ▲▼ rather than the number box that had existed for four years. **Whoever changes a control changes the guide in the same drop.**
 
 ### 5c. Claude's backlog (no input needed)
 
