@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.47.1 (banner and data-html-version move together, always)
-     0.47.1 — Z: repin app.js to 1.29.1. Markup unchanged.
+     Version 0.48.0 (banner and data-html-version move together, always)
+     0.48.0 — repin app.js 1.30.0 / css 0.54.0. Markup still unchanged:
+     the tier reorder arrows are built by app.js, like the rows they sit in.
      0.47.0 — item 5 (shared tiers). NO MARKUP CHANGE: the share strip is
      built by app.js under whichever tier row asked for it, because tier
      rows are themselves JS-built and a single markup panel would have to be
@@ -300,9 +301,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.53.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.54.0">
 </head>
-<body data-html-version="0.47.1">
+<body data-html-version="0.48.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1120,6 +1121,6 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.29.1"></script>
+  <script type="module" src="app.js?v=1.30.0"></script>
 </body>
 </html>
