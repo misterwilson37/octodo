@@ -1,6 +1,21 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.30.1 — EDITING A PROJECT'S STAGES WAS ERASING WHO COMPLETED
+// Version 1.31.0 — A STAGE RECORDS WHO ADDED IT. Jake: "Each person should
+// get credit for what each person checks off, and it should track both when
+// the task/piece of the project was created, as well as when it was
+// completed (alongside who created that piece). Every time."
+//
+// The stage editor is the ONLY place a stage can be added to a project that
+// already exists, and it is the only place that can tell a NEW stage from an
+// old one — `row.dataset.orig` is -1 for a row with no original behind it.
+// store.js cannot make that distinction and must not guess: a legacy stage
+// also has no createdBy, and stamping it with whoever edits next would
+// invent evidence rather than record it (see store.js 0.22.0).
+//
+// Existing rows need nothing: 1.30.1 already carries the whole stage
+// forward, so a createdBy written today survives every later edit. Those two
+// changes are the same fix seen from both ends.
+// (prev) Version 1.30.1 — EDITING A PROJECT'S STAGES WAS ERASING WHO COMPLETED
 // THEM. Found by Jake from console data, and his read of it was reasonable
 // and wrong in an instructive way: Tomlinson's stage completions carried
 // completedBy and his did not, so it looked like the stamp depended on WHO.
@@ -895,7 +910,7 @@ import {
   saveWorkspace, forgetWorkspaceCache,                             // E38 rename
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
   mergedWorkspaceIds                                               // item 5
-} from "./store.js?v=0.21.2";
+} from "./store.js?v=0.22.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -906,7 +921,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.30.1";
+export const APP_VERSION = "1.31.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -3450,7 +3465,12 @@ function stagesSave() {
     // D62 rev: collect into the staged copy — nothing writes until
     // "Create next year's run"; checkboxes/dues stay reset by design.
     if (S.dupTarget) {
+      // D59 — next year's run is a NEW project, so every stage in it is new
+      // and gets today's provenance. Copying last year's would credit the
+      // wrong person for work nobody has done yet.
       S.dupTarget.stages = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row => ({
+        createdBy: currentEmail(),
+        createdAt: Date.now(),
         name: row.querySelector(".st-name").value.trim() || "Untitled stage",
         direction: row.querySelector(".st-dir").value,
         anchor: row.querySelector(".st-anchor").value,
@@ -3477,7 +3497,13 @@ function stagesSave() {
     // and so deleted completedBy (E9) from every finished stage on every
     // edit, leaving it ticked with nobody's name on it. A keep-list is a
     // list somebody has to remember to extend; a drop-list is not.
-    const carried = (oi >= 0 && orig[oi]) ? { ...orig[oi] } : {};
+    const isNewStage = !(oi >= 0 && orig[oi]);
+    // A row with no original is being added right now, so its provenance is
+    // knowable and gets written. An existing row keeps whatever it has,
+    // including nothing — see the banner.
+    const carried = isNewStage
+      ? { createdBy: currentEmail(), createdAt: Date.now() }
+      : { ...orig[oi] };
     // D109 — the editor OWNS hurrah (button state, not carried), so it must
     // NOT survive the spread or turning the climax off would not stick.
     delete carried.hurrah;
