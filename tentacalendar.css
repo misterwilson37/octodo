@@ -1,8 +1,14 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.53.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.54.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
-   0.53.0 (item 5, shared tiers): .t-share is the handshake on every tier
+   0.54.0 (tier order by position): .t-move / .t-pos replace the .t-rank
+   number box. Reuses .st-move's exact geometry because it IS that control
+   — stacked ▲▼ moving a row in a list — and D104 says one grammar. .t-rank
+   is gone from the stylesheet as well as the markup; a rule for an element
+   that no longer exists is the kind of thing a later reader treats as a
+   clue.
+   (prev) 0.53.0 (item 5, shared tiers): .t-share is the handshake on every tier
    row and .tier-share is the strip that opens under it. Deliberately built
    from the SAME vocabulary as .person-row / .person-tag — this is the same
    idea (who holds a key) at tier size rather than board size, and D104 says
@@ -239,7 +245,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.53.0";
+  --tc-version: "0.54.0";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -670,7 +676,16 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
   margin-bottom: .4rem;
   flex-wrap: wrap;
 }
-.tier-row .t-rank { width: 3.2rem; }
+.tier-row .t-move { display: flex; flex-direction: column; }
+.tier-row .t-move button {
+  background: none; border: none; color: var(--ink-dim);
+  cursor: pointer; line-height: .8; font-size: .65rem; padding: 0 .2rem;
+}
+.tier-row .t-move button:hover { color: var(--ink); }
+.tier-row .t-pos {
+  width: 1.4rem; text-align: right; font-variant-numeric: tabular-nums;
+  color: var(--ink-dim); font-size: .85rem;
+}
 .tier-row .t-name { flex: 1; min-width: 7rem; }
 .tier-row .t-color { width: 2.6rem; padding: 0; height: 2.1rem; }
 .tier-row .t-kind { width: 6.5rem; }
