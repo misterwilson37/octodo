@@ -1,6 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.31.0 — A STAGE RECORDS WHO ADDED IT. Jake: "Each person should
+// Version 1.32.0 — E41: ONBOARDING. Welcome splash screen (shows once per
+// workspace), step-by-step guided tours (replayable from settings), contextual
+// popovers (first-time hints at key UI points), and expandable help panels
+// (inline progressive disclosure). All state persists to the workspace document
+// via new store.js exports (markTourCompleted, dismissHint, markFirstVisitDone).
+// Tours are defined as arrays of steps; each step targets an element, highlights
+// it, and shows a popover with instructions and navigation. Popovers follow the
+// same dimiss-once pattern (stored in onboardingState.dismissedHints). Skeleton
+// markup lives in index.html; app.js builds the UI and manages state.
+//
+// (prev) Version 1.31.0 — A STAGE RECORDS WHO ADDED IT. Jake: "Each person should
 // get credit for what each person checks off, and it should track both when
 // the task/piece of the project was created, as well as when it was
 // completed (alongside who created that piece). Every time."
@@ -909,8 +919,9 @@ import {
   addMember, removeMember, setMemberRole, createDependentWorkspace, // E5/E32
   saveWorkspace, forgetWorkspaceCache,                             // E38 rename
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
-  mergedWorkspaceIds                                               // item 5
-} from "./store.js?v=0.22.0";
+  mergedWorkspaceIds,                                              // item 5
+  markTourCompleted, dismissHint, markFirstVisitDone              // E41 — onboarding
+} from "./store.js?v=0.23.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -921,9 +932,263 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.31.0";
+export const APP_VERSION = "1.32.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
+
+// ============================================================
+// E41 — ONBOARDING SYSTEM (tours, popovers, help panels)
+// ============================================================
+
+/** Tour definitions: each tour is an array of steps. A step has:
+ *  - selector: CSS selector of the element to highlight
+ *  - title: step title
+ *  - text: step instruction text
+ *  - position: where the popover should appear ("top", "bottom", "left", "right")
+ */
+const TOURS = {
+  welcome: null, // Handled specially by splash screen
+  firstTask: [
+    {
+      selector: "#jump-add",
+      title: "Create a task",
+      text: "Click here to add your first task. You can create as many as you need.",
+      position: "bottom"
+    },
+    {
+      selector: "#task-title",
+      title: "Give it a name",
+      text: "Write a short title. 'Bake a cake' is better than 'TODO'.",
+      position: "bottom"
+    },
+    {
+      selector: "#task-date",
+      title: "Set when it's due",
+      text: "When do you need this done? The app will use this to order your day.",
+      position: "bottom"
+    },
+    {
+      selector: "#task-tier",
+      title: "Pick a tier",
+      text: "Which part of your life? Home, Work, or Personal. You can change this later.",
+      position: "bottom"
+    }
+  ],
+  firstTier: [
+    {
+      selector: "#settings-btn",
+      title: "Open settings",
+      text: "Click the gear icon to customize your board.",
+      position: "bottom"
+    },
+    {
+      selector: "#tier-add",
+      title: "Create a tier",
+      text: "Click here to add a new tier — maybe 'Health', 'Writing', or whatever matches your life.",
+      position: "left"
+    },
+    {
+      selector: "[data-pane='tiers']",
+      title: "Manage your tiers",
+      text: "Rank them with the arrows. #1 sorts first in the queue when nothing else decides the order.",
+      position: "left"
+    }
+  ],
+  escalation: [
+    {
+      selector: "#task-escalate",
+      title: "Make it nag",
+      text: "Set this to 'hourly' or 'daily' and the task gets redder and climbs as time passes. Good for things you're avoiding.",
+      position: "bottom"
+    }
+  ],
+  sharing: [
+    {
+      selector: "#people-add",
+      title: "Share your board",
+      text: "A shared board is ONE set of lists, not a copy. Everyone seeing it is looking at the same thing.",
+      position: "left"
+    }
+  ]
+};
+
+/** Contextual popover hints: shown once at key UI points on first touch.
+ *  hintId -> { selector, text }
+ */
+const POPOVER_HINTS = {
+  tierFirst: {
+    selector: "#tier-add",
+    text: "👉 Start here: add a tier like 'Home' or 'Work' to organize your life."
+  },
+  taskFirst: {
+    selector: "#jump-add",
+    text: "👉 Then create a task. Click here."
+  },
+  dueDate: {
+    selector: "#task-date",
+    text: "Due dates drive the queue. The app will sort today's tasks by when they're due."
+  },
+  escalate: {
+    selector: "#task-escalate",
+    text: "Set this to 'daily' or 'hourly' and the task climbs and glows as time passes. It's the power move."
+  },
+  tierRank: {
+    selector: ".t-move",
+    text: "Rank 1 sorts first when nothing else decides the order. Use the ▲▼ to move tiers."
+  }
+};
+
+/** Current tour state: { tourId, stepIdx, element, popover } or null */
+let currentTour = null;
+
+/** Show the welcome splash screen (E41). */
+function showWelcomeSplash() {
+  const splash = $("#welcome-splash");
+  if (!splash || !S.wsDoc?.onboardingState?.firstVisit) return;
+  splash.hidden = false;
+  
+  $("#splash-skip").addEventListener("click", () => {
+    splash.hidden = true;
+    markFirstVisitDone();
+  });
+  $("#splash-tour").addEventListener("click", () => {
+    splash.hidden = true;
+    markFirstVisitDone();
+    startTour("firstTask");
+  });
+}
+
+/** Start a tour by ID. */
+function startTour(tourId) {
+  if (!TOURS[tourId]) return;
+  if (currentTour) endTour();
+  
+  currentTour = { tourId, stepIdx: 0, element: null, popover: null };
+  showTourStep();
+}
+
+/** Show the current tour step. */
+function showTourStep() {
+  if (!currentTour) return;
+  
+  const tour = TOURS[currentTour.tourId];
+  if (!tour || currentTour.stepIdx >= tour.length) {
+    endTour();
+    return;
+  }
+  
+  const step = tour[currentTour.stepIdx];
+  const targetEl = $(step.selector);
+  
+  // Show backdrop
+  const backdrop = $("#tour-backdrop");
+  if (backdrop) {
+    backdrop.hidden = false;
+    backdrop.addEventListener("click", endTour);
+  }
+  
+  // Highlight target element
+  const highlight = $("#tour-highlight");
+  if (highlight && targetEl) {
+    const rect = targetEl.getBoundingClientRect();
+    highlight.style.left = (rect.left - 4) + "px";
+    highlight.style.top = (rect.top - 4) + "px";
+    highlight.style.width = (rect.width + 8) + "px";
+    highlight.style.height = (rect.height + 8) + "px";
+    highlight.hidden = false;
+  }
+  
+  // Show popover
+  const popover = $("#tour-popover");
+  if (popover) {
+    $("#tour-step-num").textContent = (currentTour.stepIdx + 1);
+    $("#tour-step-total").textContent = tour.length;
+    $("#tour-title").textContent = step.title || "Tour Step";
+    $("#tour-text").textContent = step.text || "";
+    
+    // Position popover near target
+    if (targetEl) {
+      const rect = targetEl.getBoundingClientRect();
+      const popW = 380, popH = 200;
+      let x = rect.left + rect.width / 2 - popW / 2;
+      let y = rect.top - popH - 20;
+      
+      if (y < 0) y = rect.bottom + 20;
+      if (x < 0) x = 20;
+      if (x + popW > window.innerWidth) x = window.innerWidth - popW - 20;
+      
+      popover.style.left = x + "px";
+      popover.style.top = y + "px";
+    }
+    
+    // Set button states
+    const prevBtn = $("#tour-prev");
+    const nextBtn = $("#tour-next");
+    if (prevBtn) prevBtn.hidden = (currentTour.stepIdx === 0);
+    if (nextBtn) nextBtn.textContent = (currentTour.stepIdx >= tour.length - 1) ? "Done ✓" : "Next →";
+    
+    popover.hidden = false;
+  }
+  
+  // Add event listeners
+  if ($("#tour-exit")) $("#tour-exit").onclick = endTour;
+  if ($("#tour-next")) $("#tour-next").onclick = () => {
+    currentTour.stepIdx++;
+    if (currentTour.stepIdx >= tour.length) {
+      endTour();
+      markTourCompleted(currentTour.tourId);
+    } else {
+      showTourStep();
+    }
+  };
+  if ($("#tour-prev")) $("#tour-prev").onclick = () => {
+    currentTour.stepIdx--;
+    showTourStep();
+  };
+}
+
+/** End the current tour. */
+function endTour() {
+  const backdrop = $("#tour-backdrop");
+  const highlight = $("#tour-highlight");
+  const popover = $("#tour-popover");
+  
+  if (backdrop) backdrop.hidden = true;
+  if (highlight) highlight.hidden = true;
+  if (popover) popover.hidden = true;
+  
+  currentTour = null;
+}
+
+/** Show a contextual popover hint (first-time only). */
+function showPopoverHint(hintId) {
+  // Only show if not already dismissed and onboarding state exists
+  if (!S.wsDoc?.onboardingState) return;
+  if (S.wsDoc.onboardingState.dismissedHints?.[hintId]) return;  // Already dismissed
+  
+  const hint = POPOVER_HINTS[hintId];
+  if (!hint) return;
+  
+  const targetEl = $(hint.selector);
+  if (!targetEl) return;
+  
+  const popover = $("#popover-hint");
+  if (!popover) return;
+  
+  const rect = targetEl.getBoundingClientRect();
+  popover.style.left = (rect.right + 10) + "px";
+  popover.style.top = (rect.top + rect.height / 2 - 30) + "px";
+  
+  $("#popover-hint-text").textContent = hint.text;
+  popover.hidden = false;
+  
+  $(".popover-hint-close").onclick = () => {
+    popover.hidden = true;
+    dismissHint(hintId);
+  };
+}
+
+// End E41 tour system
 
 // ---------- State ----------
 const S = {
@@ -982,7 +1247,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#jump-add").addEventListener("click", () => {                      // D78
     if (S.view !== "day") setView("day"); // the form lives in Today
     $("#task-form").scrollIntoView({ behavior: "smooth", block: "start" });
-    setTimeout(() => $("#task-title").focus({ preventScroll: true }), 350);
+    setTimeout(() => {
+      $("#task-title").focus({ preventScroll: true });
+      showPopoverHint("taskFirst");  // E41 — hint on first task creation
+      // Hints for date and escalate will fire on field focus
+    }, 350);
   });
   $("#settings-btn").addEventListener("click", openSettings);
   $("#hdr-fullscreen").addEventListener("click", toggleFullscreen);   // D108
@@ -1093,12 +1362,18 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#project-color").addEventListener("input", checkProjectColor);
   $("#project-tier").addEventListener("change", syncProjectDateRequirement);   // D126
   markClean("projectForm", projectFormSignature);   // D131 — initial empty-form baseline at boot
-  $("#tier-add").addEventListener("click", () => tierEditorRow({}, true));
+  $("#tier-add").addEventListener("click", () => { 
+    tierEditorRow({}, true); 
+    showPopoverHint("tierFirst");  // E41 — hint on first tier creation
+  });
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   wirePipelineManager();   // D124 — the project-type library controls (once)
   $("#settings-save").addEventListener("click", onSaveSettings);  $("#cfg-poll").addEventListener("input", updatePollCostHint);
   $("#task-date-today").addEventListener("click", onDateToday);       // D140
   $("#task-time-now").addEventListener("click", onTimeNow);           // D141
+  // E41 — onboarding hints for task form
+  $("#task-date")?.addEventListener("focus", () => showPopoverHint("dueDate"));
+  $("#task-escalate")?.addEventListener("click", () => showPopoverHint("escalate"));
   $("#alert-test").addEventListener("click", testAlert);              // D137 — a click is also the audio unlock
   $("#cfg-alert-notify").addEventListener("change", onNotifyToggle);  // D137 — permission must be asked from a gesture
   $("#due-save").addEventListener("click", dueSave);
@@ -1380,7 +1655,11 @@ function subscribeBoard() {
   S.members = []; S.wsDoc = null; S.config = null;
   Object.keys(docCensus).forEach(k => { docCensus[k] = 0; });
 
-  S.unsubs.push(subscribeWorkspaceDoc(w => { S.wsDoc = w; renderBoards(); }));   // E34
+  S.unsubs.push(subscribeWorkspaceDoc(w => { 
+    S.wsDoc = w; 
+    renderBoards(); 
+    if (w?.onboardingState?.firstVisit) showWelcomeSplash();  // E41 — welcome on first visit
+  }));   // E34
   S.unsubs.push(subscribeMembers(m => { S.members = m; renderPeople(); }));      // E5
   S.unsubs.push(subscribeTiers(t => { S.tiers = t; docCensus.tiers = t.length; refreshTierSelects(); renderFilters(); render(); }));
   S.unsubs.push(subscribeTasks(t => { S.tasks = t; docCensus.tasks = t.length; render(); maybeDecisionTime(); }));
@@ -6203,6 +6482,13 @@ function switchSettingsTab(tab) {
 function openSettings() {
   $("#settings-modal").hidden = false;
   switchSettingsTab("tiers");
+  // E41 — initialize help panels (collapsible sections)
+  document.querySelectorAll("#settings-modal .help-panel").forEach(panel => {
+    const toggle = panel.querySelector(".help-panel-toggle");
+    if (toggle) {
+      toggle.onclick = () => panel.classList.toggle("expanded");
+    }
+  });
   renderPeople();   // E5 — members may already be in hand
   renderCalendarRobot();   // E39
   const c = S.config || {};
