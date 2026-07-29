@@ -1,6 +1,13 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.22.0 — A STAGE NOW RECORDS WHO MADE IT, NOT JUST WHO FINISHED
+// Version 0.23.0 — E41: ONBOARDING STATE. Workspace documents now carry a
+// nested onboardingState object tracking firstVisit, completedTours, and
+// dismissedHints. This is the foundation for the new in-app tutorial system:
+// splash screens, step-by-step tours, contextual popovers, and expandable
+// help panels. Three new exports (markTourCompleted, dismissHint, markFirstVisitDone)
+// sync state back to Firestore.
+//
+// (prev) Version 0.22.0 — A STAGE NOW RECORDS WHO MADE IT, NOT JUST WHO FINISHED
 // IT. Jake: "Each person should get credit for what each person checks off,
 // and it should track both when the task/piece of the project was created,
 // as well as when it was completed (alongside who created that piece).
@@ -653,9 +660,16 @@ async function createPersonalWorkspace(user, uref, userExists) {
     createdBy: ME,
     color: pickWorkspaceColor(ME),
     nextPollAt: 0,                  // E14 — 0 = never polled; the first run claims it
-    pollIntervalMinutes: 60         // E14 — AUTHORITATIVE as of item 7: the claim
+    pollIntervalMinutes: 60,        // E14 — AUTHORITATIVE as of item 7: the claim
                                     // query reads it, so it has to live here.
                                     // saveConfig mirrors the UI's value onto it.
+    // E41 — onboarding state, per-workspace. Tracks first visit, completed tours,
+    // dismissed hints. One boolean here; the rest are maps. Persists across sessions.
+    onboardingState: {
+      firstVisit: true,
+      completedTours: {},           // tourId -> true
+      dismissedHints: {}            // hintId -> true
+    }
   });
 
   await setDoc(doc(db, "workspaces", ref.id, "members", ME), {
@@ -2018,6 +2032,23 @@ export async function saveConfig(data) {
   // field. The settings form still edits settings/config, so the value is
   // written to both rather than left to drift: a UI that edits a field the
   // engine never reads is a setting that silently does nothing.
+}
+
+/** E41 — mark a tour as completed in this workspace. */
+export async function markTourCompleted(tourId) {
+  const update = { [`onboardingState.completedTours.${tourId}`]: true };
+  await setDoc(wsRef(), update, { merge: true });
+}
+
+/** E41 — dismiss a hint in this workspace (never show again). */
+export async function dismissHint(hintId) {
+  const update = { [`onboardingState.dismissedHints.${hintId}`]: true };
+  await setDoc(wsRef(), update, { merge: true });
+}
+
+/** E41 — mark first visit as done (splash screen won't show again). */
+export async function markFirstVisitDone() {
+  await setDoc(wsRef(), { "onboardingState.firstVisit": false }, { merge: true });
   const mins = Number(data?.pollIntervalMinutes);
   if (mins > 0) {
     try { await updateDoc(wsRef(), { pollIntervalMinutes: mins }); }
