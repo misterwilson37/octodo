@@ -85,7 +85,8 @@ A *dependent* workspace is not a special code path — it is an ordinary workspa
 
 | Document | Answers |
 |---|---|
-| `HANDOFF-2.0.md` | **Start here.** What is built, what is next, what to test, and the platform landmines you need before writing a line. |
+| `GUIDE.md` | **For people who are going to USE it, not build it.** What a tier is, why the queue refuses to be reordered, how sharing works. Hand this to anyone you give the link to. |
+| `HANDOFF-2.0.md` | **Start here if you're building.** What is built, what is next, what to test, and the platform landmines you need before writing a line. |
 | `TENTACALENDAR-2.0-DESIGN.md` | Why the architecture is shaped this way. Schema, rules, sharing, cost, migration runbook. Decisions are **E-rows**. |
 | `SETUP-2.0.md` | Standing up the Firebase project, repo and DNS from a browser. Already done; kept for reproduction. |
 
