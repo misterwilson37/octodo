@@ -1,14 +1,35 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.32.0 — E41: ONBOARDING. Welcome splash screen (shows once per
-// workspace), step-by-step guided tours (replayable from settings), contextual
-// popovers (first-time hints at key UI points), and expandable help panels
-// (inline progressive disclosure). All state persists to the workspace document
-// via new store.js exports (markTourCompleted, dismissHint, markFirstVisitDone).
-// Tours are defined as arrays of steps; each step targets an element, highlights
-// it, and shows a popover with instructions and navigation. Popovers follow the
-// same dimiss-once pattern (stored in onboardingState.dismissedHints). Skeleton
-// markup lives in index.html; app.js builds the UI and manages state.
+// Version 1.32.1 — E41 REPAIR. 1.32.0 shipped the onboarding system in a
+// state where no part of it could complete. Fixed here:
+//
+//   1. FINISHING A TOUR THREW. The Next handler called endTour(), which nulls
+//      currentTour, and then read currentTour.tourId on the following line.
+//      TypeError every time, so markTourCompleted() was never reached and no
+//      tour could ever be recorded as done. Split into finishTour(): record
+//      first, tear down second.
+//   2. #task-escalate DOES NOT EXIST. The escalation tour step and its hint
+//      both pointed at it; the real ids are #task-esc-n / #task-esc-unit.
+//      The step highlighted nothing and the hint was unreachable code.
+//   3. A MISSING OR HIDDEN TARGET DREW THE BOX AT 0,0. getBoundingClientRect
+//      on a display:none element returns zeros, so any step aimed inside a
+//      closed modal pointed confidently at the top-left corner of the screen.
+//      Such a step is now skipped with a console warning that names the
+//      selector — a broken tour should be findable, not merely quiet.
+//   4. NO SCROLL. The highlight is position:fixed and read from the viewport,
+//      so a target below the fold got a highlight below the fold.
+//   5. LISTENERS ACCUMULATED. The backdrop gained a click handler on every
+//      step, and the splash buttons were bound inside a function called from
+//      a Firestore snapshot — which re-fires on every workspace change. Both
+//      are now bound exactly once, in wireOnboarding().
+//   6. THE POPOVER GUESSED ITS OWN SIZE (380x200) and could sit half off the
+//      bottom. It is measured now, and clamped to the viewport on both axes.
+//   7. STATE MOVED TO THE PERSON. See store.js 0.23.1: it was on the
+//      workspace document, which the rules let only an owner write, so the
+//      splash was undismissable for every helper, editor, viewer and
+//      dependent. It reads through onboardingState() now.
+//
+// (prev) Version 1.32.0 — E41: onboarding. Superseded above.
 //
 // (prev) Version 1.31.0 — A STAGE RECORDS WHO ADDED IT. Jake: "Each person should
 // get credit for what each person checks off, and it should track both when
@@ -920,8 +941,8 @@ import {
   saveWorkspace, forgetWorkspaceCache,                             // E38 rename
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
   mergedWorkspaceIds,                                              // item 5
-  markTourCompleted, dismissHint, markFirstVisitDone              // E41 — onboarding
-} from "./store.js?v=0.23.0";
+  onboardingState, markTourCompleted, dismissHint, markFirstVisitDone   // E41
+} from "./store.js?v=0.23.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -932,7 +953,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.32.0";
+export const APP_VERSION = "1.32.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -947,68 +968,37 @@ const DAY_MS = 86400000;
  *  - position: where the popover should appear ("top", "bottom", "left", "right")
  */
 const TOURS = {
-  welcome: null, // Handled specially by splash screen
   firstTask: [
-    {
-      selector: "#jump-add",
-      title: "Create a task",
-      text: "Click here to add your first task. You can create as many as you need.",
-      position: "bottom"
-    },
-    {
-      selector: "#task-title",
-      title: "Give it a name",
-      text: "Write a short title. 'Bake a cake' is better than 'TODO'.",
-      position: "bottom"
-    },
-    {
-      selector: "#task-date",
-      title: "Set when it's due",
-      text: "When do you need this done? The app will use this to order your day.",
-      position: "bottom"
-    },
-    {
-      selector: "#task-tier",
-      title: "Pick a tier",
-      text: "Which part of your life? Home, Work, or Personal. You can change this later.",
-      position: "bottom"
-    }
+    { selector: "#jump-add",   title: "Everything starts here",
+      text: "This button jumps you to the new-task form. You can also just scroll down to it.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#task-title", title: "Give it a name",
+      text: "A short, concrete one. \u201cBook the dentist\u201d beats \u201cdentist\u201d, because future-you has to recognise it in a list.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#task-date",  title: "And a deadline",
+      text: "This is the important one. The queue is built from deadlines \u2014 there is no drag-and-drop, so this field is how you say what matters." },
+    { selector: "#task-tier",  title: "Which part of your life?",
+      text: "Tiers colour the queue and can be hidden on days you do not want to see them. Home, Work and Personal come with the board; rename them freely." },
+    { selector: "#task-esc-n", title: "Optional, and the best thing here",
+      text: "\u201cIf ignored, nag again every \u2026\u201d. A task set to nag hourly is genuinely hard to ignore by lunchtime. Reach for this when you catch yourself thinking \u201cI\u2019ll remember.\u201d" }
   ],
   firstTier: [
-    {
-      selector: "#settings-btn",
-      title: "Open settings",
-      text: "Click the gear icon to customize your board.",
-      position: "bottom"
-    },
-    {
-      selector: "#tier-add",
-      title: "Create a tier",
-      text: "Click here to add a new tier — maybe 'Health', 'Writing', or whatever matches your life.",
-      position: "left"
-    },
-    {
-      selector: "[data-pane='tiers']",
-      title: "Manage your tiers",
-      text: "Rank them with the arrows. #1 sorts first in the queue when nothing else decides the order.",
-      position: "left"
-    }
-  ],
-  escalation: [
-    {
-      selector: "#task-escalate",
-      title: "Make it nag",
-      text: "Set this to 'hourly' or 'daily' and the task gets redder and climbs as time passes. Good for things you're avoiding.",
-      position: "bottom"
-    }
+    { selector: "#settings-btn", title: "Tiers live in Settings",
+      text: "The gear opens everything about how this board is set up." },
+    { selector: "#tier-add",     title: "Add as many as you like",
+      text: "A tier is a bucket for one part of your life \u2014 a class, a side project, the house.",
+      before: () => { openSettings(); switchSettingsTab("tiers"); } },
+    { selector: ".t-move",       title: "Order is a position, not a number",
+      text: "The arrows move a tier up and down. Rank only breaks a tie \u2014 anything with a nearer deadline still comes first, whatever tier it is in.",
+      before: () => { openSettings(); switchSettingsTab("tiers"); } }
   ],
   sharing: [
-    {
-      selector: "#people-add",
-      title: "Share your board",
-      text: "A shared board is ONE set of lists, not a copy. Everyone seeing it is looking at the same thing.",
-      position: "left"
-    }
+    { selector: "[data-tab='people']", title: "Two sizes of sharing",
+      text: "A whole BOARD is somewhere you visit \u2014 they see all of it. A single TIER merges into both your queues instead, which is usually what you actually want.",
+      before: () => { openSettings(); switchSettingsTab("people"); } },
+    { selector: "#people-add",         title: "Keys, not copies",
+      text: "A shared board is one set of lists. They tick something off and it leaves your screen within the second \u2014 there is never a second copy to fall out of sync.",
+      before: () => { openSettings(); switchSettingsTab("people"); } }
   ]
 };
 
@@ -1016,46 +1006,57 @@ const TOURS = {
  *  hintId -> { selector, text }
  */
 const POPOVER_HINTS = {
-  tierFirst: {
-    selector: "#tier-add",
-    text: "👉 Start here: add a tier like 'Home' or 'Work' to organize your life."
-  },
-  taskFirst: {
-    selector: "#jump-add",
-    text: "👉 Then create a task. Click here."
-  },
-  dueDate: {
-    selector: "#task-date",
-    text: "Due dates drive the queue. The app will sort today's tasks by when they're due."
-  },
-  escalate: {
-    selector: "#task-escalate",
-    text: "Set this to 'daily' or 'hourly' and the task climbs and glows as time passes. It's the power move."
-  },
-  tierRank: {
-    selector: ".t-move",
-    text: "Rank 1 sorts first when nothing else decides the order. Use the ▲▼ to move tiers."
-  }
+  taskFirst: { selector: "#jump-add",
+    text: "New tasks start here \u2014 or scroll down to the form." },
+  dueDate:   { selector: "#task-date",
+    text: "The queue is built from deadlines. If something ends up in the wrong place, change its date rather than looking for a way to drag it." },
+  escalate:  { selector: "#task-esc-n",
+    text: "Set a nag interval and this task climbs and reddens as it ages. It is the feature people miss and then rely on." },
+  tierFirst: { selector: "#tier-add",
+    text: "Tiers are buckets \u2014 Home, Work, a class, a project. Everything you make lives in one." },
+  tierRank:  { selector: ".t-move",
+    text: "Position is the rank. It only breaks ties: a nearer deadline always wins, whatever tier it is in." }
 };
 
 /** Current tour state: { tourId, stepIdx, element, popover } or null */
 let currentTour = null;
 
 /** Show the welcome splash screen (E41). */
+/** E41 — the welcome splash, shown once per PERSON (not per board).
+ *
+ *  ⚠️ 0.23.0/1.32.0 wired the two buttons with addEventListener INSIDE this
+ *  function and called it from a Firestore snapshot callback, which fires
+ *  again on every workspace-document change — so a rename added a second
+ *  handler, and the third rename made Skip fire markFirstVisitDone() three
+ *  times. Wired once at boot below; this function only shows and hides. */
 function showWelcomeSplash() {
   const splash = $("#welcome-splash");
-  if (!splash || !S.wsDoc?.onboardingState?.firstVisit) return;
+  if (!splash || onboardingState().splashDone) return;
   splash.hidden = false;
-  
-  $("#splash-skip").addEventListener("click", () => {
-    splash.hidden = true;
-    markFirstVisitDone();
+}
+
+function closeWelcomeSplash(thenTour) {
+  const splash = $("#welcome-splash");
+  if (splash) splash.hidden = true;
+  markFirstVisitDone();
+  if (thenTour) startTour(thenTour);
+}
+
+function wireOnboarding() {
+  $("#splash-skip")?.addEventListener("click", () => closeWelcomeSplash(null));
+  $("#splash-tour")?.addEventListener("click", () => closeWelcomeSplash("firstTask"));
+  // One backdrop listener, for the life of the page. 1.32.0 added a fresh one
+  // on every step, so a four-step tour left four copies behind.
+  $("#tour-backdrop")?.addEventListener("click", endTour);
+  $("#tour-exit")?.addEventListener("click", endTour);
+  $("#tour-next")?.addEventListener("click", tourNext);
+  $("#tour-prev")?.addEventListener("click", tourPrev);
+  $(".popover-hint-close")?.addEventListener("click", () => {
+    const p = $("#popover-hint");
+    if (p) p.hidden = true;
+    if (p?.dataset.hintId) dismissHint(p.dataset.hintId);
   });
-  $("#splash-tour").addEventListener("click", () => {
-    splash.hidden = true;
-    markFirstVisitDone();
-    startTour("firstTask");
-  });
+  window.addEventListener("resize", () => { if (currentTour) showTourStep(); });
 }
 
 /** Start a tour by ID. */
@@ -1070,84 +1071,110 @@ function startTour(tourId) {
 /** Show the current tour step. */
 function showTourStep() {
   if (!currentTour) return;
-  
+
   const tour = TOURS[currentTour.tourId];
-  if (!tour || currentTour.stepIdx >= tour.length) {
-    endTour();
+  if (!tour || currentTour.stepIdx >= tour.length) { endTour(); return; }
+
+  const step = tour[currentTour.stepIdx];
+
+  // A step may need its surroundings opened before its target exists —
+  // half of the tier tour lives inside the Settings modal, and 1.32.0 aimed
+  // at it while it was shut. `before` runs first and is idempotent by
+  // construction (openSettings/switchSettingsTab are both safe to re-run).
+  if (typeof step.before === "function") {
+    try { step.before(); } catch (err) { console.warn("[tour] step setup failed:", err); }
+  }
+
+  const targetEl = $(step.selector);
+
+  // A step whose element is missing or not laid out (display:none, or inside
+  // a closed modal) cannot be highlighted honestly. 1.32.0 drew the box at
+  // 0,0 in that case, which points at the top-left corner of the screen and
+  // tells the user something false. Skip forward instead, and say so in the
+  // console so a broken selector is findable rather than merely quiet.
+  const rect = targetEl ? targetEl.getBoundingClientRect() : null;
+  const visible = !!rect && (rect.width > 0 || rect.height > 0);
+  if (!visible) {
+    console.warn(`[tour] step ${currentTour.stepIdx + 1} of "${currentTour.tourId}" targets ${step.selector}, which is absent or not laid out — skipping.`);
+    currentTour.stepIdx++;
+    if (currentTour.stepIdx >= tour.length) { finishTour(); return; }
+    showTourStep();
     return;
   }
-  
-  const step = tour[currentTour.stepIdx];
-  const targetEl = $(step.selector);
-  
-  // Show backdrop
-  const backdrop = $("#tour-backdrop");
-  if (backdrop) {
-    backdrop.hidden = false;
-    backdrop.addEventListener("click", endTour);
+
+  // Bring the target into view before measuring. The highlight is
+  // position:fixed and read from the VIEWPORT rect, so a target below the
+  // fold got a highlight below the fold.
+  if (rect.top < 0 || rect.bottom > window.innerHeight) {
+    targetEl.scrollIntoView({ behavior: "auto", block: "center" });
   }
-  
-  // Highlight target element
+  const r = targetEl.getBoundingClientRect();
+
+  $("#tour-backdrop").hidden = false;   // listener is bound once, in wireOnboarding
+
   const highlight = $("#tour-highlight");
-  if (highlight && targetEl) {
-    const rect = targetEl.getBoundingClientRect();
-    highlight.style.left = (rect.left - 4) + "px";
-    highlight.style.top = (rect.top - 4) + "px";
-    highlight.style.width = (rect.width + 8) + "px";
-    highlight.style.height = (rect.height + 8) + "px";
+  if (highlight) {
+    highlight.style.left   = (r.left - 4) + "px";
+    highlight.style.top    = (r.top - 4) + "px";
+    highlight.style.width  = (r.width + 8) + "px";
+    highlight.style.height = (r.height + 8) + "px";
     highlight.hidden = false;
   }
-  
-  // Show popover
+
   const popover = $("#tour-popover");
   if (popover) {
-    $("#tour-step-num").textContent = (currentTour.stepIdx + 1);
-    $("#tour-step-total").textContent = tour.length;
-    $("#tour-title").textContent = step.title || "Tour Step";
+    $("#tour-step-num").textContent = String(currentTour.stepIdx + 1);
+    $("#tour-step-total").textContent = String(tour.length);
+    $("#tour-title").textContent = step.title || "";
     $("#tour-text").textContent = step.text || "";
-    
-    // Position popover near target
-    if (targetEl) {
-      const rect = targetEl.getBoundingClientRect();
-      const popW = 380, popH = 200;
-      let x = rect.left + rect.width / 2 - popW / 2;
-      let y = rect.top - popH - 20;
-      
-      if (y < 0) y = rect.bottom + 20;
-      if (x < 0) x = 20;
-      if (x + popW > window.innerWidth) x = window.innerWidth - popW - 20;
-      
-      popover.style.left = x + "px";
-      popover.style.top = y + "px";
-    }
-    
-    // Set button states
-    const prevBtn = $("#tour-prev");
-    const nextBtn = $("#tour-next");
+
+    const prevBtn = $("#tour-prev"), nextBtn = $("#tour-next");
     if (prevBtn) prevBtn.hidden = (currentTour.stepIdx === 0);
-    if (nextBtn) nextBtn.textContent = (currentTour.stepIdx >= tour.length - 1) ? "Done ✓" : "Next →";
-    
+    if (nextBtn) nextBtn.textContent = (currentTour.stepIdx >= tour.length - 1) ? "Done \u2713" : "Next \u2192";
+
+    // Measure the card rather than assuming 380x200 — the text is variable
+    // and a guessed height is how a popover ends up half off the bottom.
     popover.hidden = false;
+    popover.style.left = "0px"; popover.style.top = "0px";
+    const pw = popover.offsetWidth || 380, ph = popover.offsetHeight || 200;
+    const GAP = 14, EDGE = 12;
+
+    let y = r.top - ph - GAP;                       // above by preference
+    if (y < EDGE) y = r.bottom + GAP;               // else below
+    if (y + ph > window.innerHeight - EDGE) y = Math.max(EDGE, window.innerHeight - ph - EDGE);
+
+    let x = r.left + r.width / 2 - pw / 2;
+    x = Math.min(Math.max(x, EDGE), Math.max(EDGE, window.innerWidth - pw - EDGE));
+
+    popover.style.left = x + "px";
+    popover.style.top  = y + "px";
   }
-  
-  // Add event listeners
-  if ($("#tour-exit")) $("#tour-exit").onclick = endTour;
-  if ($("#tour-next")) $("#tour-next").onclick = () => {
-    currentTour.stepIdx++;
-    if (currentTour.stepIdx >= tour.length) {
-      endTour();
-      markTourCompleted(currentTour.tourId);
-    } else {
-      showTourStep();
-    }
-  };
-  if ($("#tour-prev")) $("#tour-prev").onclick = () => {
-    currentTour.stepIdx--;
-    showTourStep();
-  };
 }
 
-/** End the current tour. */
+/** Advance. Split out of the old inline handler because that one called
+ *  endTour() — which nulls currentTour — and THEN read currentTour.tourId,
+ *  so finishing any tour threw a TypeError and no completion was ever
+ *  recorded. Record first, tear down second. */
+function finishTour() {
+  const id = currentTour?.tourId;
+  endTour();
+  if (id) markTourCompleted(id);
+}
+
+function tourNext() {
+  if (!currentTour) return;
+  const tour = TOURS[currentTour.tourId] || [];
+  if (currentTour.stepIdx >= tour.length - 1) { finishTour(); return; }
+  currentTour.stepIdx++;
+  showTourStep();
+}
+
+function tourPrev() {
+  if (!currentTour || currentTour.stepIdx === 0) return;
+  currentTour.stepIdx--;
+  showTourStep();
+}
+
 function endTour() {
   const backdrop = $("#tour-backdrop");
   const highlight = $("#tour-highlight");
@@ -1162,30 +1189,29 @@ function endTour() {
 
 /** Show a contextual popover hint (first-time only). */
 function showPopoverHint(hintId) {
-  // Only show if not already dismissed and onboarding state exists
-  if (!S.wsDoc?.onboardingState) return;
-  if (S.wsDoc.onboardingState.dismissedHints?.[hintId]) return;  // Already dismissed
-  
   const hint = POPOVER_HINTS[hintId];
   if (!hint) return;
-  
+  if (onboardingState().hints[hintId]) return;          // already dismissed, by this PERSON
+
   const targetEl = $(hint.selector);
-  if (!targetEl) return;
-  
   const popover = $("#popover-hint");
-  if (!popover) return;
-  
-  const rect = targetEl.getBoundingClientRect();
-  popover.style.left = (rect.right + 10) + "px";
-  popover.style.top = (rect.top + rect.height / 2 - 30) + "px";
-  
+  if (!targetEl || !popover) return;
+
+  const r = targetEl.getBoundingClientRect();
+  if (!r.width && !r.height) return;                    // not laid out — say nothing
+
   $("#popover-hint-text").textContent = hint.text;
+  popover.dataset.hintId = hintId;                      // the close button reads this
   popover.hidden = false;
-  
-  $(".popover-hint-close").onclick = () => {
-    popover.hidden = true;
-    dismissHint(hintId);
-  };
+
+  const pw = popover.offsetWidth || 320, ph = popover.offsetHeight || 80;
+  const GAP = 10, EDGE = 12;
+  let x = r.right + GAP;
+  if (x + pw > window.innerWidth - EDGE) x = Math.max(EDGE, r.left - pw - GAP);
+  let y = r.top + r.height / 2 - ph / 2;
+  y = Math.min(Math.max(y, EDGE), Math.max(EDGE, window.innerHeight - ph - EDGE));
+  popover.style.left = x + "px";
+  popover.style.top = y + "px";
 }
 
 // End E41 tour system
@@ -1332,6 +1358,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#yv-add-project").addEventListener("click", openYvProjectModal);
   wireDashboard();   // D105 — static chrome, wired once
   wireBurnInCare();  // D107 — ditto
+  wireOnboarding();  // E41 — ditto: splash buttons, tour nav, hint dismissal
   $("#clock-save").addEventListener("click", saveClockDialog);            // D112
   $("#clock-cancel").addEventListener("click", () => { $("#clock-modal").hidden = true; clockMode = null; });
   // D120 — the Time Report
@@ -1373,7 +1400,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#task-time-now").addEventListener("click", onTimeNow);           // D141
   // E41 — onboarding hints for task form
   $("#task-date")?.addEventListener("focus", () => showPopoverHint("dueDate"));
-  $("#task-escalate")?.addEventListener("click", () => showPopoverHint("escalate"));
+  $("#task-esc-n")?.addEventListener("focus", () => showPopoverHint("escalate"));
   $("#alert-test").addEventListener("click", testAlert);              // D137 — a click is also the audio unlock
   $("#cfg-alert-notify").addEventListener("change", onNotifyToggle);  // D137 — permission must be asked from a gesture
   $("#due-save").addEventListener("click", dueSave);
@@ -1635,6 +1662,13 @@ function onSignedIn(user) {
   S.boardUnsub = subscribeMyWorkspaces(bs => { S.boards = bs; renderBoards(); });
 
   subscribeBoard();
+
+  // E41 — the splash belongs HERE, not in the workspace-document snapshot.
+  // Onboarding is a fact about the PERSON: you do not re-learn the app
+  // because you opened a second board, and a snapshot callback re-fires on
+  // every rename. store.js has already hydrated the flag from the profile
+  // read that sign-in performs anyway, so this costs nothing.
+  showWelcomeSplash();
 }
 
 /**
@@ -1658,7 +1692,6 @@ function subscribeBoard() {
   S.unsubs.push(subscribeWorkspaceDoc(w => { 
     S.wsDoc = w; 
     renderBoards(); 
-    if (w?.onboardingState?.firstVisit) showWelcomeSplash();  // E41 — welcome on first visit
   }));   // E34
   S.unsubs.push(subscribeMembers(m => { S.members = m; renderPeople(); }));      // E5
   S.unsubs.push(subscribeTiers(t => { S.tiers = t; docCensus.tiers = t.length; refreshTierSelects(); renderFilters(); render(); }));
