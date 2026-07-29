@@ -1,6 +1,37 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.21.2 — SIGN IN AS SOMEBODY ELSE. Jake, testing with Nico:
+// Version 0.22.0 — A STAGE NOW RECORDS WHO MADE IT, NOT JUST WHO FINISHED
+// IT. Jake: "Each person should get credit for what each person checks off,
+// and it should track both when the task/piece of the project was created,
+// as well as when it was completed (alongside who created that piece).
+// Every time."
+//
+// Tasks and project DOCUMENTS already carried all four (createdBy/createdAt/
+// completedBy/completedAt). Project STAGES carried only the completion half —
+// so "Leah added this step and I finished it" was unanswerable, which is
+// exactly the question a shared tier invents.
+//
+// stampNewStages() is applied at the WRITE BOUNDARY. Every stage array in the
+// app reaches Firestore through addProject, addProjectWithStages or
+// setProjectStages, so stamping here catches every caller including ones
+// nobody has written yet.
+//
+// ⚠️ IT ONLY STAMPS STAGES THAT HAVE NO createdBy, AND ONLY WHERE THE CALLER
+// HAS ESTABLISHED THEY ARE NEW. A legacy stage also has no createdBy, and
+// attributing it to whoever next edits the project would be inventing
+// evidence — worse than the blank it replaces, because a blank is honestly
+// unknown and a name is a claim. app.js decides newness (its editor rows know
+// whether they map to an original); addProject/addProjectWithStages do not
+// have to ask, because at creation every stage is new.
+//
+// On Jake's "is it possible to cheat?": yes, and deliberately not defended
+// against. createdBy is immutable in the rules (1.2.1) for TASKS and
+// PROJECTS because it gates deletion; a stage is an array element inside a
+// project document, so rules cannot see it and nothing hangs off it but
+// credit. His call, quoted so nobody re-litigates it: "then we have bigger
+// problems, and this software isn't made for those assholes."
+//
+// (prev) Version 0.21.2 — SIGN IN AS SOMEBODY ELSE. Jake, testing with Nico:
 // "Signs out, but can't sign in as anyone else in Safari. It just remembers
 // what google account is logged into Google."
 //
@@ -204,7 +235,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.21.2";
+export const STORE_VERSION = "0.22.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -1831,14 +1862,27 @@ export function saveProjectTypes(types) {
 }
 
 /** New project snapshots the current template into its own editable stages. */
+/**
+ * Give every stage that lacks one a creator and a creation time.
+ *
+ * Call ONLY where the caller knows the stages are new. See the 0.22.0 note:
+ * a legacy stage is indistinguishable from a new one by inspection, and
+ * guessing turns an honest blank into a false claim.
+ */
+export function stampNewStages(stages) {
+  const now = Date.now(), me = whoami();
+  return (stages || []).map(s =>
+    s && s.createdBy ? s : { ...s, createdBy: me, createdAt: s?.createdAt ?? now });
+}
+
 export async function addProject({ name, color, startDate, endDate, tierId, workload = 2 }) {
   const tmplSnap = await getDoc(settingsRef("stageTemplate"));
   const template = tmplSnap.exists() ? (tmplSnap.data().stages || []) : [];
   const legacy = { before: ["before", "start"], during: ["after", "start"], after: ["after", "end"] };
-  const stages = template.map(s => {
+  const stages = stampNewStages(template.map(s => {
     const [dir, anc] = s.direction && s.anchor ? [s.direction, s.anchor] : (legacy[s.phase] || legacy.during);
     return { name: s.name, direction: dir, anchor: anc, offsetDays: s.offsetDays || 0, completedAt: null, dueAt: null };
-  });
+  }));
   return addDoc(colIn(wsOfTier(tierId), "projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null, completedBy: null,   // E9
@@ -1854,6 +1898,7 @@ export async function addProject({ name, color, startDate, endDate, tierId, work
  * NOT consulted and one-off stage surgery survives the duplication).
  */
 export function addProjectWithStages({ name, color, startDate, endDate, tierId, workload = 2, stages = [] }) {
+  stages = stampNewStages(stages);   // at creation, every stage is new
   return addDoc(colIn(wsOfTier(tierId), "projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null, completedBy: null,   // E9
