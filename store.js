@@ -1,6 +1,22 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.21.1 — WHOSE ORDER YOU SEE WHEN VISITING. Jake: "Visiting her
+// Version 0.21.2 — SIGN IN AS SOMEBODY ELSE. Jake, testing with Nico:
+// "Signs out, but can't sign in as anyone else in Safari. It just remembers
+// what google account is logged into Google."
+//
+// Not Safari remembering, and not a bug in signOut: signInWithPopup with a
+// bare provider asks Google for "the signed-in user", and where that is
+// unambiguous Google answers instantly WITHOUT drawing a chooser. One
+// account on the device therefore means one account in this app, forever,
+// with no visible way to say otherwise. `prompt: "select_account"` makes it
+// ask every time.
+//
+// ⚠️ THIS IS A TESTING BLOCKER AS MUCH AS A FEATURE. Every second-person
+// smoke test (IU, IX-b, IZ, JA) needs two accounts in one browser, so
+// without this the shared-tier work cannot be checked by one person at one
+// desk — which is the only way it CAN be checked right now.
+//
+// (prev) Version 0.21.1 — WHOSE ORDER YOU SEE WHEN VISITING. Jake: "Visiting her
 // should give me a taste of EXACTLY what she looks at — zero differences.
 // Otherwise I wouldn't have an honest picture of her load."
 //
@@ -188,7 +204,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.21.1";
+export const STORE_VERSION = "0.21.2";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -638,6 +654,9 @@ async function createPersonalWorkspace(user, uref, userExists) {
 
 export async function signIn() {
   const provider = new GoogleAuthProvider();
+  // Always draw the chooser. Without this, a device with exactly one Google
+  // account signs straight back into it and "Sign out" looks broken.
+  provider.setCustomParameters({ prompt: "select_account" });
   await signInWithPopup(auth, provider);
 }
 
