@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.48.2 (banner and data-html-version move together, always)
+     Version 0.49.0 (banner and data-html-version move together, always)
+     0.49.0 — E41: ONBOARDING MARKUP. Welcome splash screen, tour overlay system,
+     contextual popovers, and help panel structure. App.js builds tours and manages
+     state; this file carries markup only. ?v= bumps to 1.32.0 (app.js).
+     0.48.2 (banner and data-html-version move together, always)
      0.48.0 — repin app.js 1.30.0 / css 0.54.0. Markup still unchanged:
      the tier reorder arrows are built by app.js, like the rows they sit in.
      0.47.0 — item 5 (shared tiers). NO MARKUP CHANGE: the share strip is
@@ -303,7 +307,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.54.0">
 </head>
-<body data-html-version="0.48.2">
+<body data-html-version="0.49.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -789,6 +793,22 @@
         <p class="hint locked-note">Tiers are part of this board's setup, and your access here is <b>Can help</b> or <b>Can view</b>. You can read all of it; changing it needs <b>Can edit</b>. Ask whoever gave you the key.</p>
         <h3>Tiers (priority queue)</h3>
         <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
+        <!-- E41 — help panels for progressive disclosure -->
+        <div class="help-panel" data-help-id="tiers-what">
+          <div class="help-panel-toggle">💡 What are tiers?</div>
+          <div class="help-panel-content">
+            <p>A <b>tier</b> is a bucket for parts of your life — Home, Work, Personal, a class, a project, whatever matches how you think about your day.</p>
+            <p>Rank #1 sorts first when nothing else decides the order. Use the ▲▼ arrows to move tiers around — the list immediately re-numbers.</p>
+            <p>You can hide tiers with the checkbox — useful on Saturday when Work is just noise. You can also set which days the tier is active (Mon–Fri, weekends only, every day).</p>
+          </div>
+        </div>
+        <div class="help-panel" data-help-id="tiers-calendar">
+          <div class="help-panel-toggle">📅 Calendar tiers</div>
+          <div class="help-panel-content">
+            <p>Set a tier's type to <b>Calendar</b> and it pulls appointments from your Google Calendar instead of tasks you create. The Calendar ID field appears, and you paste your calendar's ID there.</p>
+            <p>Your events show up in the queue near their start times, never nag, and disappear once they pass — they're read-only.</p>
+          </div>
+        </div>
         <!-- E39 — the six clicks, next to the field they fill. -->
         <details id="cal-connect">
           <summary>📅 How do I show my Google Calendar here?</summary>
@@ -818,6 +838,15 @@
         <p class="hint locked-note">Pipelines are part of this board's setup. Yours is a working key, not a setup one — you can read this, and <b>Can edit</b> is needed to change it. Adding or removing stages on an <i>individual</i> project still works.</p>
         <h3>Project pipelines</h3>
         <p class="hint">Build a LIBRARY of pipelines and pick one when you create a project (e.g. an actuarial default, a "Holiday Card", a "Taiko Performance"). <em>Default</em> is the standard template copied into a new project when you don't choose another. Existing projects keep their own copy whatever you change here.</p>
+        <!-- E41 — help panels for progressive disclosure -->
+        <div class="help-panel" data-help-id="pipeline-what">
+          <div class="help-panel-toggle">💡 What are project pipelines?</div>
+          <div class="help-panel-content">
+            <p>A <b>pipeline</b> is a template of stages — the steps you always take for a certain kind of project.</p>
+            <p>When you create a project and pick a pipeline, it copies all the stages into that project. Then you can adjust dates and details for this specific run.</p>
+            <p>Your <b>Default</b> pipeline is copied into every new project that doesn't pick a different type.</p>
+          </div>
+        </div>
         <div class="form-row" id="pipeline-picker-row">
           <label>Editing <select id="pipeline-target"></select></label>
           <button id="pipeline-new" class="mini" type="button" title="Create a new project type">+ New type</button>
@@ -1121,6 +1150,54 @@
   <!-- Shared tap-popover for ⓘ dots -->
   <div id="popover" hidden></div>
 
-  <script type="module" src="app.js?v=1.31.0"></script>
+  <!-- ============ E41 — ONBOARDING: WELCOME SPLASH ============ -->
+  <!-- Shows once per workspace on first visit. Outside #drift-wrap (D37). -->
+  <div id="welcome-splash" class="modal-shell onboarding-overlay" hidden>
+    <div class="modal-card onboarding-card welcome-splash-card">
+      <div class="modal-head">
+        <h2>🐙 Welcome to Tentacalendar</h2>
+      </div>
+      <div class="onboarding-body">
+        <p>A planning board that decides <b>what you should do next</b> — instead of letting you.</p>
+        <p class="hint">It reads your deadlines and builds your day from them. If something is late, it climbs; late enough, it speaks.</p>
+        <p class="hint">This is a 60-second tour. Click <b>Let's go</b> below, or skip if you like to tinker.</p>
+      </div>
+      <div class="onboarding-buttons">
+        <button id="splash-skip" class="mini">Skip</button>
+        <button id="splash-tour" class="primary">Let's go →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ E41 — ONBOARDING: TOUR OVERLAY ============ -->
+  <!-- Tour step display, highlight overlay, and navigation. -->
+  <div id="tour-backdrop" class="onboarding-overlay" hidden></div>
+  <div id="tour-highlight" class="tour-highlight" hidden></div>
+  <div id="tour-popover" class="tour-popover" hidden>
+    <div id="tour-step-indicator">Step <span id="tour-step-num">1</span> of <span id="tour-step-total">5</span></div>
+    <h3 id="tour-title">Tour Step</h3>
+    <p id="tour-text">Tour instruction text.</p>
+    <div class="tour-buttons">
+      <button id="tour-exit" class="mini" title="Exit tour">✕ Exit</button>
+      <button id="tour-prev" class="mini" hidden>← Back</button>
+      <button id="tour-next" class="primary">Next →</button>
+    </div>
+  </div>
+
+  <!-- ============ E41 — ONBOARDING: CONTEXTUAL POPOVERS ============ -->
+  <!-- Dismissible hints for first-time interactions at key UI points.
+       Built dynamically by app.js; markup is structural only. -->
+  <div id="popover-hint" class="popover-hint" hidden>
+    <div class="popover-hint-arrow"></div>
+    <p id="popover-hint-text"></p>
+    <button class="mini popover-hint-close" title="Dismiss">✕</button>
+  </div>
+
+  <!-- ============ E41 — ONBOARDING: HELP PANELS ============ -->
+  <!-- Inline expandable help sections in various parts of the UI.
+       The .help-toggle class marks sections that become collapsible on first visit. -->
+  <!-- These will be populated by app.js based on help definitions. -->
+
+  <script type="module" src="app.js?v=1.32.0"></script>
 </body>
 </html>
