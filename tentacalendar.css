@@ -1,8 +1,14 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.55.0  (banner and --tc-version move together, ALWAYS —
-   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
-   0.55.0 (E41 — onboarding): .onboarding-overlay, .welcome-splash-card,
+   Version 0.55.1  (banner and --tc-version move together, ALWAYS —
+   0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.
+   AND THEN 0.55.0 DID IT AGAIN: banner 0.55.0, --tc-version still 0.54.0.
+   The warning was two lines above the mistake. If you are bumping this
+   file, the bump is TWO edits, and the second one is at :root.)
+   0.55.1 (E41 repair): the block below was written against --card,
+   --bg-alt and --accent-dim, which do not exist. Remapped to --panel,
+   --panel-2 and --accent, and --tc-version corrected.
+   (prev) 0.55.0 (E41 — onboarding): .onboarding-overlay, .welcome-splash-card,
    .tour-highlight, .tour-popover, .popover-hint, .help-panel and related.
    Complete visual system for welcome splash, step-by-step tours with overlays,
    contextual popovers, and expandable help panels.
@@ -249,7 +255,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.54.0";
+  --tc-version: "0.55.1";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -1917,7 +1923,17 @@ header, .dash-split { transition: opacity 1.2s ease; }
 
 /* ============================================================ */
 /* E41 — ONBOARDING STYLES (welcome splash, tours, popovers,   */
-/* help panels) ============================================================ */
+/* help panels)                                                */
+/* 0.55.1: 0.55.0 styled this whole block against --card,      */
+/* --bg-alt and --accent-dim, none of which are declared in    */
+/* :root. Every surface here — the splash card, the tour       */
+/* popover, the hint, the help panels — therefore rendered     */
+/* with NO background at all: text floating over the dimmed    */
+/* app. Mapped onto the real palette (--panel, --panel-2,      */
+/* --accent). ⚠️ If you add a colour here, add it to :root or  */
+/* use one that is already there; an undeclared var does not   */
+/* warn, it just silently inherits.                            */
+/* ============================================================ */
 
 /* Base overlay — darkens the background. Used by welcome splash and tours. */
 .onboarding-overlay {
@@ -1984,7 +2000,7 @@ header, .dash-split { transition: opacity 1.2s ease; }
 /* Tour popover — the instruction card. */
 .tour-popover {
   position: fixed;
-  background: var(--card);
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 1rem;
@@ -2036,7 +2052,7 @@ header, .dash-split { transition: opacity 1.2s ease; }
 /* Contextual popover hints — dismissible popovers at UI points. */
 .popover-hint {
   position: fixed;
-  background: var(--card);
+  background: var(--panel);
   border: 1px solid var(--accent);
   border-radius: 6px;
   padding: .8rem .9rem;
@@ -2091,8 +2107,8 @@ header, .dash-split { transition: opacity 1.2s ease; }
 
 /* Help panels — inline collapsible help sections (progressive disclosure). */
 .help-panel {
-  border-left: 3px solid var(--accent-dim);
-  background: var(--bg-alt);
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
   padding: .8rem;
   margin: .8rem 0;
   border-radius: 4px;
