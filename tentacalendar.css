@@ -1,8 +1,12 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.54.0  (banner and --tc-version move together, ALWAYS —
+   Version 0.55.0  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.)
-   0.54.0 (tier order by position): .t-move / .t-pos replace the .t-rank
+   0.55.0 (E41 — onboarding): .onboarding-overlay, .welcome-splash-card,
+   .tour-highlight, .tour-popover, .popover-hint, .help-panel and related.
+   Complete visual system for welcome splash, step-by-step tours with overlays,
+   contextual popovers, and expandable help panels.
+   (prev) 0.54.0 (tier order by position): .t-move / .t-pos replace the .t-rank
    number box. Reuses .st-move's exact geometry because it IS that control
    — stacked ▲▼ moving a row in a list — and D104 says one grammar. .t-rank
    is gone from the stylesheet as well as the markup; a rule for an element
@@ -1910,3 +1914,234 @@ header, .dash-split { transition: opacity 1.2s ease; }
    so the table still parses at a glance in greyscale or at arm's length. */
 .role-matrix td { color: var(--accent); }
 .role-matrix td:first-child { color: var(--ink-dim); }
+
+/* ============================================================ */
+/* E41 — ONBOARDING STYLES (welcome splash, tours, popovers,   */
+/* help panels) ============================================================ */
+
+/* Base overlay — darkens the background. Used by welcome splash and tours. */
+.onboarding-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Welcome splash card */
+.welcome-splash-card {
+  max-width: 420px;
+  text-align: center;
+}
+
+.welcome-splash-card .onboarding-body {
+  padding: 1.2rem 0;
+}
+
+.welcome-splash-card .onboarding-body p {
+  margin: .6rem 0;
+  font-size: .95rem;
+  line-height: 1.5;
+}
+
+.welcome-splash-card .onboarding-body p:first-child {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.onboarding-buttons {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  margin-top: 1.2rem;
+}
+
+.onboarding-buttons button {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* Tour backdrop — the darker overlay behind the tour popover. */
+#tour-backdrop {
+  z-index: 199;
+}
+
+/* Tour highlight — the glowing box around the element being explained. */
+.tour-highlight {
+  position: fixed;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.6), inset 0 0 0 1px var(--accent);
+  border-radius: 8px;
+  z-index: 201;
+  animation: tour-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.6), inset 0 0 0 1px var(--accent); }
+  50% { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.6), inset 0 0 0 1px var(--accent); }
+}
+
+/* Tour popover — the instruction card. */
+.tour-popover {
+  position: fixed;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+  max-width: 380px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 202;
+}
+
+.tour-popover #tour-step-indicator {
+  font-size: .75rem;
+  color: var(--accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: .4rem;
+}
+
+.tour-popover h3 {
+  font-size: 1rem;
+  margin: .4rem 0 .6rem;
+  color: var(--ink);
+}
+
+.tour-popover p {
+  font-size: .9rem;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  margin: 0 0 .8rem;
+}
+
+.tour-buttons {
+  display: flex;
+  gap: .4rem;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.tour-buttons button {
+  flex: 1;
+  padding: .4rem .6rem;
+  font-size: .85rem;
+}
+
+.tour-buttons #tour-exit {
+  flex: 0 0 auto;
+  min-width: 60px;
+}
+
+/* Contextual popover hints — dismissible popovers at UI points. */
+.popover-hint {
+  position: fixed;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: .8rem .9rem;
+  max-width: 320px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 150;
+  animation: popover-pop 0.3s ease-out;
+}
+
+@keyframes popover-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.popover-hint-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--accent);
+}
+
+.popover-hint p {
+  margin: 0 0 .4rem;
+  font-size: .9rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.popover-hint .popover-hint-close {
+  position: absolute;
+  top: .4rem;
+  right: .4rem;
+  padding: .2rem .4rem;
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: .8rem;
+}
+
+.popover-hint .popover-hint-close:hover {
+  color: var(--ink);
+}
+
+/* Help panels — inline collapsible help sections (progressive disclosure). */
+.help-panel {
+  border-left: 3px solid var(--accent-dim);
+  background: var(--bg-alt);
+  padding: .8rem;
+  margin: .8rem 0;
+  border-radius: 4px;
+  font-size: .9rem;
+  line-height: 1.5;
+}
+
+.help-panel-toggle {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.help-panel-toggle::before {
+  content: "▶";
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: .8rem;
+}
+
+.help-panel.expanded .help-panel-toggle::before {
+  transform: rotate(90deg);
+}
+
+.help-panel-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  margin-top: 0;
+}
+
+.help-panel.expanded .help-panel-content {
+  max-height: 500px;
+  margin-top: .6rem;
+}
+
+.help-panel-content p {
+  margin: .4rem 0;
+  color: var(--ink-dim);
+}
+
+.help-panel-content p:first-child {
+  margin-top: 0;
+}
+
+.help-panel-content p:last-child {
+  margin-bottom: 0;
+}
