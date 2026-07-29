@@ -1,6 +1,33 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.30.0 — TIER ORDER IS A POSITION, NOT A NUMBER YOU TYPE. Jake,
+// Version 1.30.1 — EDITING A PROJECT'S STAGES WAS ERASING WHO COMPLETED
+// THEM. Found by Jake from console data, and his read of it was reasonable
+// and wrong in an instructive way: Tomlinson's stage completions carried
+// completedBy and his did not, so it looked like the stamp depended on WHO.
+// setStageDone writes `completedBy = whoami()` unconditionally, so that could
+// not be it — and the field was ABSENT rather than null, which means
+// something removed it afterwards.
+//
+// saveStages() rebuilt each stage from the form and carried forward an
+// ALLOWLIST of two fields, `completedAt` and `dueAt`. Everything else on the
+// stage was dropped, completedBy included. So every stage edit silently
+// rewrote history: the stage stayed ticked and the credit vanished. The real
+// split in his data was TIME, not person — his completions happened before
+// the last stage edit and hers after it. Had she gone first the evidence
+// would have pointed at her.
+//
+// FIXED by carrying the whole stage and overriding only what the editor
+// owns. An allowlist of preserved fields is a list that goes stale the next
+// time a stage gains one — this is the second thing E9 put on a stage and
+// the first one it lost.
+//
+// ⚠️ `hurrah` MUST STILL BE STRIPPED BEFORE THE SPREAD. D109 says the editor
+// OWNS that flag (it is button state, not carried), so a stale `hurrah: true`
+// surviving the spread would resurrect a climax the user had just turned off.
+//
+// ⚠️ ALREADY-LOST STAMPS ARE NOT RECOVERABLE. The value is gone from the
+// document; nothing knows what it was. This stops the bleeding only.
+// (prev) Version 1.30.0 — TIER ORDER IS A POSITION, NOT A NUMBER YOU TYPE. Jake,
 // after a colleague shared a tier with him: "it came in as 4/4. I changed it
 // to 3 without changing my 3, and it just... stayed there? I think the arrows
 // should move it up and down in the queue rather than change the number."
@@ -879,7 +906,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.30.0";
+export const APP_VERSION = "1.30.1";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -3445,15 +3472,24 @@ function stagesSave() {
   const orig = p.stages || [];
   const stages = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")].map(row => {
     const oi = parseInt(row.dataset.orig, 10);
-    const carried = (oi >= 0 && orig[oi]) ? orig[oi] : { completedAt: null, dueAt: null };
+    // Carry the WHOLE stage, then override only what this form owns. The
+    // previous version listed the fields to keep — completedAt and dueAt —
+    // and so deleted completedBy (E9) from every finished stage on every
+    // edit, leaving it ticked with nobody's name on it. A keep-list is a
+    // list somebody has to remember to extend; a drop-list is not.
+    const carried = (oi >= 0 && orig[oi]) ? { ...orig[oi] } : {};
+    // D109 — the editor OWNS hurrah (button state, not carried), so it must
+    // NOT survive the spread or turning the climax off would not stick.
+    delete carried.hurrah;
     return {
+      ...carried,
       name: row.querySelector(".st-name").value.trim() || "Untitled stage",
       direction: row.querySelector(".st-dir").value,
       anchor: row.querySelector(".st-anchor").value,
       offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
       completedAt: carried.completedAt ?? null,
       dueAt: carried.dueAt ?? null,
-      ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109: the editor OWNS this flag (button state, not carried)
+      ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})
     };
   });
   {
