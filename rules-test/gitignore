@@ -1,0 +1,24 @@
+# rules-test/.gitignore
+
+# 724 packages. Never.
+node_modules/
+package-lock.json
+
+# ⚠️ firestore.rules IN THIS FOLDER IS A COPY, and a stale copy that tests
+# green is worse than no test at all. It is deliberately NOT committed, so
+# that running the suite forces you to make a fresh one:
+#
+#     cp ../firestore-2.0.rules ./firestore.rules
+#
+# The repo already carries one copy of the rules that drifted (it sat at
+# 1.1.1, the version WITH the catch-all hole, while 1.2.1 was live in the
+# console). Committing a second copy here would make three.
+firestore.rules
+
+# Emulator noise
+*-debug.log
+emu.log
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
