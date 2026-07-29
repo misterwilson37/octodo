@@ -1,6 +1,26 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.29.1 — Z: repin to store 0.21.1 (whose tier order you see when
+// Version 1.30.0 — TIER ORDER IS A POSITION, NOT A NUMBER YOU TYPE. Jake,
+// after a colleague shared a tier with him: "it came in as 4/4. I changed it
+// to 3 without changing my 3, and it just... stayed there? I think the arrows
+// should move it up and down in the queue rather than change the number."
+//
+// He is right, and the reason is worth writing down because the old control
+// was fine for four years and stopped being fine the moment item 5 shipped.
+// A typed rank only works while ONE person authors every number. A shared
+// tier arrives carrying a rank chosen by somebody who has never seen your
+// board, so the first thing it does is collide — and a text box has no way
+// to express "put this above that" except by asking you to renumber your own
+// tiers around a guest.
+//
+// ▲▼ instead, and rank is assigned 1..N FROM DOM POSITION on save. Ties stop
+// being an error to report and become a state that cannot be constructed,
+// which is the better answer to his "it should kick back an error": the best
+// error message is the one that can never fire. Opening ⚙️ ▸ Tiers and
+// saving now also NORMALISES any collision already in the data.
+//
+// The arrows match .st-up/.st-down on stage rows exactly (D104: one grammar).
+// (prev) Version 1.29.1 — Z: repin to store 0.21.1 (whose tier order you see when
 // visiting somebody's board). No app-side change; the pin has to move or D49
 // bites — a ?v= on a <script> tag does not cache-bust the imports inside it.
 // (prev) Version 1.29.0 — ITEM 5, THE UI HALF. Almost nothing here changed, which
@@ -848,7 +868,7 @@ import {
   saveWorkspace, forgetWorkspaceCache,                             // E38 rename
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
   mergedWorkspaceIds                                               // item 5
-} from "./store.js?v=0.21.1";
+} from "./store.js?v=0.21.2";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -859,7 +879,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.29.1";
+export const APP_VERSION = "1.30.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -5358,8 +5378,9 @@ function projectFormSignature() {
  *  a future setting can't silently fall outside the dirty check. */
 function settingsSignature() {
   const tierSig = [...document.querySelectorAll("#tier-editor .tier-row")].map(row =>
-    [row.querySelector(".t-rank")?.value,
-     row.querySelector(".t-name")?.value,
+    // No .t-rank here: the rows are read in DOM order, so REORDERING them
+    // changes this array and is caught without a rank field to compare.
+    [row.querySelector(".t-name")?.value,
      row.querySelector(".t-color")?.value,
      row.querySelector(".t-kind")?.value,
      row.querySelector(".t-cal")?.value,
@@ -6142,6 +6163,7 @@ function openSettings() {
   const box = $("#tier-editor");
   box.innerHTML = "";
   for (const t of S.tiers) tierEditorRow(t, false);
+  renumberTierRows();
   checkTierColors();
   // D124 — the pipeline library draft: Default (stageTemplate) + named types.
   pipelineDraft = {
@@ -6191,11 +6213,12 @@ const TIER_PALETTE = ["#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#b
 function tierEditorRow(t, isNew) {
   const box = $("#tier-editor");
   if (isNew) {
-    const ranks = [...box.querySelectorAll(".t-rank")].map(el => parseInt(el.value, 10) || 0);
+    // No rank guess any more — a new tier is appended and therefore last,
+    // and renumberTierRows() gives it its number.
     const used = new Set([...box.querySelectorAll(".t-color")].map(el => el.value.toLowerCase()));
     const fresh = TIER_PALETTE.filter(c => !used.has(c));
     t = {
-      rank: (ranks.length ? Math.max(...ranks) : 0) + 1,
+      rank: 99,   // placeholder; overwritten by position on save
       color: (fresh.length ? fresh : TIER_PALETTE)[Math.floor(Math.random() * (fresh.length ? fresh.length : TIER_PALETTE.length))],
       kind: "task"
     };
@@ -6211,7 +6234,8 @@ function tierEditorRow(t, isNew) {
     `<label class="t-day" title="${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d]}"><input type="checkbox" class="t-dow" data-dow="${d}" ${allowed.has(d) ? "checked" : ""}>${n}</label>`
   ).join("");
   row.innerHTML = `
-    <input class="t-rank" type="number" min="1" value="${t.rank ?? 1}" title="Priority rank: only breaks ties in the queue now (D43), but orders the filter chips and dropdowns">
+    <span class="t-move"><button type="button" class="t-up" title="Move up">▲</button><button type="button" class="t-down" title="Move down">▼</button></span>
+    <span class="t-pos" title="Where this tier sits in your day. Set by the arrows — deliberately not typeable, because two tiers wearing the same number is not something the queue can honour.">1</span>
     <input class="t-name" type="text" value="${esc(t.name || "")}" placeholder="Tier name">
     <input class="t-color" type="color" value="${t.color || "#4dabf7"}" title="Tier color (chips in the queue)">
     <select class="t-kind" title="Tasks = checkable items you create here. Calendar = appointments pulled from a Google Calendar (they pin near their start time and never nag).">
@@ -6241,6 +6265,8 @@ function tierEditorRow(t, isNew) {
     if (!ev.target.checked) return;
     box.querySelectorAll(".t-timeless").forEach(cb => { if (cb !== ev.target) cb.checked = false; });
   });
+  row.querySelector(".t-up").addEventListener("click", () => moveTierRow(row, -1));
+  row.querySelector(".t-down").addEventListener("click", () => moveTierRow(row, 1));
   row.querySelector(".t-del").addEventListener("click", () => {
     if (row.dataset.id) {
       if (!confirm(`Delete tier "${t.name}"? Tasks in it will show as "?" until re-tiered.`)) return;
@@ -6267,7 +6293,35 @@ function tierEditorRow(t, isNew) {
   });
 
   box.append(row);
+  renumberTierRows();
   if (isNew) row.querySelector(".t-name").focus();
+}
+
+/** Move one tier row past its neighbour.
+ *
+ *  ⚠️ CLOSES EVERY SHARE STRIP FIRST. A `.tier-share` panel is a SIBLING of
+ *  the rows, so with one open, `previousElementSibling` is a panel rather
+ *  than a tier and the swap puts a row in the wrong place — silently, and
+ *  only when somebody happened to have the sharing panel open. */
+function moveTierRow(row, dir) {
+  const box = $("#tier-editor");
+  box.querySelectorAll(".tier-share").forEach(p => p.remove());
+  const rows = [...box.querySelectorAll(".tier-row")];
+  const i = rows.indexOf(row), j = i + dir;
+  if (i < 0 || j < 0 || j >= rows.length) return;
+  if (dir < 0) box.insertBefore(row, rows[j]);
+  else box.insertBefore(rows[j], row);
+  renumberTierRows();
+}
+
+/** Repaint 1..N down the editor. Display only — the number is DERIVED from
+ *  position every time, and position is what gets saved, so the two can
+ *  never disagree the way a typed rank and a real order could. */
+function renumberTierRows() {
+  [...document.querySelectorAll("#tier-editor .tier-row")].forEach((r, i) => {
+    const pos = r.querySelector(".t-pos");
+    if (pos) pos.textContent = String(i + 1);
+  });
 }
 
 /**
@@ -6513,7 +6567,9 @@ function onSaveSettings() {
     decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2), // D52
     clearDeckThreshold: clampInt($("#cfg-cleardeck").value, 0, 100, 60) / 100 // D85
   });
+  let tierPos = 0;
   for (const row of document.querySelectorAll(".tier-row")) {
+    tierPos += 1;
     const kind = row.querySelector(".t-kind").value;
     // D60: gather the day toggles; an accidental zero-day tier falls
     // back to Mon–Fri rather than making scheduling math impossible.
@@ -6522,7 +6578,7 @@ function onSaveSettings() {
       .map(cb => parseInt(cb.dataset.dow, 10));
     if (!allowedDays.length) allowedDays = [1, 2, 3, 4, 5];
     const data = {
-      rank: clampInt(row.querySelector(".t-rank").value, 1, 99, 99),
+      rank: tierPos,   // 1..N from DOM order — ties are unconstructible
       name: row.querySelector(".t-name").value.trim() || "Untitled",
       color: row.querySelector(".t-color").value,
       kind,
