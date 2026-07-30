@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.18.1** | Last updated: 2026-07-29 | **App: 1.32.1 · store 0.23.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.49.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0** — the web app is deployed. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1.** ⚠️ **If a board is running 1.32.0/0.23.0/0.55.0/0.49.0, it has a live regression in `saveConfig` — see §E41.** State lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
+**Document version: 0.20.0** | Last updated: 2026-07-29 | **App: 1.32.1 · store 0.23.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.49.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0** — the web app is deployed. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1.** ⚠️ **If a board is running 1.32.0/0.23.0/0.55.0/0.49.0, it has a live regression in `saveConfig` — see §E41.** State lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
 
 > **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
@@ -35,7 +35,7 @@ Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy,
 | `POLL_SECRET` / `TZ` | ✅ Both set and verified by a live curl. |
 | Calendars connected | ✅ Jake's are connected and a mirror calendar exists. |
 | **Cloud Scheduler** | ✅ **Created and firing.** Confirmed running at 18:07 on 2026-07-27, on schedule. Item 7 is closed. |
-| **Rules emulator** | ⚠️ **Newly available — USE IT.** Jake added `storage.googleapis.com` to Claude's egress allowlist (claude.ai/settings/capabilities → Code execution → Allow network egress). The allowlist is baked into the session token at session start, **so it only works in a conversation started after that change** — it did not work in the one where it was added. `npm i firebase-tools @firebase/rules-unit-testing`, then `npx firebase setup:emulators:firestore`. Java 21 is already in the container. |
+| **Rules emulator** | ✅ **USED, 2026-07-29. `rules-test/` is in the repo: 24 tests, all green against rules 1.2.1.** This is the project's first automated test of anything. `cd rules-test && npm install && npm test`. ⚠️ It tests a COPY — `cp ../firestore-2.0.rules ./firestore.rules` before every run, and check that file against the console. Java 21 and the egress allowlist are both already in place; the allowlist is baked in at session start, so it only works in a conversation opened after that setting changed. |
 | Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice. |
 | **Item 5 — shared tiers** | ✅ **BUILT, AND PROVEN BETWEEN TWO REAL PEOPLE.** A colleague shared a tier with Jake; both saw the same document and toggled it live (TIER-3). No rules change was needed. **TIER-4…10 still unrun** — including the two that can lose data. |
 | `import.html` (item 9) | ❌ Not written. **The last thing before Katie moves.** |
@@ -52,6 +52,60 @@ He set the order himself on 2026-07-27: **rules → shared tiers → import**, o
 **Nico's board is still named `nico.m.wilson`** (created before the E38 rename fix). Settings → People → Rename fixes it once the web files are current.
 
 **Minor, unhurried:** `POLL_SECRET` and the service URL appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Two-minute env-var edit plus a Scheduler header update. Not urgent.
+
+### ITEM 9 — import.html IS BUILT (2026-07-29, Bimac)
+
+**Status: written and tested against the emulator with Katie's real 245-document export. Never run against live Firestore.** Two new files plus a test:
+
+| file | version | what it is |
+|---|---|---|
+| `import-transform.js` | 1.0.0 | **All the logic.** Pure functions over plain objects — no Firestore, no DOM, no `Date.now()` except through an argument. This is why item 9 could be tested at all. |
+| `import.html` | 1.0.0 | A form and a batch writer. Deliberately thin. |
+| `rules-test/import.test.mjs` | — | **18 assertions, all green**, including *all 157 writes accepted by rules 1.2.1* and *no document anywhere contains `undefined`*. |
+
+**Run it:** `EXPORT_JSON=/path/to/export.json npx firebase emulators:exec --only firestore "node import.test.mjs"`. The export is somebody's real board, so there is no fixture committed and never should be.
+
+**⚠️ THE INTERVIEW IS THE DESIGN, AND IT WAS JAKE'S.** The first plan was for Claude to ask three questions in chat and hardcode the answers. Jake's correction: *ask them on import, so she's part of the conversation — and it's factored in if anyone else ever branches off Tentacalendar and wants to join Octodo.* The page therefore asks seven questions, **all derived from the file, none hardcoded** — an export with no running clock is never asked about running clocks. Do not replace any of them with a constant.
+
+The questions, and why each one cannot be answered from the data:
+1. **Board name** — cosmetic, prefilled from the source.
+2. **A role per other member** — 1.x has a flat `memberEmails` array where everyone is equal. 2.0 has owner/editor/helper/viewer. This is pure invention and it has to be asked. One question per member, so it scales to any board.
+3. **Name the default project layout** — 1.x has ONE anonymous `stageTemplate`; 2.0's Pipeline tab is a library of *named* layouts. Naming it is the difference between a usable tab and an empty one. Jake spotted this; it was not in §4.5.
+4. **Running clocks** — leave open or close at import.
+5. **Sessions pointing at deleted projects** — skip (default) or keep.
+6. **Calendar tiers with no calendar id** — keep as anchor or convert to task. Katie's *Business* tier is one: `kind:"anchor"`, empty `gcalCalendarId`. It imports perfectly and stays empty forever.
+7. **`eventsCache`** — skip (default; the poll rebuilds it) or import.
+
+**⚠️ WRITE ORDER IS LOAD-BEARING.** Firestore evaluates rules for a batched write against the state **before** the batch, and every subcollection rule calls `get()` on `members/{me}`. So the board document and the owner's own key are written **and committed on their own, first**; everything else follows in 400-document batches. Batching all of it together denies all of it. Found in the emulator, and it is the reason the emulator was worth building.
+
+**Three transforms §4.5 does not mention**, found by reading the real export rather than the design doc:
+- **`memberEmails` array → `members` subcollection**, with roles invented via the interview.
+- **`gcalAuth: "service"`** — 2.0 anchor tiers carry it, 1.x tiers do not.
+- **E7 tier ranks use the COMPOSITE key `` `${wsId}:${tierId}` ``**, not the bare tierId. A bare key yields a per-user ordering that silently never loads. Asserted by IMPORT-3d.
+
+**`completedBy` is written as `null` on all finished work.** 1.x recorded *when* something was done and never *by whom*, and on a two-person board a guess is a coin flip. store.js 0.22.0 is explicit that inventing evidence is worse than recording none. The import page says this to the user rather than hiding it.
+
+**What the export contains (verified against the real file):** all 7 tiers with working-day masks, `timeless` (D126 predates the migration), and lead windows · all 99 tasks, with five fields genuinely optional — `notes` 70/99, `estimateMinutes` 44/99, `recurrence` 40/99, `spawnedNextAt` 33/99, `firstDueAt`/`rescheduleCount` 20/99 · all 17 projects, one lacking `workload` (the `?? 2` legacy fallback is real, not defensive) · **7 of 17 projects have hand-edited stage lists** (0, 8, 14, 18, 19 stages against a 13-stage template) and they travel intact · all three settings documents, including her 13-stage template with 🎆 on Publication · `projectTypes` is **empty** — she has no pipeline library, which is why question 3 matters.
+
+**⚠️ WHAT NO IMPORTER CAN CARRY, and the thing most likely to go wrong on flip day.** The export holds calendar **IDs**. It cannot hold calendar **permissions** — those live in Google Calendar, and **2.0 runs under a different service account**. Both the inbound calendars and the outbound mirror must be re-shared by hand. If they are not, **the tiers import perfectly and stay empty forever**, which is the worst failure shape available: no error, no warning, just nothing. `postImportChecklist()` puts this first and `import.html` prints it on completion.
+
+**RULES-6b settles who runs it:** a non-owner cannot write the board document, so §11's *"Katie adds Jake as an editor and he imports"* **cannot execute**. Katie signs in and runs it herself, or grants Co-owner. IMPORT-6a asserts the denial in the migration's own shape.
+
+**Not done:** never run for real. **The next session's opening task is a dry run on a throwaway Google account** — export a scratch 1.x board, import it, and walk the checklist. Everything above is emulator-true and browser-untested.
+
+---
+
+### RULES-TEST — the emulator suite (new 2026-07-29)
+
+**`rules-test/` — 24 tests, all green against rules 1.2.1.** Run it whenever the rules change, **before** publishing to the console. Full notes in `rules-test/README.md`, including the two traps that bit on its own first run (a missing `email_verified` claim makes every negative test pass for the wrong reason; a test that grants access poisons any later test using that identity as a negative control).
+
+**Two things it established that were previously only reasoned about:**
+
+1. **E41's defect is now a regression test.** RULES-1b…1e prove editor, helper, viewer and a dependent-on-their-own-board are all refused a workspace-document write. That is why the splash was undismissable, and it can never come back silently.
+
+2. ⚠️ **RULES-6b: AN EDITOR CANNOT WRITE `pollIntervalMinutes` TO THE WORKSPACE DOCUMENT.** §0a deduced this; it is now measured. **The E22(a)/E25 runbook step "Katie adds Jake as an editor and he imports" is not a preference, it is impossible.** On flip day Katie either grants **Co-owner**, or — simpler, and the recommendation — **runs `import.html` herself**, since she owns her board and needs nothing extra. Put this on the flip-day checklist rather than discovering it that morning.
+
+---
 
 ### E41 — ONBOARDING SYSTEM (built 1.32.0, repaired 1.32.1)
 

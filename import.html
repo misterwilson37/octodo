@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — import.html
+     Version 1.0.0 — item 9. Migrates a 1.x export into a fresh 2.0 board.
+
+     WHY THIS FILE IS THIN. Everything that DECIDES anything lives in
+     import-transform.js, which is a pure module with no Firestore and no DOM,
+     so it can be tested. rules-test/import.test.mjs runs it against the
+     emulator with a real export and the real rules — 18 assertions, including
+     that all 157 writes are accepted and that no document contains
+     `undefined`. This page is a form and a writer. Keep it that way: logic
+     that lands here is logic nobody can test.
+
+     ⚠️ WRITE ORDER IS LOAD-BEARING, NOT TIDINESS. Firestore evaluates rules
+     for a batched write against the state BEFORE the batch. Every rule on a
+     subcollection calls get() on members/{me}. So the board document and the
+     owner's own key must be written AND COMMITTED before anything else is
+     batched, or every subsequent write is denied by a rule reading a member
+     document that does not exist yet. This cost an afternoon to find in the
+     emulator; do not "optimise" it into one batch.
+
+     THE INTERVIEW IS THE POINT. Jake's design: 1.x has no roles, its default
+     project layout has no name, and an export can arrive with a running clock
+     and sessions pointing at deleted projects. Rather than bake one couple's
+     answers into a script, the page ASKS — so it works for whoever migrates
+     next, and the answers belong to the person whose board it is.
+     ============================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tentacalendar — Import a 1.x board</title>
+<style>
+  :root {
+    --bg:#0a0f14; --panel:#101822; --panel-2:#16212e; --ink:#dce7f0;
+    --ink-dim:#8fa3b5; --line:#1f2d3d; --accent:#4dd0c4; --danger:#ff6b6b;
+    --warn:#ffa94d; --ok:#69db7c; --radius:10px;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; padding:1.5rem; background:var(--bg); color:var(--ink);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  main { max-width:760px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 .2rem; }
+  h2 { font-size:1.05rem; margin:1.6rem 0 .6rem; color:var(--accent); }
+  .sub { color:var(--ink-dim); margin:0 0 1.5rem; }
+  section {
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:1.1rem; margin:0 0 1rem;
+  }
+  section[hidden] { display:none; }
+  button {
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:.5rem .9rem; font:inherit; cursor:pointer;
+  }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#06231f; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input[type=text] {
+    background:var(--bg); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:.45rem .6rem; font:inherit; width:100%; max-width:22rem;
+  }
+  .q { border-left:3px solid var(--accent); padding:.1rem 0 .1rem .9rem; margin:1.2rem 0; }
+  .q .label { font-weight:600; }
+  .q .help { color:var(--ink-dim); font-size:.87rem; margin:.35rem 0 .6rem; }
+  .opts { display:flex; flex-wrap:wrap; gap:.4rem; }
+  .opts label {
+    border:1px solid var(--line); border-radius:6px; padding:.35rem .7rem;
+    cursor:pointer; background:var(--bg); font-size:.9rem;
+  }
+  .opts label:has(input:checked) { border-color:var(--accent); background:var(--panel-2); color:var(--accent); }
+  .opts input { display:none; }
+  ul { margin:.4rem 0; padding-left:1.2rem; }
+  li { margin:.25rem 0; }
+  .err  { color:var(--danger); }
+  .warn { color:var(--warn); }
+  .ok   { color:var(--ok); }
+  .dim  { color:var(--ink-dim); }
+  code { background:var(--bg); padding:.1rem .35rem; border-radius:4px; font-size:.87em; }
+  table { border-collapse:collapse; width:100%; font-size:.9rem; margin:.5rem 0; }
+  td, th { text-align:left; padding:.3rem .5rem; border-bottom:1px solid var(--line); }
+  th { color:var(--ink-dim); font-weight:600; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  #bar { height:6px; background:var(--bg); border-radius:3px; overflow:hidden; margin:.7rem 0; }
+  #bar div { height:100%; width:0; background:var(--accent); transition:width .15s; }
+  .banner { font-size:.8rem; color:var(--ink-dim); margin-top:2rem; text-align:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🐙 Import a Tentacalendar 1.x board</h1>
+  <p class="sub">This reads an export file, asks you a handful of questions about it, shows you exactly what it will write, and only then writes it. Nothing is written until you press the last button.</p>
+
+  <!-- 1 — sign in -->
+  <section id="s-auth">
+    <h2>1 · Sign in</h2>
+    <p class="dim">Sign in as the person who should <b>own</b> the new board. Ownership is locked at creation and cannot be transferred, so this must be the right account — if you are migrating someone else's board, they sign in, not you.</p>
+    <p><button id="signin" class="primary">Sign in with Google</button></p>
+    <p id="who" class="ok" hidden></p>
+  </section>
+
+  <!-- 2 — file -->
+  <section id="s-file" hidden>
+    <h2>2 · Choose the export file</h2>
+    <p class="dim">The <code>.json</code> file that <code>export.html</code> downloaded from the 1.x app.</p>
+    <p><input type="file" id="file" accept=".json,application/json"></p>
+    <div id="parse"></div>
+  </section>
+
+  <!-- 3 — findings -->
+  <section id="s-check" hidden>
+    <h2>3 · What is in the file</h2>
+    <div id="counts"></div>
+    <div id="findings"></div>
+  </section>
+
+  <!-- 4 — interview -->
+  <section id="s-interview" hidden>
+    <h2>4 · A few decisions</h2>
+    <p class="dim">These cannot be worked out from the file. Every one has a sensible default, so you can read them and move on.</p>
+    <div id="questions"></div>
+    <p><button id="toPreview" class="primary">Show me what this will do →</button></p>
+  </section>
+
+  <!-- 5 — preview -->
+  <section id="s-preview" hidden>
+    <h2>5 · Preview</h2>
+    <div id="plan"></div>
+    <p><button id="run" class="primary">Write it</button>
+       <button id="back">← Change an answer</button></p>
+  </section>
+
+  <!-- 6 — result -->
+  <section id="s-done" hidden>
+    <h2>6 · Done</h2>
+    <div id="bar"><div></div></div>
+    <div id="result"></div>
+  </section>
+
+  <p class="banner">import.html 1.0.0 · transform <span id="tv"></span></p>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, writeBatch, collection }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
+import * as T from "./import-transform.js?v=1.0.0";
+
+const $ = s => document.querySelector(s);
+$("#tv").textContent = T.TRANSFORM_VERSION;
+
+const app  = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+let ME = null, DATA = null, V = null, QS = null, PLAN = null, WSID = null;
+
+// ---------- 1. auth ----------
+$("#signin").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => alert(e.message));
+onAuthStateChanged(auth, u => {
+  if (!u) return;
+  ME = (u.email || "").toLowerCase();
+  $("#who").textContent = `Signed in as ${ME} — this account will own the new board.`;
+  $("#who").hidden = false;
+  $("#signin").disabled = true;
+  $("#s-file").hidden = false;
+});
+
+// ---------- 2. file ----------
+$("#file").onchange = async ev => {
+  const f = ev.target.files?.[0];
+  if (!f) return;
+  reset();
+  let text;
+  try { text = await f.text(); }
+  catch { return say("#parse", `<p class="err">Could not read that file.</p>`); }
+
+  try { DATA = JSON.parse(text); }
+  catch (err) {
+    // The smart-quote case. A hand-redacted export can carry U+201C where a
+    // quote mark should be, and then the parse dies partway through. Point at
+    // the byte, because "invalid JSON" is not an actionable message.
+    const m = /position (\d+)/.exec(err.message);
+    let where = "";
+    if (m) {
+      const i = +m[1], from = Math.max(0, i - 60);
+      const snip = text.slice(from, i + 60).replace(/[<>&]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+      const line = text.slice(0, i).split("\n").length;
+      where = `<p class="dim">Line ${line}. The problem is at the caret:</p>
+               <pre style="background:var(--bg);padding:.6rem;border-radius:6px;overflow:auto;font-size:.8rem">${snip}</pre>
+               <p class="dim">If you edited this file by hand to remove client names, the usual cause is an editor
+               replacing a straight quote <code>"</code> with a curly one <code>“</code>. Re-do the edit in a plain
+               text editor with autocorrect off.</p>`;
+    }
+    return say("#parse", `<p class="err"><b>That file is not valid JSON.</b></p>${where}
+      <p class="dim">Nothing has been written. Nothing will be, until the file parses cleanly —
+      an importer that wrote the documents before the break would report success on a half-migrated board.</p>`);
+  }
+
+  V = T.validateExport(DATA);
+  say("#parse", `<p class="ok">Parsed cleanly.</p>`);
+  showFindings();
+};
+
+function showFindings() {
+  const rows = Object.entries(V.counts)
+    .map(([k, n]) => `<tr><td>${k}</td><td class="n">${n}</td></tr>`).join("");
+  say("#counts", `<table><tr><th>collection</th><th class="n">documents</th></tr>${rows}</table>`);
+
+  let h = "";
+  const list = (cls, items) => `<ul>${items.map(x => `<li class="${cls}">${x}</li>`).join("")}</ul>`;
+  if (V.errors.length)   h += `<p class="err"><b>This file cannot be imported as it stands:</b></p>${list("err", V.errors)}`;
+  if (V.warnings.length) h += `<p class="warn"><b>Worth knowing:</b></p>${list("warn", V.warnings)}`;
+  if (V.notes.length)    h += `<p class="dim"><b>Noticed:</b></p>${list("dim", V.notes)}`;
+  if (!h) h = `<p class="ok">Nothing unusual found.</p>`;
+  say("#findings", h);
+  $("#s-check").hidden = false;
+
+  if (!V.ok) return;
+  QS = T.buildInterview(DATA, ME, V);
+  renderQuestions();
+  $("#s-interview").hidden = false;
+}
+
+// ---------- 4. interview ----------
+function renderQuestions() {
+  $("#questions").innerHTML = QS.map((q, i) => {
+    const body = q.kind === "text"
+      ? `<input type="text" id="q${i}" value="${esc(q.default ?? "")}">`
+      : `<div class="opts">${q.options.map(o =>
+          `<label><input type="radio" name="q${i}" value="${esc(o.value)}"
+            ${o.value === q.default ? "checked" : ""}>${esc(o.label)}</label>`).join("")}</div>`;
+    return `<div class="q"><div class="label">${esc(q.label)}</div>
+            <div class="help">${q.help ? esc(q.help) : ""}</div>${body}</div>`;
+  }).join("");
+}
+
+function readAnswers() {
+  const a = {};
+  QS.forEach((q, i) => {
+    a[q.id] = q.kind === "text"
+      ? $(`#q${i}`).value
+      : (document.querySelector(`input[name="q${i}"]:checked`)?.value ?? q.default);
+  });
+  return a;
+}
+
+$("#toPreview").onclick = () => {
+  // A fresh id, so a second run never lands on top of a first.
+  WSID = doc(collection(db, "workspaces")).id;
+  PLAN = T.buildPlan(DATA, readAnswers(), { wsId: WSID, me: ME, now: Date.now() });
+  const byCol = {};
+  for (const w of PLAN.writes) {
+    const key = w.collection === "root" ? "users/{you}" : (w.path[1] || "the board document");
+    byCol[key] = (byCol[key] || 0) + 1;
+  }
+  const rows = Object.entries(byCol)
+    .map(([k, n]) => `<tr><td>${esc(k)}</td><td class="n">${n}</td></tr>`).join("");
+  const skipped = PLAN.skipped.eventsCache + PLAN.skipped.orphanSessions;
+  say("#plan", `
+    <p>A new board will be created at <code>${WSID}</code>, owned by <code>${esc(ME)}</code>.
+       Your existing boards are not touched.</p>
+    <table><tr><th>will write</th><th class="n">documents</th></tr>${rows}
+      <tr><td><b>total</b></td><td class="n"><b>${PLAN.writes.length}</b></td></tr></table>
+    ${skipped ? `<p class="dim">${skipped} document(s) deliberately skipped:
+      ${PLAN.skipped.eventsCache} cached calendar event(s), ${PLAN.skipped.orphanSessions} orphaned session(s).</p>` : ""}
+    <p class="warn">Read the number above. If it looks wrong, go back — this is the last stop.</p>`);
+  $("#s-preview").hidden = false;
+  $("#s-preview").scrollIntoView({ behavior: "smooth" });
+};
+
+$("#back").onclick = () => { $("#s-preview").hidden = true; $("#s-interview").scrollIntoView({ behavior: "smooth" }); };
+
+// ---------- 5. write ----------
+$("#run").onclick = async () => {
+  $("#run").disabled = $("#back").disabled = true;
+  $("#s-done").hidden = false;
+  $("#s-done").scrollIntoView({ behavior: "smooth" });
+  const bar = $("#bar div");
+  const done = n => { bar.style.width = Math.round(100 * n / PLAN.writes.length) + "%"; };
+
+  try {
+    // ⚠️ ORDER. The board document and the owner's key go first, on their own,
+    // and must COMMIT before anything else — every subcollection rule calls
+    // get() on members/{me}, and a batched write is evaluated against the
+    // state before the batch. Batching these with the rest denies all of it.
+    const head = PLAN.writes.slice(0, 2);
+    for (const w of head) await setDoc(doc(db, "workspaces", ...w.path), w.doc);
+    done(2);
+
+    // Everything else in chunks. 500 is the hard limit; 400 leaves room.
+    const rest = PLAN.writes.slice(2);
+    for (let i = 0; i < rest.length; i += 400) {
+      const chunk = rest.slice(i, i + 400);
+      const batch = writeBatch(db);
+      for (const w of chunk) {
+        const ref = w.collection === "root"
+          ? doc(db, "users", w.path[1])
+          : doc(db, "workspaces", ...w.path);
+        w.merge ? batch.set(ref, w.doc, { merge: true }) : batch.set(ref, w.doc);
+      }
+      await batch.commit();
+      done(2 + i + chunk.length);
+    }
+
+    const checklist = T.postImportChecklist(DATA, readAnswers());
+    say("#result", `
+      <p class="ok"><b>${PLAN.writes.length} documents written.</b> The board is at <code>${WSID}</code>
+         and is now the one you land on when you sign in.</p>
+      <h2>Before you call it done</h2>
+      <ul>${checklist.map(c => `<li>${esc(c)}</li>`).join("")}</ul>
+      <p class="dim">Two things this could not bring across, by nature rather than oversight.
+        <b>Calendar permissions</b> live in Google Calendar, not in your data, and 2.0 runs under a
+        different service account — so the grants must be redone by hand, and until they are, your
+        calendar tiers will import perfectly and stay empty.
+        <b>Who completed what</b> is blank on finished work: 1.x recorded when things were done and never
+        by whom, and a guess on a two-person board is a coin flip. New work records it from here on.</p>
+      <p><button onclick="location.href='./index.html'" class="primary">Open the board →</button></p>`);
+  } catch (err) {
+    say("#result", `
+      <p class="err"><b>The import stopped: ${esc(err.message)}</b></p>
+      <p>The board at <code>${WSID}</code> is <b>partly written</b>. Do not re-run this page onto it —
+         delete that workspace document and its subcollections in the Firebase console first, then start again.
+         A second run generates a fresh id and will not clean up after the first.</p>
+      <p class="dim">If this says <code>permission-denied</code>, the likeliest cause is that the account you
+         signed in with is not the account that should own the board. Ownership is fixed at creation.</p>`);
+  }
+};
+
+// ---------- helpers ----------
+function say(sel, html) { $(sel).innerHTML = html; }
+function esc(s) { return String(s).replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c])); }
+function reset() {
+  for (const s of ["#s-check", "#s-interview", "#s-preview", "#s-done"]) $(s).hidden = true;
+  DATA = V = QS = PLAN = WSID = null;
+  $("#run").disabled = $("#back").disabled = false;
+  $("#bar div").style.width = "0";
+}
+</script>
+</body>
+</html>
