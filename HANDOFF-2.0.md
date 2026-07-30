@@ -1,27 +1,33 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.22.0** | Last updated: 2026-07-29 | **App: 1.33.0 · store 0.24.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.50.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.1.0** — the web app is deployed. ⚠️ **THE TIER MIS-ROUTING BUG IS FIXED IN store 0.24.0 AND NEEDS PUSHING — see §0b.** The two board routers now REFUSE an unresolved destination instead of writing to the active board. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1**; state lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
+**Document version 0.23.0** · Last updated 2026-07-30
 
-> **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
->
-> **Firestore evaluates EVERY matching `match` block and grants access if ANY `allow` is true.** There is no "more specific rule wins." A narrow rule **cannot take back** what a broader one has already given.
->
-> Rules 1.0.0 through 1.1.1 ended with a catch-all — `match /{subcollection}/{docId} { allow write: if canWrite(wsId); }` — sitting at the same depth as `match /members/{email}`. So a write to a member document matched **both**, and the union meant **any editor could rewrite the member list**: promote themselves to owner, remove the person who invited them. Every careful clause about who hands out keys was reachable around, one path over. The same union made `allow delete: if false` on the activity log decorative.
->
-> Fixed in **1.2.1** by deleting the wildcard and naming the collections. **The cost is deliberate: a collection with no clause is now denied.** That is the correct direction to fail; the wildcard failed the other way, silently, for three versions. **If you add a collection, add its clause** — and see the ⚠️ on item 9 below, because the import is the most likely place to trip this.
+| | |
+|---|---|
+| **Versions** | app 1.34.0 · store 0.25.0 · queue 0.20.0 · css 0.56.0 · html 0.51.0 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.1.0 |
+| **Deployed** | app 1.33.0 / store 0.24.0 / whereis 1.1.0 are live. **1.34.0 / 0.25.0 / css 0.56.0 are NOT** — per-user tier colour, untested. |
+| **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
+| **Next** | Owner rename-for-everyone (Jake asked 2026-07-30). Then per-user hide, delete-refuses-when-shared, orphan sweep. |
+| **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
-> **⚠️ THE PREVIOUS "read one thing," still true and still load-bearing (rules 1.1.1):** a rule that matches on the document ID could never have secured a QUERY. `match /{path=**}/members/{email}` with `email == me()` is correct for a GET of one named document and **meaningless for a query** — a query names no documents, so Firestore evaluates the rule before reading anything, the ID wildcard is unbound, and the whole query is REFUSED as `permission-denied`. Not "returns nothing": refused. **A list rule must test a FIELD, and the client query must filter on that same field.**
+### ⚠️ Three things to do before you write a line
 
-> **⚠️ RULES ARE A SEPARATE ACTION FROM PUSHING FILES.** They live in the console, not the repo. **Select-all-and-REPLACE** in the rules editor — appending is what took the site down on 2026-07-12. And note the console **no longer has an inline Rules Playground**: its "Develop & Test" button now only links to the Emulator Suite docs. Test rules with the local emulator (see §0a) or not at all.
+**1. `node version-check.mjs`.** Before handing Jake anything. Every file
+carries its version twice — a banner and a constant — and they have drifted
+**four times**. The last drift cost a deploy: Jake opened `store.js`, saw the
+version he already had, and reasonably concluded nothing had been sent, so a
+routing fix he was waiting on sat unshipped for a session. Prose warnings failed
+three times; this is the same warning as a thing that fails.
 
-Live 1.x: `tentacalendar.misterwilson.org` (Katie's, untouched). Dev 2.0: `misterwilson37.github.io/octodo`.
-Current instance: **Hapalochlaena** (Claude Opus 5, 17th instance / 15th named) — *Hapalochlaena lunulata*, the blue-ringed octopus, for the shape of the bug this session existed to close. Its bite is **painless and goes unnoticed** until it is far too late, which is the mis-routed write exactly: `addTask` resolved, the UI drew the task, the author saw it forever, and the person it was meant for never could. And the rings only **light up when it is provoked** — an animal that is invisible until it decides not to be. That is the fix: a router that cannot determine its destination now shows itself instead of quietly guessing.
-Previous instance: **Bimac** (Claude Opus 5, 16th instance / 14th named) — *Octopus bimaculoides*, the California two-spot, for two reasons that both landed this session: it wears **false eyespots**, two dark marks that look exactly like eyes and are not, and it is the **laboratory octopus**, the species kept precisely because it is the one you can run real tests on. The 15th instance (Claude Haiku, unnamed — it never read this file) shipped E41 as false eyespots: four summary documents, four version banners that moved without their constants, and a tour system in which no tour could complete. This session was testing.
-Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus, Briareus, Argonauta, Bimac, Hapalochlaena**.
+**2. Headers are short now — keep them short.** They had grown to 296 lines in
+`store.js` and **949 in `app.js`**, which put each banner ~900 lines from its
+constant. History moved to `CHANGELOG.md`; each constant now sits on the line
+directly below its banner. **Do not start a new changelog in a header.**
 
-**Bimac's session, in one paragraph, for whoever is next.** Repaired E41 (ten defects, four of them version constants that had moved in a banner but not in code, one of them a decapitated `saveConfig` that had silently broken the calendar poll's own setting). Built `rules-test/` — 24 assertions, the project's first automated test of anything. Built `import.html` + `import-transform.js` + 18 more assertions, all green against Katie's real 245-document export. Built `whereis.html` and used it to localise the tier-sharing bug to one line of `store.js`. **What went badly: communication.** Long replies with instructions buried in the middle, plans switched without being stated, and Jake sent to hand-encode Firebase console URLs containing a `PROJECT` placeholder whose value (`fantasktic-octodo`) was in my own emulator commands all session. If you take one thing from this: **state the plan in one line before doing it, put the instruction on its own line, and never ask him to go find a value you already have.**
-
-**Hapalochlaena's session, in one paragraph, for whoever is next.** Verified the previous handoff against the code before touching anything — every claim in §0a held up, line numbers had drifted about forty lines, and all fourteen version constants agreed with the banner. **The reported hallucination was in the conversation, not the repo; do not go looking for phantom defects.** Fixed the tier mis-routing bug (§0b) and found that the fallback was in **two** places rather than the one the handoff named, the second reachable through `restoreDoc`, which creates. Closed one provable routing race (follow-up chains), two swallowed-error defects in `saveTier`, one latent `undefined` write, and both quick items — the black-on-black chip and the descending role dropdown. **What I could NOT do: settle which race originally fired.** I found a third candidate that fits Jake's evidence better than either of Bimac's two and said so rather than picking one; the fix is correct under all three, which is why it was worth shipping without the answer. Nothing was deployed and nothing was browser-tested.
+**3. `whereis.html`, not the Firebase console,** for any "where does this live"
+question. The console's subcollection list is a sample, not an inventory — it
+showed `members, settings` for boards that demonstrably held tiers and tasks,
+and two lines of investigation were wasted trusting it.
 
 > ⚠️ **CHECK WHICH MODEL YOU ARE BEFORE A STRUCTURAL SESSION.** The 15th instance was Haiku, on a 340KB app with a 90KB handoff it did not open. The failure was not one bad edit; it was plausible-looking work at every level at once. If you are a small model and the task is "add a subsystem to this app," say so and ask for a bigger one.
 
@@ -60,153 +66,67 @@ He set the order himself on 2026-07-27: **rules → shared tiers → import**, o
 
 **Minor, unhurried:** `POLL_SECRET` and the service URL appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Two-minute env-var edit plus a Scheduler header update. Not urgent.
 
-### 0b. THE TIER MIS-ROUTING BUG — FIXED IN store 0.24.0 (2026-07-29, Hapalochlaena)
+### 0b. THE TIER MIS-ROUTING BUG — FIXED, store 0.24.0 (Hapalochlaena)
 
-**Fixed in code, syntax-checked, NEVER PUSHED AND NEVER RUN IN A BROWSER.** The
-first job of the next session is to deploy it and run TIER-5 and TIER-10.
+**Was:** a task typed into a shared tier landed on the author's own board. It
+resolved, drew, and was invisible to the person it was for — writing to your own
+board is always permitted, so nothing reported a problem.
 
-**What it was.** sumnerk12 makes a tier, shares it with gmail, also gives gmail
-a key to the board. gmail types a task into the shared tier. gmail sees it;
-sumnerk12 never does. Upgrading gmail to editor fixed NEW tasks and did not
-rescue the old one — because changing a role never moves a document. This was
-never a visibility failure: the document was in the wrong collection.
+**Cause:** both board resolvers ended `|| ws()`, falling back to the ACTIVE
+board when the ownership map had no entry. **The previous handoff named only
+`wsOfTier`; `wsOf` had the same fallback and is worse — `restoreDoc` routes
+through it with `setDoc`, which CREATES.** That was TIER-10's data-loss case.
 
-**The mechanism.** Both board resolvers in `store.js` ended `|| ws()`. When the
-ownership map had no entry, the write went to the ACTIVE board — the author's
-own. `addTask` resolved, the UI drew the task, and nothing anywhere reported a
-problem, because writing to your own board is always permitted.
+**Fix:** both throw `octodo/unrouted`; every creator stamps the id it mints
+(a guess had been standing in for a stamp); `app.js` catches refusals globally
+because nearly every store call here is a bare `.then()`. Full detail in the
+`store.js` router comment — read that, not this.
 
-> ⚠️ **THE FALLBACK WAS IN TWO PLACES, NOT ONE. The previous handoff named only
-> `wsOfTier`.** `wsOf` carried the identical `|| ws()` and it is the more
-> dangerous of the pair, because **`restoreDoc` (D116's undo) routes through it
-> and uses `setDoc`, which CREATES.** Undo a delete on a shared tier with a cold
-> map and the task was silently re-created on your own board — correct on your
-> screen, still gone on theirs. **That is TIER-10's failure exactly**, and
-> TIER-10 is one of the two tests flagged *can lose data*. If you are ever
-> tempted to reinstate a fallback for one resolver, this is the reason both
-> must refuse.
+✅ **TIER-5 PASSED in a browser 2026-07-29.** `whereis.html` shows every task in
+the shared tier on the shared board, including a deliberate re-run of the
+original repro. **TIER-10 (undo on a SHARED tier) is still unrun.**
 
-**What shipped (store 0.24.0).** The recommended shape from §0a, followed:
+⚠️ **Root cause never established, and I did not pick one.** §0a offered two
+candidate races; `_where` is never pruned, which makes both self-healing *for
+routing* and argues the bad write came from a path that mints or resurrects an
+id — a follow-up chain, a recurrence spawn, or an undo — rather than the tier
+picker. **Hypothesis, not a finding.** The fix holds under all three.
+`window.octodoWhere()` answers it in one console call if it recurs.
 
-1. **`wsOf` and `wsOfTier` throw instead of guessing.** The error carries
-   `code: "octodo/unrouted"` and a sentence a person can act on, because their
-   only correct move is to retry. `isRouteError` is exported for callers.
-2. **Every creator stamps the id it mints, before returning** — `addTask`,
-   `addFollowUp`, the recurrence spawn, `addProject`, `addProjectWithStages`,
-   `clockIn`, `logSession`. The old comment justified the fallback as covering
-   "a document created in this same tick"; **a guess was standing in for a
-   stamp.** Removing the fallback without adding these would have broken real
-   writes.
-3. **app 1.33.0 adds a global `unhandledrejection` listener.** Nearly every
-   store call in `app.js` is a bare `.then()` with no `.catch()`, so a refused
-   write would have become an unhandled rejection — a console line nobody
-   reads and a task that silently was not created. **That is the same failure
-   shape as the bug, one layer up.** One net, so no future call site can
-   forget. Route errors get a dialog; everything else is logged and left alone.
-4. **`window.octodoWhere()`** is §0a's distinguishing experiment, left in the
-   file rather than added and removed. It prints `MERGE`, the known shared
-   boards, `_activeMembers`, and every tier the map can place.
+**Also fixed:** `saveTier`'s catch swallowed everything and blamed permissions;
+a latent `rank: undefined` that would have landed in that catch; `trackShared`
+updating `hidden` without recomputing the merge; `tierChip` black-on-black;
+role dropdown descending.
 
-**⚠️ ONE PROVABLE RACE THIS CLOSED, WHICH WAS NOT THE REPORTED BUG.**
-`onTaskFormSubmit` does `addTask(payload).then(ref => createFollowUpChain(ref.id,
-…))`, and `addFollowUp` routed through `wsOf` on an id that no snapshot had yet
-stamped. **Parent on the shared board, children on whichever board happened to
-be active.** It usually won, because the local optimistic snapshot usually beat
-the `.then()`. Usually.
-
-**⚠️ WHAT I DID NOT ESTABLISH, STATED PLAINLY.** §0a offered two candidate root
-causes and said not to guess between them. **I could not settle it by reading,
-and I did not pick one.** Worse for both candidates: `_where` **is never
-pruned**, so once a tier has been seen the stamp survives every later merge
-change — which makes both boot races self-healing *for routing*, and argues the
-offending write did not come from the tier picker at all. A **third candidate**
-fits the evidence better: a path that mints or resurrects an id rather than
-reading one from the picker — a follow-up chain, a recurrence spawn, or an undo.
-Jake's own title for the stranded task, *"Personal made & work deleted"*, reads
-that way. **That is a hypothesis and not a finding.** The fix is correct under
-all three, which is why it was worth shipping without the answer — but if you
-want the answer, `octodoWhere()` at the moment of a bad write is now one console
-call, and it should be run before anyone builds on top of this.
-
-**Also fixed in 0.24.0, all found while reading rather than reported:**
-
-- **`saveTier`'s catch swallowed everything and named one cause.** Any real
-  failure got the reassuring "no setup rights here" line — a save that silently
-  did not happen while the console said the tier was fine. Only
-  `permission-denied` is swallowed now; the rest re-throws.
-- **A latent `undefined` write in `saveTier`, closed before it fired.** The SDK
-  is built without `ignoreUndefinedProperties`, so a call omitting `rank` would
-  throw on `rank: undefined` → get swallowed by the catch above → become a
-  silent no-op blaming permissions. Today's only caller always sends a rank.
-  The next one would have met it. **This is the shape to watch for in this
-  file: a throw that lands in a catch that misreports it.**
-- **`trackShared` updated `hidden` without recomputing the merge.** `hidden` is
-  an input to `mergeSet`, so it must. Correct by luck today, because the caller
-  happens to `refreshMerge()` after its loop.
-
-**Both quick items from §0a are done, and both were confirmed in the code first
-(the handoff's line numbers had drifted ~40 lines, its mechanisms were exact):**
-
-- **`tierChip` now picks its own foreground.** `.chip` hardcodes `color:
-  #0a0f14` in the stylesheet and the function set only `background`, so Jake's
-  `#000000` tier was black on black. Rec. 709 luma, 0.55 threshold, inline in
-  `app.js` — **no CSS change, so css stays 0.55.1.** A malformed colour falls
-  back to the light foreground rather than throwing: a chip is decoration and
-  must not take a render down. **This was the stated prerequisite for per-user
-  colours, so that spec is now unblocked.**
-- **The role dropdown is ascending** (`app.js`, was line 1886, now ~1919):
-  `Can view, Can help, Can edit, Co-owner`. Least power first, so the
-  destructive end of the list is the end you have to travel to.
-
-> ⚠️ **THE DIV-BALANCE SHIP-CHECK HAS A PERMANENT FALSE POSITIVE. STRIP HTML
-> COMMENTS BEFORE COUNTING.** A naive count of `index.html` reports **170 open
-> against 169 close** and always has — the 170th is the literal text `<div>`
-> inside its own version-history comment, in the 0.40.0 entry that reads *"plus
-> one `<div>`, which is what E30 was for."* With comments stripped it is
-> **169/169, balanced**, and the untouched upload counts identically, so it
-> predates any edit you are about to make. Argonauta's session already lost
-> time to a false positive in this same check and wrote the rule that matters:
-> **a check that flags legal code stops being read, exactly as one that misses
-> stops being worth running.** The one-line fix, so nobody re-derives it:
-> `re.sub(r'<!--.*?-->', '', html, flags=re.S)` first, then count.
-
-**⚠️ WHO CHECKED IT OFF — THE FIELD EXISTS, THE UI DOES NOT.** Jake's first
-question on seeing shared tiers work was how to tell which of two people ticked
-something. `completedBy` has been written by `setTaskDone` since E9/store
-0.22.0 and is correct on every task completed since; **nothing in `app.js`
-renders it anywhere.** That surface is item 6 — the activity feed and kudos —
-and it is unbuilt, so until it exists `whereis.html` **1.1.0** is the only way
-to read it. Two blanks are honest and must not be "fixed": anything completed
-before E9 shipped, and **all** of Katie's 1.x history, which `import-transform`
-writes as null on purpose because 1.x recorded *when* and never *by whom*.
-
-**Not touched:** `queue.js`, `celebrate.js`, `config.js`, `tentacalendar.css`,
-the rules, `functions/`, `import.html`, `whereis.html`. **`rules-test/` was not
-re-run** — nothing in this drop touches the rules, but it costs two minutes and
-the next session should run it anyway before believing that.
+⚠️ **The stranded task is still stranded.** 0.24.0 stops new ones; it does not
+move the old one. Delete and retype it.
 
 ---
 
-### SPEC — PER-USER TIER COLOUR AND NAME (Jake's request, 2026-07-29, not built)
+### PER-USER TIER COLOUR AND NAME — BUILT, UNTESTED (app 1.34.0 · store 0.25.0)
 
-**The use case, in his words:** *"ELA8 doesn't need to call their tier ELA 8 — it's just ELA. But if I have ELA6, ELA7, and ELA8, I need to differentiate them."* The owner of three needs the numbers; the recipient of one does not. Same for colour — each person picks their own.
+`users/{email}.tierColors` / `.tierLabels`, composite-keyed `"wsId:tierId"` as
+the spec warned. `skinFor()` overwrites `name`/`color` before a tier leaves
+`subscribeTiers`, so every consumer gets it free; `canonName`/`canonColor` ride
+along for Settings' "shared as …" line. Applies only on your own board, same
+guard as `rankFor`. Clear the name box to drop your override.
 
-Today `name` and `color` live on the shared tier document, so a change propagates to everyone. That is not a bug, it is the only possible behaviour for one document; making it personal means an override on the profile, exactly as **E7** did for tier order:
+⚠️ **The whole feature is one branch in the Settings save loop** — see the
+comment there. Lose the `delete data.name` and the propagation bug returns
+looking identical.
 
-```
-users/{email}
-  tierRanks:  { "wsId:tierId": 2 }            // exists today
-  tierColors: { "wsId:tierId": "#39ff14" }    // new
-  tierLabels: { "wsId:tierId": "ELA" }        // new
-```
+⚠️ **Known limitation:** nobody can rename a shared tier for everyone, owner
+included. Correct for the ELA6/7/8 case; wrong if somebody shares a typo, where
+today's only fix is unshare/reshare. **Owner rename-for-everyone is queued as
+the next build** — Jake asked for it 2026-07-30.
 
-⚠️ **The composite `` `${wsId}:${tierId}` `` key, not the bare tierId** — same trap as `tierRanks`, and a bare key silently never loads.
+⚠️ **`TIER_RANKS` was never live.** Its comment claimed `subscribeMyProfile`
+kept it so; no such function exists or ever has. Both maps hydrate once at
+sign-in — one device does not follow another. **Third comment in this project
+found more confident than its code, after E41's and §0b's.**
 
-The owner's `name`/`color` on the tier document stay canonical; the profile holds an optional override, so a person who has set nothing keeps seeing what the owner chose. Three decisions that fall out:
-
-- **Show the original somewhere.** Settings → Tiers reading `ELA` with `shared as "ELA 8"` underneath, so "the ELA 8 one" is still a sentence you can say to each other.
-- **A rename is display-only.** Nothing may key off the tier name.
-- ~~**The contrast fix is a prerequisite,** not a follow-up.~~ **DONE in app 1.33.0 (§0b). This spec is unblocked.**
+**Never run in a browser.** Test: two accounts, one shared tier, rename on one
+side, confirm the other does not move.
 
 ---
 
