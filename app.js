@@ -1,5 +1,30 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
+// Version 1.34.0 — PER-USER TIER COLOUR AND NAME (UI half).
+//   Settings ▸ Tiers: on a SHARED row the name and colour you type are YOURS.
+//   ⚠️ THE WHOLE FEATURE IS ONE BRANCH IN THE SETTINGS SAVE LOOP — name and
+//   color are deleted from the payload before saveTier and sent to
+//   saveTierSkin instead. Lose that delete in a refactor and the propagation
+//   bug returns looking identical. Everything else (kind, days, carryover,
+//   calendar id, rank) is a property of the tier and still goes to the doc.
+//   "shared as «name»" + the owner's colour dot renders under every shared
+//   row. Empty the name box to clear your override and get theirs back.
+//
+// Version 1.33.0 — ROUTING REFUSALS BECOME VISIBLE; TWO OLD DEFECTS.
+//   A global unhandledrejection listener: nearly every store call here is a
+//   bare .then() with no .catch(), so store 0.24.0's refusals would have been
+//   console lines nobody reads — the same silent-failure shape as the bug
+//   being fixed, one layer up. One net, so no call site can forget.
+//   tierChip() now picks its own foreground (Rec. 709 luma, 0.55 threshold):
+//   .chip hardcodes near-black text and this set only background, so a black
+//   tier was black on black. Prerequisite for 1.34.0, not a follow-up.
+//   Role dropdown runs ascending — least power first, destructive end last.
+//   window.octodoWhere() exposed for live routing diagnosis.
+//
+// ⚠️ 1.34.0 AND 1.33.0 WERE FIRST DELIVERED WITH THIS BANNER STILL READING
+//   1.32.1 WHILE APP_VERSION READ 1.34.0. See store.js's banner for what that
+//   cost. THE HEADER IS THE DIFF.
+//
 // Version 1.32.1 — E41 REPAIR. 1.32.0 shipped the onboarding system in a
 // state where no part of it could complete. Fixed here:
 //
@@ -942,8 +967,9 @@ import {
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
   mergedWorkspaceIds,                                              // item 5
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
-  isRouteError, routingSnapshot                                    // 0.24.0
-} from "./store.js?v=0.24.0";
+  isRouteError, routingSnapshot,                                   // 0.24.0
+  saveTierSkin                                                     // 0.25.0
+} from "./store.js?v=0.25.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -954,7 +980,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.33.0";
+export const APP_VERSION = "1.34.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -6673,6 +6699,15 @@ function tierEditorRow(t, isNew) {
   const row = document.createElement("div");
   row.className = "tier-row";
   row.dataset.id = t.id || "";
+  // 1.34.0 — the save loop needs three facts the DOM does not otherwise carry:
+  // whether this tier is shared, which board it lives on (the skin key is
+  // composite), and what the OWNER called it, so a name left untouched saves
+  // no override at all rather than freezing today's owner name into your
+  // profile forever.
+  row.dataset.shared = t.shared ? "1" : "";
+  row.dataset.ws = t.wsId || "";
+  row.dataset.canonName = t.canonName ?? t.name ?? "";
+  row.dataset.canonColor = t.canonColor ?? t.color ?? "";
   // D60: which days count for this tier — reschedule targets, project
   // date interception, and stage-offset math all follow these toggles.
   const allowed = new Set((Array.isArray(t.allowedDays) && t.allowedDays.length) ? t.allowedDays : [1, 2, 3, 4, 5]);
@@ -6694,6 +6729,8 @@ function tierEditorRow(t, isNew) {
     <button class="t-share" title="Share this tier with somebody">🤝</button>
     <button class="t-del" title="Delete tier">✕</button>
     <span class="t-days" title="Working days for this tier: reschedules land on these days, project dates outside them get intercepted, and pipeline offsets only count them. Weekend jobs? Check Sa/Su." ${t.kind === "anchor" ? "hidden" : ""}>${dayToggles}</span>
+    ${t.shared && t.id ? `<span class="t-canon" title="What the tier's owner calls it. The name and colour above are yours alone — clear the name to go back to theirs.">shared as “${esc(t.canonName ?? t.name ?? "")}”
+      <span class="t-canon-dot" style="background:${esc(t.canonColor ?? t.color ?? "#666")}"></span></span>` : ""}
     <input class="t-cal" type="text" value="${esc(t.gcalCalendarId || "")}"
       placeholder="Google Calendar ID — GCal ⚙️ → pick calendar → 'Integrate calendar' → Calendar ID"
       title="Which Google Calendar feeds this tier. calendar.google.com → ⚙️ Settings → click the calendar → 'Integrate calendar' → Calendar ID. Your main personal calendar's ID is just your Gmail address."
@@ -7035,6 +7072,28 @@ function onSaveSettings() {
       allowedDays
     };
     if (kind === "anchor") data.defaultLeadWindowMinutes = 30;
+
+    // ---- PER-USER TIER SKIN (app 1.34.0) ----
+    // ⚠️ THE WHOLE FEATURE LIVES IN THIS BRANCH. On a SHARED tier the name and
+    // colour you typed are YOURS and must never reach the tier document —
+    // pushing them there is precisely the propagation Jake reported, where
+    // renaming ELA 8 to ELA renamed it for the owner too. Everything else in
+    // `data` (kind, days, carryover, calendar id, rank) is a property of the
+    // tier itself and still goes to the document exactly as before.
+    //
+    // A blank name clears the override rather than saving "Untitled" as your
+    // private label, so emptying the box is how you get the owner's name back.
+    const shared = row.dataset.shared === "1";
+    if (shared && row.dataset.id) {
+      const typedName = row.querySelector(".t-name").value.trim();
+      const typedColor = row.querySelector(".t-color").value;
+      saveTierSkin(row.dataset.ws, row.dataset.id, {
+        label: typedName && typedName !== row.dataset.canonName ? typedName : null,
+        color: typedColor && typedColor.toLowerCase() !== (row.dataset.canonColor || "").toLowerCase() ? typedColor : null
+      });
+      delete data.name;
+      delete data.color;
+    }
     saveTier(row.dataset.id || null, data);
   }
   // D124 — persist the whole pipeline library. Capture the visible editor
