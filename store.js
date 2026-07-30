@@ -268,12 +268,12 @@ import {
 import {
   getFirestore, doc, collection, collectionGroup, getDoc, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp,
-  writeBatch
+  writeBatch, deleteField
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.24.0";
+export const STORE_VERSION = "0.25.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -290,9 +290,36 @@ let ME = null;
  *  merge rule below needs to know when you are standing in your own house. */
 let HOME_WS = null;
 /** E7 — this user's cross-workspace tier ordering: "wsId:tierId" -> rank.
- *  The ONLY place a user's opinion about tier order lives. Kept live by
- *  subscribeMyProfile so a change on one device reorders the other. */
+ *  The ONLY place a user's opinion about tier order lives.
+ *  ⚠️ Hydrated ONCE by resolveWorkspace at sign-in. An earlier version of this
+ *  comment said it was "kept live by subscribeMyProfile"; no such function
+ *  exists or ever has. A reorder on one device does not move another until it
+ *  reloads. Corrected 0.25.0. */
 let TIER_RANKS = {};
+
+/**
+ * PER-USER TIER SKIN — this user's private name and colour for a tier,
+ * keyed "wsId:tierId" exactly as TIER_RANKS is.
+ *
+ * ⚠️ THE COMPOSITE KEY IS NOT OPTIONAL. A bare tierId here silently never
+ * loads — the same trap tierRanks documents, and the reason this cache is
+ * deliberately the same shape rather than a cleverer one.
+ *
+ * Why it exists: name and color live ON the shared tier document, so one
+ * document means one name for everybody. That is not a bug, it is the only
+ * possible behaviour for one document — so making it personal has to be an
+ * overlay on the profile, never a second copy of the tier. Jake's case: the
+ * owner of ELA6/ELA7/ELA8 needs the numbers; the colleague who receives one
+ * of them just calls it ELA.
+ *
+ * ⚠️ HYDRATED ONCE AT SIGN-IN, NOT LIVE — and neither is TIER_RANKS. The
+ * comment above TIER_RANKS claims it is "kept live by subscribeMyProfile".
+ * THERE IS NO subscribeMyProfile. It has never existed in this file. That
+ * comment was wrong before this feature and is corrected below; the practical
+ * consequence for both maps is that changing your order or your colour on one
+ * device does not move the other until it reloads.
+ */
+let TIER_SKINS = { colors: {}, labels: {} };
 
 /** E41 — this user's onboarding progress, hydrated from users/{email} at
  *  sign-in and written back through the three helpers at the foot of this
@@ -606,6 +633,7 @@ function resetMergeState() {
   MERGE = []; _activeMembers = new Set();
   _shared.clear(); _wsCache.clear();
   TIER_RANKS = {};
+  TIER_SKINS = { colors: {}, labels: {} };
   ONBOARDING = { splashDone: false, tours: {}, hints: {} };   // E41
   for (const m of Object.values(_where)) m.clear();
 }
@@ -678,6 +706,10 @@ async function resolveWorkspace(user) {
   if (usnap.exists()) {
     HOME_WS = usnap.data().homeWorkspaceId || null;
     TIER_RANKS = usnap.data().tierRanks || {};
+    TIER_SKINS = {                                  // 0.25.0 — free ride on the same read
+      colors: usnap.data().tierColors || {},
+      labels: usnap.data().tierLabels || {}
+    };
     // E41 — free ride on a read that was already happening. `onboardingDone`
     // is E16/§10.2's own field and outranks the newer sub-object: anyone who
     // finished onboarding under the old flag is not asked to do it again.
@@ -814,6 +846,8 @@ async function createPersonalWorkspace(user, uref, userExists) {
   if (!userExists) {                // never stomp an existing profile's fields
     profile.createdAt = now;
     profile.tierRanks = {};         // E7 — per-user, cross-workspace tier order
+    profile.tierColors = {};        // 0.25.0 — per-user tier skin, same key shape
+    profile.tierLabels = {};
     profile.lastSeenActivityAt = now;
     profile.onboardingDone = false; // E16/§10.2 — gates the walkthrough
   }
@@ -1464,7 +1498,13 @@ export function subscribeTiers(cb) {
       }))), "tier")],
     tiers => {
       const viewer = viewerEmail();
-      const ranked = tiers.map(t => {
+      const ranked = tiers.map(t0 => {
+        // 0.25.0 — the skin is applied FIRST and overwrites `name`/`color`, so
+        // every consumer downstream (chips, swatches, the queue, the project
+        // form) shows your version without knowing this feature exists. The
+        // owner's originals ride along as canonName/canonColor for the one
+        // place that must show both: Settings ▸ Tiers.
+        const t = skinFor(t0, viewer);
         const r = rankFor(t, viewer);
         return (r == null) ? t : { ...t, rank: r };
       });
@@ -1506,6 +1546,62 @@ function rankFor(tier, viewer) {
     if (theirs != null) return theirs;
   }
   return null;   // the document's own rank stands
+}
+
+/**
+ * Dress a tier in this user's private name and colour.
+ *
+ * ⚠️ ONLY WHEN YOU ARE LOOKING AT YOUR OWN DAY. Visiting somebody's board is
+ * supposed to be an honest picture of THEIR load, and a tier wearing your
+ * private label in their house would be a lie in the same way a secretly-mine
+ * priority would be (§4.2). Same guard as rankFor's, deliberately.
+ *
+ * Always returns a tier carrying canonName/canonColor — the owner's originals
+ * — whether or not an override exists, so no caller has to branch.
+ */
+function skinFor(tier, viewer) {
+  const out = { ...tier, canonName: tier.name, canonColor: tier.color, skinned: false };
+  if (viewer !== ME || ACTIVE_WS !== HOME_WS) return out;
+  const key = `${tier.wsId}:${tier.id}`;
+  const label = TIER_SKINS.labels[key];
+  const color = TIER_SKINS.colors[key];
+  if (label) { out.name = label; out.skinned = true; }
+  if (color) { out.color = color; out.skinned = true; }
+  return out;
+}
+
+/**
+ * Save (or clear) this user's private name and colour for one tier.
+ *
+ * Pass null/"" for either field to CLEAR that override and fall back to the
+ * owner's original — which is the only escape hatch there is, and the reason
+ * Settings shows "shared as …" underneath. A person who has never set
+ * anything has no entry here and sees exactly what the owner chose.
+ *
+ * ⚠️ WRITES TO users/{me} AND NOWHERE ELSE. Nothing here may touch the tier
+ * document; that is the whole point of the feature. Firestore has no "delete
+ * one map key" in a merge write, so clearing uses deleteField().
+ */
+export async function saveTierSkin(wsId, tierId, { label, color } = {}) {
+  if (!ME || !wsId || !tierId) return;
+  const key = `${wsId}:${tierId}`;
+  const patch = {};
+  if (label) { TIER_SKINS.labels[key] = label; patch[`tierLabels.${key}`] = label; }
+  else       { delete TIER_SKINS.labels[key]; patch[`tierLabels.${key}`] = deleteField(); }
+  if (color) { TIER_SKINS.colors[key] = color; patch[`tierColors.${key}`] = color; }
+  else       { delete TIER_SKINS.colors[key]; patch[`tierColors.${key}`] = deleteField(); }
+  try {
+    await setDoc(doc(db, "users", ME), {}, { merge: true });   // the doc may predate these fields
+    await updateDoc(doc(db, "users", ME), patch);
+  } catch (err) {
+    console.warn("[store] could not save your name/colour for this tier:", err);
+  }
+}
+
+/** What the owner actually called it — for Settings' "shared as …" line. */
+export function tierSkinOf(wsId, tierId) {
+  const key = `${wsId}:${tierId}`;
+  return { label: TIER_SKINS.labels[key] || null, color: TIER_SKINS.colors[key] || null };
 }
 
 /** E7 — record this user's opinion of where a tier belongs in THEIR day.
