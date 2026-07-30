@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — whereis.html
-     Version 1.0.0 — a read-only diagnostic. Answers "where does this
+     Version 1.1.0 — adds the "checked off by" column. The field (E9's
+     completedBy) has been written by setTaskDone since store 0.22.0 and this
+     page simply never rendered it, so on a shared tier there was no way to
+     tell which of two people had ticked something. A BLANK IS HONEST, NOT A
+     GAP: anything completed before E9 shipped has completedBy:null, and
+     import-transform writes null for ALL of Katie's 1.x history on purpose —
+     1.x recorded when something was done and never by whom, and on a
+     two-person board a guess is a coin flip.
+
+     (prev) Version 1.0.0 — a read-only diagnostic. Answers "where does this
      document actually live", which the Firebase console cannot reliably do
      because its subcollection list is a sample, not an inventory.
 
@@ -138,6 +147,7 @@ $("#go").onclick = async () => {
       title: t.title, taskWs: b.wsId, tierId: t.tierId,
       tierWs: home, tier: tierName.get(t.tierId) || null,
       by: t.createdBy, done: t.completedAt ? "done" : "",
+      doneBy: t.completedAt ? (t.completedBy || null) : null,
       bad: home ? home !== b.wsId : "unknown"
     });
   }
@@ -173,7 +183,7 @@ $("#go").onclick = async () => {
         <td>${esc(label(r.taskWs))}<br><code>${esc(r.taskWs)}</code></td>
         <td>${esc(r.tier || "—")}<br><code>${esc(r.tierId)}</code></td>
         <td>${r.tierWs ? esc(label(r.tierWs)) + `<br><code>${esc(r.tierWs)}</code>` : `<span class="bad">not visible to you</span>`}</td>
-        <td class="dim">${esc(r.by || "")} ${esc(r.done)}</td></tr>`).join("")
+        <td class="dim">made by ${esc(r.by || "?")}${r.done ? ` · checked off by ${esc(r.doneBy || "not recorded")}` : ""}</td></tr>`).join("")
     );
   }
 
@@ -198,13 +208,17 @@ $("#go").onclick = async () => {
   h += `<h2>Every task (${rows.length})</h2>
         <p><input id="filter" placeholder="filter by title…"> <button class="ghost" id="clear">clear</button></p>`
     + `<div id="tasktbl">` + tbl(
-    ["", "task", "board", "tier", "created by"],
+    ["", "task", "board", "tier", "created by", "checked off by"],
     rows.map(r => `<tr class="${r.bad === true ? "bad" : ""}" data-t="${esc((r.title||"").toLowerCase())}">
       <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
       <td>${esc(r.title)} <span class="dim">${esc(r.done)}</span></td>
       <td>${esc(label(r.taskWs))}</td>
       <td>${esc(r.tier || r.tierId)}</td>
-      <td class="dim">${esc(r.by || "")}</td></tr>`).join("")
+      <td class="dim">${esc(r.by || "")}</td>
+      <td class="dim">${r.done
+          ? (r.doneBy ? esc(r.doneBy)
+                      : '<span title="Completed before E9 shipped, or imported from 1.x, which never recorded who.">not recorded</span>')
+          : ""}</td></tr>`).join("")
   ) + `</div>`;
 
   $("#out").innerHTML = h;
