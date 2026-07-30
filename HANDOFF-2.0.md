@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.20.0** | Last updated: 2026-07-29 | **App: 1.32.1 · store 0.23.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.49.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0** — the web app is deployed. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1.** ⚠️ **If a board is running 1.32.0/0.23.0/0.55.0/0.49.0, it has a live regression in `saveConfig` — see §E41.** State lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
+**Document version: 0.21.0** | Last updated: 2026-07-29 | **App: 1.32.1 · store 0.23.1 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.49.1 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.0.0** — the web app is deployed. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1.** ⚠️ **If a board is running 1.32.0/0.23.0/0.55.0/0.49.0, it has a live regression in `saveConfig` — see §E41.** State lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
 
 > **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
@@ -17,6 +17,8 @@
 Live 1.x: `tentacalendar.misterwilson.org` (Katie's, untouched). Dev 2.0: `misterwilson37.github.io/octodo`.
 Current instance: **Bimac** (Claude Opus 5, 16th instance / 14th named) — *Octopus bimaculoides*, the California two-spot, for two reasons that both landed this session: it wears **false eyespots**, two dark marks that look exactly like eyes and are not, and it is the **laboratory octopus**, the species kept precisely because it is the one you can run real tests on. The 15th instance (Claude Haiku, unnamed — it never read this file) shipped E41 as false eyespots: four summary documents, four version banners that moved without their constants, and a tour system in which no tour could complete. This session was testing.
 Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus, Briareus, Argonauta, Bimac**.
+
+**Bimac's session, in one paragraph, for whoever is next.** Repaired E41 (ten defects, four of them version constants that had moved in a banner but not in code, one of them a decapitated `saveConfig` that had silently broken the calendar poll's own setting). Built `rules-test/` — 24 assertions, the project's first automated test of anything. Built `import.html` + `import-transform.js` + 18 more assertions, all green against Katie's real 245-document export. Built `whereis.html` and used it to localise the tier-sharing bug to one line of `store.js`. **What went badly: communication.** Long replies with instructions buried in the middle, plans switched without being stated, and Jake sent to hand-encode Firebase console URLs containing a `PROJECT` placeholder whose value (`fantasktic-octodo`) was in my own emulator commands all session. If you take one thing from this: **state the plan in one line before doing it, put the instruction on its own line, and never ask him to go find a value you already have.**
 
 > ⚠️ **CHECK WHICH MODEL YOU ARE BEFORE A STRUCTURAL SESSION.** The 15th instance was Haiku, on a 340KB app with a 90KB handoff it did not open. The failure was not one bad edit; it was plausible-looking work at every level at once. If you are a small model and the task is "add a subsystem to this app," say so and ask for a bigger one.
 
@@ -52,6 +54,76 @@ He set the order himself on 2026-07-27: **rules → shared tiers → import**, o
 **Nico's board is still named `nico.m.wilson`** (created before the E38 rename fix). Settings → People → Rename fixes it once the web files are current.
 
 **Minor, unhurried:** `POLL_SECRET` and the service URL appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Two-minute env-var edit plus a Scheduler header update. Not urgent.
+
+### ⚠️ OPEN BUG — TIER SHARING MIS-ROUTES A TASK (found and localised 2026-07-29, NOT FIXED)
+
+**This is the next session's first job. It is localised to one line.**
+
+**Reproduction, as Jake ran it.** sumnerk12 makes a tier, shares it with gmail, also gives gmail a key to the board. gmail types a task into the shared tier. gmail sees it; sumnerk12 never does. Upgrading gmail to editor fixes NEW tasks and does not rescue the old one.
+
+**Confirmed by `whereis.html` from both accounts.** One task is provably in the wrong place:
+
+| task | sits in board | its tier | the tier's real board |
+|---|---|---|---|
+| `Personal made & work deleted` | `9LyjpmkTEBtIGOjvRIwE` — gmail's **own personal** board | `n1hhwdqhG5mgth707TDL` | `VzrwrofAWAY3xFRbCmtv` — the **shared** board |
+
+Everything created afterwards routed correctly. Changing a role never moves a document, which is why the original stayed stranded — it is not a visibility failure, the document is in the wrong collection.
+
+**The mechanism, exactly.** `store.js:398`:
+
+```js
+const wsOfTier = tierId => _where.tiers.get(tierId) || ws();
+```
+
+`_where.tiers` is a cache filled **asynchronously** inside `fanout()` as snapshots arrive (`store.js:426`). `ws()` is `ACTIVE_WS` — the writer's own board. So when the mapping is absent at the instant of the write, the task lands on the author's personal board and **nothing anywhere reports a problem**. addTask succeeds, the UI shows the task, the author sees it forever, and the person it was meant for never can.
+
+**⚠️ THE FIX IS PROBABLY NOT "POPULATE THE CACHE SOONER." It is that this fallback should not exist.** A routing rule that cannot determine the destination must refuse, not guess — writing to the wrong board silently is strictly worse than an error the person can see. Recommended shape: `wsOfTier` returns null on a miss, and `addTask`/`addProject` throw a visible "still loading, try again" rather than writing. Then the race becomes an annoyance instead of data in the wrong place.
+
+**Two candidate root causes for the miss. DO NOT GUESS BETWEEN THEM — the emulator can now settle it.**
+
+1. **A boot race.** `subscribeBoard()` calls `mergeSet()`, which reads `_shared`; `_shared` is filled by `subscribeMyWorkspaces`'s first snapshot. If the board binds before that snapshot lands, MERGE omits the shared workspace, `fanout` never subscribes to it, and `noteWhere` never runs for that tier.
+2. **`mergeSet()` excluded it on purpose.** `store.js`'s `mergeSet` includes a shared board only if `atHome || [..._activeMembers].some(e => e !== ME && s.members.has(e))`. Check whether `_activeMembers` was populated at that moment — the same ordering question, one layer down.
+
+Both produce identical symptoms. The distinguishing experiment: instrument `wsOfTier` to log `tierId`, the cache hit/miss, and `MERGE` at the moment of a write, then create a task in a shared tier immediately after a cold load.
+
+**Related, and quick:**
+- **`tierChip()` (`app.js:2664`) sets `background` from `tier.color` and never sets `color`.** Jake's test tier is literally `#000000`, so the chip is black on black. No luminance logic exists anywhere. Fix it before per-user colours ship (below), because that feature invites people to choose dark colours.
+- **The role dropdown is in descending power** (`app.js:1886`): `owner, editor, helper, viewer`. Jake wants ascending — `Can view, Can help, Can edit, Co-owner`.
+
+---
+
+### SPEC — PER-USER TIER COLOUR AND NAME (Jake's request, 2026-07-29, not built)
+
+**The use case, in his words:** *"ELA8 doesn't need to call their tier ELA 8 — it's just ELA. But if I have ELA6, ELA7, and ELA8, I need to differentiate them."* The owner of three needs the numbers; the recipient of one does not. Same for colour — each person picks their own.
+
+Today `name` and `color` live on the shared tier document, so a change propagates to everyone. That is not a bug, it is the only possible behaviour for one document; making it personal means an override on the profile, exactly as **E7** did for tier order:
+
+```
+users/{email}
+  tierRanks:  { "wsId:tierId": 2 }            // exists today
+  tierColors: { "wsId:tierId": "#39ff14" }    // new
+  tierLabels: { "wsId:tierId": "ELA" }        // new
+```
+
+⚠️ **The composite `` `${wsId}:${tierId}` `` key, not the bare tierId** — same trap as `tierRanks`, and a bare key silently never loads.
+
+The owner's `name`/`color` on the tier document stay canonical; the profile holds an optional override, so a person who has set nothing keeps seeing what the owner chose. Three decisions that fall out:
+
+- **Show the original somewhere.** Settings → Tiers reading `ELA` with `shared as "ELA 8"` underneath, so "the ELA 8 one" is still a sentence you can say to each other.
+- **A rename is display-only.** Nothing may key off the tier name.
+- **The contrast fix is a prerequisite,** not a follow-up.
+
+---
+
+### whereis.html 1.0.0 — the diagnostic (new 2026-07-29)
+
+**Read-only. Writes nothing.** Sign in, and it prints every board you hold a key to, every tier and which board it lives in, every task, and — the point — **flags any task sitting in a different board from its own tier.** That check is `wsOfTier`'s contract asserted against live data, and it is what turned the sharing report from three competing theories into one confirmed document in one wrong collection.
+
+**Run it once per account.** Rules limit reads to boards you hold a key to, so no single run sees everything. Its one blind spot: it flags tasks in the *wrong* board and cannot flag a task it *cannot see* — the sumnerk12 run reported ✓ while the offending task sat in gmail's board, invisible to it. Read a ✓ as "correct for what this account can read", not "correct".
+
+⚠️ **Prefer this over the Firebase console for any "where does this live" question. The console's subcollection list is a sample, not an inventory** — during this session it showed `members, settings` for boards that demonstrably held tiers and tasks. Two separate lines of investigation were wasted trusting that sidebar.
+
+---
 
 ### ITEM 9 — import.html IS BUILT (2026-07-29, Bimac)
 
