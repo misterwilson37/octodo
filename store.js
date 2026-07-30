@@ -1,298 +1,28 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.25.0 — PER-USER TIER COLOUR AND NAME.
-//   users/{email}.tierColors + .tierLabels, composite-keyed "wsId:tierId"
-//   exactly as tierRanks is. skinFor() overwrites name/color before a tier
-//   leaves subscribeTiers, so every consumer shows your version for free;
-//   canonName/canonColor ride along for Settings' "shared as …" line. Skins
-//   apply ONLY on your own board, same guard as rankFor.
-//   Also: corrected a comment claiming TIER_RANKS is "kept live by
-//   subscribeMyProfile". NO SUCH FUNCTION EXISTS OR EVER HAS. Both maps
-//   hydrate once at sign-in; one device does not follow another.
+// Version 0.25.1
 //
-// Version 0.24.0 — THE BOARD ROUTERS REFUSE INSTEAD OF GUESSING.
-//   wsOf() and wsOfTier() both ended `|| ws()`, so an unresolved destination
-//   wrote to the ACTIVE board — a task typed into a shared tier landed on the
-//   author's own board, resolved cleanly, and was invisible to the person it
-//   was for. Both now throw octodo/unrouted. THE FALLBACK WAS IN TWO PLACES,
-//   NOT THE ONE THE HANDOFF NAMED: restoreDoc routes through wsOf and uses
-//   setDoc, which CREATES — that was TIER-10's data-loss case.
-//   Every creator now stamps the id it mints (addTask, addFollowUp, the
-//   recurrence spawn, both project creators, clockIn, logSession), which is
-//   what makes refusing safe; a guess had been standing in for a stamp.
-//   Also: saveTier's catch swallowed everything and blamed permissions;
-//   a latent `rank: undefined` write that would have landed in that catch;
-//   trackShared updated `hidden` without recomputing the merge.
-//   routingSnapshot() exported — window.octodoWhere() in the console.
+// Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
+// Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
-// ⚠️ VERSION 0.25.0 AND 0.24.0 WERE FIRST DELIVERED WITH THIS BANNER STILL
-//   READING 0.23.1 WHILE STORE_VERSION READ 0.25.0 — the inverse of defect 3
-//   below, and worse for the one job the banner has: Jake opened the file,
-//   saw an unchanged header, concluded nothing had been sent, and did not
-//   deploy a fix he was waiting on. THE HEADER IS THE DIFF. Anyone reading a
-//   file top-down sees this before they see a constant 276 lines down.
-//   Check both, every time, and see the automated check in HANDOFF §7.
+// RECENT:
+// 0.25.0 — Per-user tier colour and name (tierColors/tierLabels on the
+//          profile, composite-keyed). skinFor() applies them; canonName
+//          and canonColor ride along for Settings' "shared as" line.
+// 0.24.0 — THE BOARD ROUTERS REFUSE INSTEAD OF GUESSING. wsOf() and
+//          wsOfTier() both used to fall back to the ACTIVE board, so a
+//          task typed into a shared tier landed on the author's own and
+//          was invisible to everyone else. Both now throw. Every creator
+//          stamps the id it mints, which is what makes refusing safe.
 //
-// Version 0.23.1 — E41 REPAIR. 0.23.0 shipped four defects, two of them in
-// code that had nothing to do with onboarding. Fixed here:
-//
-//   1. saveConfig() WAS DECAPITATED. 0.23.0's edit landed between its first
-//      line and the rest of its body, so the E14 mirror of
-//      pollIntervalMinutes onto the WORKSPACE DOCUMENT silently disappeared.
-//      That is the value the Cloud Run claim query sorts on, so the hourly
-//      calendar poll stopped following the setting the moment 0.23.0 shipped.
-//      Item 7 was closed on 2026-07-27; this reopened it without saying so.
-//   2. THAT ORPHANED BODY LANDED INSIDE markFirstVisitDone(), where it
-//      referenced an undeclared `data` — a ReferenceError on every Skip.
-//   3. STORE_VERSION still read "0.22.0" while this banner read 0.23.0.
-//      The badge is how Jake knows what he is running; a banner that moves
-//      without the constant is worse than no bump at all, because it makes
-//      the badge lie confidently.
-//   4. ONBOARDING STATE WAS ON THE WRONG DOCUMENT. It was written to the
-//      workspace, and firestore.rules 1.2.1 gates workspace-document update
-//      behind canAdmin() — OWNER ONLY. So a helper, an editor, a viewer, and
-//      Nico on his own dependent board all got permission-denied, which made
-//      their welcome splash undismissable on every single load. Worse, the
-//      writes used dot-path keys inside setDoc({merge:true}), and dot paths
-//      are only honoured by updateDoc — setDoc treats them as LITERAL field
-//      names, so even an owner never actually cleared the flag.
-//
-// Onboarding belongs to the PERSON, not the board — you do not re-learn the
-// app because you opened a second workspace. It now lives on users/{email},
-// following E7's tierRanks pattern exactly: a module-level cache hydrated
-// from the profile read that sign-in ALREADY performs, mutated in memory,
-// written back with nested objects rather than dot paths. No new read path,
-// no new subscription, no new rules clause — users/{email} is a document
-// this user is already allowed to write.
-//
-// It also HONOURS the field E16/§10.2 already put there for this exact job:
-// `onboardingDone` gates the splash. 0.23.0 invented a parallel mechanism
-// and ignored the one that was seeded and commented for it.
-//
-// (prev) Version 0.23.0 — E41: onboarding state. Superseded above.
-//
-// (prev) Version 0.22.0 — A STAGE NOW RECORDS WHO MADE IT, NOT JUST WHO FINISHED
-// IT. Jake: "Each person should get credit for what each person checks off,
-// and it should track both when the task/piece of the project was created,
-// as well as when it was completed (alongside who created that piece).
-// Every time."
-//
-// Tasks and project DOCUMENTS already carried all four (createdBy/createdAt/
-// completedBy/completedAt). Project STAGES carried only the completion half —
-// so "Leah added this step and I finished it" was unanswerable, which is
-// exactly the question a shared tier invents.
-//
-// stampNewStages() is applied at the WRITE BOUNDARY. Every stage array in the
-// app reaches Firestore through addProject, addProjectWithStages or
-// setProjectStages, so stamping here catches every caller including ones
-// nobody has written yet.
-//
-// ⚠️ IT ONLY STAMPS STAGES THAT HAVE NO createdBy, AND ONLY WHERE THE CALLER
-// HAS ESTABLISHED THEY ARE NEW. A legacy stage also has no createdBy, and
-// attributing it to whoever next edits the project would be inventing
-// evidence — worse than the blank it replaces, because a blank is honestly
-// unknown and a name is a claim. app.js decides newness (its editor rows know
-// whether they map to an original); addProject/addProjectWithStages do not
-// have to ask, because at creation every stage is new.
-//
-// On Jake's "is it possible to cheat?": yes, and deliberately not defended
-// against. createdBy is immutable in the rules (1.2.1) for TASKS and
-// PROJECTS because it gates deletion; a stage is an array element inside a
-// project document, so rules cannot see it and nothing hangs off it but
-// credit. His call, quoted so nobody re-litigates it: "then we have bigger
-// problems, and this software isn't made for those assholes."
-//
-// (prev) Version 0.21.2 — SIGN IN AS SOMEBODY ELSE. Jake, testing with Nico:
-// "Signs out, but can't sign in as anyone else in Safari. It just remembers
-// what google account is logged into Google."
-//
-// Not Safari remembering, and not a bug in signOut: signInWithPopup with a
-// bare provider asks Google for "the signed-in user", and where that is
-// unambiguous Google answers instantly WITHOUT drawing a chooser. One
-// account on the device therefore means one account in this app, forever,
-// with no visible way to say otherwise. `prompt: "select_account"` makes it
-// ask every time.
-//
-// ⚠️ THIS IS A TESTING BLOCKER AS MUCH AS A FEATURE. Every second-person
-// smoke test (IU, IX-b, IZ, JA) needs two accounts in one browser, so
-// without this the shared-tier work cannot be checked by one person at one
-// desk — which is the only way it CAN be checked right now.
-//
-// (prev) Version 0.21.1 — WHOSE ORDER YOU SEE WHEN VISITING. Jake: "Visiting her
-// should give me a taste of EXACTLY what she looks at — zero differences.
-// Otherwise I wouldn't have an honest picture of her load."
-//
-// 0.21.0 got that right for a person's OWN tiers and wrong for the SHARED
-// one, and the shared one is the case he was asking about. A tier document's
-// `rank` is written by whoever has setup rights, so on a personal board it is
-// reliably the owner's opinion — but BOTH people write a shared tier's
-// document, and the last save wins. Visiting Katie could therefore have shown
-// Family at Jake's rank, sitting in the middle of her board looking like her
-// judgement about her own week.
-//
-// FIXED by putting each person's ordering of a shared tier on THEIR OWN
-// MEMBER ROW in that shared workspace. No rules change: a member row is
-// readable by everyone holding a key to the same workspace and writable only
-// by its own subject, which is exactly the shape this needs and is already
-// what the rules say. users/{email}.tierRanks stays the authority for YOUR
-// view (E7); the member row exists purely to be read by somebody else, which
-// is a thing a private profile can never be.
-//
-// And the person whose order you see when visiting is the RESIDENT, not the
-// deed-holder — on a dependent board (E32) those differ, and it is the
-// child's day that makes his board honest. See viewerEmail() and rankFor().
-//
-// (prev) Version 0.21.0 — ITEM 5: SHARED TIERS. This file now reads from SEVERAL
-// workspaces at once and writes to whichever one a document actually lives
-// on, and app.js's 6,500 lines still believe there is exactly one board.
-// That is E30 being spent a second time, and it is the whole point.
-//
-// FOUR NEW IDEAS, in the order you need them:
-//
-//   1. THE MERGE SET. Every subscription below fans out across a LIST of
-//      workspaces instead of one. The list is the active board plus every
-//      `kind:"shared"` workspace that belongs in this view — see mergeSet()
-//      for the rule, which is Jake's and not the one originally designed.
-//
-//   2. THE OWNERSHIP MAP (`_where`). Merged snapshots record which board
-//      each document came from, so a later write can be aimed at it.
-//      ⚠️ IT IS NEVER PRUNED. A deleted document keeps its entry, because
-//      restoreDoc resurrects by id and would otherwise put it back on the
-//      wrong board. Tombstones are the feature; a few thousand string pairs
-//      is not a memory problem.
-//
-//   3. PER-USER TIER RANK (E7). users/{me}.tierRanks maps "wsId:tierId" to
-//      a number, and subscribeTiers overlays it onto `rank` before app.js
-//      sees it. So app.js:6391 and queue.js:486 keep reading `.rank` and
-//      never learn it stopped being a property of the document.
-//
-//   4. SHARE / UNSHARE = A MOVE, AT THE SAME DOCUMENT IDS. shareTier lifts
-//      a tier and everything pointing at it into a new shared workspace;
-//      unshareTier brings it home. Ids are PRESERVED, which is what keeps
-//      parentTaskId chains, projectId references and the merged view's
-//      uniqueness intact. COPY, VERIFY, THEN DELETE — a failure anywhere
-//      leaves duplicates, which are visible and recoverable, and never
-//      leaves a hole, which is not (Principle 3).
-//
-// (prev) Version 0.20.1 — repin to config 1.2.0 (it now carries CALENDAR_ROBOT).
-// (prev) Version 0.20.0 — item 7 support. nextPollAt is now a NUMBER (0 = never
-// polled, poll now) rather than null: the work queue claims on
-// `nextPollAt <= now`, and null sorts before numbers in Firestore so it
-// would be swept in regardless — a field whose null and whose zero mean the
-// same thing is one fewer case for the next reader. And saveConfig now also
-// writes pollIntervalMinutes onto the WORKSPACE document, which E14 made
-// authoritative because the claim query has to read it. Both copies are
-// written so the settings UI can never be editing a field nobody reads.
-// (prev) Version 0.19.2 — the twin of 0.19.1's bug. 0.19.1 made the one-shot board
-// lookup degrade gracefully and left the LIVE LISTENER beside it with no
-// error handler at all — so a missing index printed one clean sentence from
-// one and forty lines of Firestore internals from the other. onSnapshot takes
-// an error callback and every listener that can fail on an index needs one.
-// (prev) Version 0.19.1 — bootstrap diagnostics + a query that can no longer strand
-// anybody. Nico's first sign-in died on "Missing or insufficient permissions"
-// and the console could only say the bootstrap failed, not WHERE — so this
-// adds a step tag to every stage of resolveWorkspace, and makes the one
-// optional step optional in fact as well as in intent. The rules bug itself
-// is fixed in firestore-2.0.rules 1.1.1.
-// (prev) Version 0.19.0 — E32/E33/E34: HOUSES AND KEYS, and the bug that walking
-// Nico's first sign-in through 0.18.0 exposed.
-//   · THE BUG: a dependent workspace is built for a child BEFORE that child
-//     has ever signed in, so there is no users/{email} document to point at
-//     it — and 0.18.0's resolveWorkspace saw "no home workspace" and would
-//     have cheerfully built Nico a SECOND, personal one that his parents had
-//     never heard of. resolveWorkspace now asks "do I already hold a key
-//     somewhere?" before it builds anything, and adopts a board where it is
-//     flagged as the resident minor. Deliberately ONLY a minor flag adopts:
-//     a colleague sharing a board with a stranger must not rob that stranger
-//     of a house of their own.
-//   · createDependentWorkspace: the same two words (owner / member) aimed
-//     the other way. An adult holds the deed, the child holds a key, and the
-//     child's member row carries minor:true so the rules refuse to let them
-//     hand it back (E33).
-//   · subscribeMyWorkspaces: a collectionGroup query over members where the
-//     document id is your own email — "which houses do I hold keys to."
-//     This is what the board switcher runs on.
-//   · setActiveWorkspace / setPreferredWorkspace: switching boards is a
-//     variable assignment plus a re-subscribe, exactly as E1 promised.
-// (prev) Version 0.18.0 — E1/E5/E30: THE WORKSPACE BECOMES A RUNTIME VALUE.
-// This file is the ENTIRE surface on which 2.0's multi-tenancy lands, and
-// it keeps every exported signature it had at 0.17.0 (E30) — which is why
-// app.js's 5,922 lines and queue.js's 1,206 move across verbatim.
-//   · No allowlist. rules 1.0.0 removed it; isolation is by PATH (E1), so a
-//     client-side email list would now be theatre, not security.
-//   · WORKSPACE_ID (D12's one true workspace) is gone. ACTIVE_WS is resolved
-//     at sign-in from users/{email}.homeWorkspaceId, and created if absent.
-//   · Sign-in bootstraps: users/{email} -> workspaces/{new} -> members/{email}
-//     -> seed tiers + settings. The order is load-bearing; see the comment on
-//     createPersonalWorkspace, which is the one genuine trap in this file.
-//   · completedBy lands on tasks, stages and projects now (E9). The activity
-//     FEED is build item 6; the field is here early because §7.2 is right that
-//     Reflection silently mis-attributes the day a tier is shared, and a
-//     nullable field costs nothing to carry through the migration.
-//   · E16: a new workspace's stage template is BLANK. Katie's thirteen
-//     actuarial stages travel with HER workspace and are never a stranger's
-//     factory default.
-// (prev) Version 0.17.0 — D139: BOUNDED TASK WINDOW (Option A). subscribeTasks no
-// longer streams the whole archive: two merged listeners carry active
-// (completedAt == null) + last-30-days-completed (completedAt >= floor), and
-// fetchCompletedTasks() one-shots a deep-past week on demand. Nothing is
-// deleted; history costs a read only when the week view pages back to it.
-// (prev) Version 0.16.0 — D124: the project-type library. subscribeProjectTypes /
-// saveProjectTypes read/write a settings/projectTypes doc ({types:[{id,name,
-// stages}]}); the existing stageTemplate stays the implicit Default, so live
-// projects are untouched. addProjectWithStages already snapshots explicit
-// stages, so no creation-path change was needed. Rules wildcard covers it.
-// (prev) Version 0.15.0 — D116: writes become undo-informative. clockIn/clockOut/
-// logSession return the ids and bodies they touched; setSessionEnd and
-// restoreDoc (same-id resurrection) join the toolbox.
-// (prev) Version 0.14.0
-// deleteSession + subscribeSessions). One open session max, enforced by
-// the clockIn batch. The rules wildcard already covers the collection.
-// (prev) Version 0.13.0
-// Task schema gains recurrence {every, unit, anchor} + spawnedNextAt;
-// setTaskDone materializes the next occurrence once, spawn-guarded;
-// addInterval does the calendar-correct stepping.
-// (prev) Version 0.12.0
-// climax). setStageDone now reports hurrah + projectHasHurrah so the UI can
-// aim the big celebration at the stage Katie says it belongs to.
-// (prev) Version 0.11.1
-// 0.11.1 (D102): the sign-in allowlist compares LOWERCASE, matching
-// firestore.rules 0.2.0's .lower(). This list is NOT security — the rules
-// are — but if the two disagree the app breaks in a way that looks like a
-// login bug: client stricter = "bounced back to the sign-in screen", rules
-// stricter = "Missing or insufficient permissions". Keep them symmetrical.
-// 0.11.0
-// 0.11.0 (D100): tasks carry estimateMinutes. D93 promoted "estimated time to
-// complete" from nice-to-have to load-bearing: a task time is a DUE date, so
-// with an estimate a task is a real block [due − estimate, due] with a real
-// LENGTH, and that length is the whole answer to "can I fit dinner on
-// Tuesday?". addTask destructures explicitly, so a new field would have been
-// silently DROPPED — which is exactly the kind of nothing that looks like it
-// works. null = unestimated; the clock grid draws those at a default and says
-// so. updateTask already passes arbitrary fields through (D95 only special-
-// cases dueAt), so editing an estimate needed no change there.
-// 0.10.0
-// 0.10.0 (D95): tasks remember being moved — firstDueAt (the original
-// commitment) + rescheduleCount. Counted inside updateTask so EVERY path
-// that changes a due date is caught, including ones not written yet.
-// No migration: firstDueAt ?? dueAt at read time IS the backfill.
-// Only a date that EXISTED can be moved: null → date is scheduling, not
-// rescheduling, and doesn't count.
-// 0.9.0 (D85): seed config gains clearDeckThreshold (0.6) — the point
-// where the queue flips a project from "keep abreast" to "clear the
-// deck." Additive; live DBs never reseed, so readers fall back to 0.6.
-// 0.8.0 (D63): tasks carry an optional `notes` string (title stays
-// short, details expand under the row). Additive — missing = none.
-// 0.7.0: rewindFollowUps (D53 un-complete rewind), addProjectWithStages
-// (D59 duplicate-for-next-year), per-tier allowedDays in seed (D60,
-// Personal seeds 7-day), config seeds deadlineHour 16 + 
-// decisionThresholdDays 2 (D51/D52). Live DBs never reseed — missing
-// fields fall back in readers.
-// 0.6.2: seed template uses dated/undated mix per D50.
-// All Firebase interaction lives here: auth, seeding, live
-// subscriptions, CRUD. Nothing in here touches the DOM.
-// Schema per HANDOFF.md §3.
+// ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
+//    it grew to hundreds of lines, which is how the banner and the
+//    constant below drifted apart four times. The constant sits on the
+//    next line on purpose: you cannot edit one without seeing the other.
+//    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
+
+export const STORE_VERSION = "0.25.1";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -306,7 +36,6 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.25.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
