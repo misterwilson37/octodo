@@ -1,6 +1,6 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version: 0.22.0** | Last updated: 2026-07-29 | **App: 1.33.0 · store 0.24.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.50.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.0.0** — the web app is deployed. ⚠️ **THE TIER MIS-ROUTING BUG IS FIXED IN store 0.24.0 AND NEEDS PUSHING — see §0b.** The two board routers now REFUSE an unresolved destination instead of writing to the active board. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1**; state lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
+**Document version: 0.22.0** | Last updated: 2026-07-29 | **App: 1.33.0 · store 0.24.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.55.1 · html 0.50.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.1.0** — the web app is deployed. ⚠️ **THE TIER MIS-ROUTING BUG IS FIXED IN store 0.24.0 AND NEEDS PUSHING — see §0b.** The two board routers now REFUSE an unresolved destination instead of writing to the active board. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1**; state lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
 
 > **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
 >
@@ -43,6 +43,7 @@ Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy,
 | **Rules emulator** | ✅ **USED, 2026-07-29. `rules-test/` is in the repo: 24 tests, all green against rules 1.2.1.** This is the project's first automated test of anything. `cd rules-test && npm install && npm test`. ⚠️ It tests a COPY — `cp ../firestore-2.0.rules ./firestore.rules` before every run, and check that file against the console. Java 21 and the egress allowlist are both already in place; the allowlist is baked in at session start, so it only works in a conversation opened after that setting changed. |
 | Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice. |
 | **Item 5 — shared tiers** | ✅ **BUILT, AND PROVEN BETWEEN TWO REAL PEOPLE.** A colleague shared a tier with Jake; both saw the same document and toggled it live (TIER-3). No rules change was needed. **TIER-4…10 still unrun** — including the two that can lose data. ⚠️ **The mis-routing bug is fixed in store 0.24.0 and NOT YET PUSHED — §0b. TIER-5 and TIER-10 are the tests that prove it; run them first.** |
+| **TIER-5** | ✅ **PASSED 2026-07-29, AFTER store 0.24.0.** `whereis.html` from Jake's account shows every task in the `sumner vs gmail` tier sitting in `Testing Tier (shared)` regardless of which account typed it — including `Personal made & work deleted II`, a deliberate re-run of the exact repro that stranded the original. No task is flagged mis-routed. **The routing fix is verified in a browser, not just in code.** TIER-10 (undo lands on the right board) is still unrun on a SHARED tier; `Test delete and undo.` exercised it on a personal one, which does not test the tombstone map. |
 | **The stranded task** | ⚠️ **STILL STRANDED.** `Personal made & work deleted` sits in gmail's personal board with its tier in the shared board. 0.24.0 stops NEW ones being created; **it does not move the existing one.** Delete it and retype it, or leave it as the specimen — but do not read it as evidence the fix failed. |
 | `import.html` (item 9) | ❌ Not written. **The last thing before Katie moves.** |
 
@@ -168,6 +169,16 @@ call, and it should be run before anyone builds on top of this.
 > **a check that flags legal code stops being read, exactly as one that misses
 > stops being worth running.** The one-line fix, so nobody re-derives it:
 > `re.sub(r'<!--.*?-->', '', html, flags=re.S)` first, then count.
+
+**⚠️ WHO CHECKED IT OFF — THE FIELD EXISTS, THE UI DOES NOT.** Jake's first
+question on seeing shared tiers work was how to tell which of two people ticked
+something. `completedBy` has been written by `setTaskDone` since E9/store
+0.22.0 and is correct on every task completed since; **nothing in `app.js`
+renders it anywhere.** That surface is item 6 — the activity feed and kudos —
+and it is unbuilt, so until it exists `whereis.html` **1.1.0** is the only way
+to read it. Two blanks are honest and must not be "fixed": anything completed
+before E9 shipped, and **all** of Katie's 1.x history, which `import-transform`
+writes as null on purpose because 1.x recorded *when* and never *by whom*.
 
 **Not touched:** `queue.js`, `celebrate.js`, `config.js`, `tentacalendar.css`,
 the rules, `functions/`, `import.html`, `whereis.html`. **`rules-test/` was not
