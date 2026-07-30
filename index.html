@@ -1,882 +1,934 @@
-# HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
-
-**Document version: 0.22.0** | Last updated: 2026-07-29 | **App: 1.34.0 · store 0.25.0 · queue 0.20.0 · celebrate 0.2.0 · config 1.2.0 · css 0.56.0 · html 0.51.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.1.0** — the web app is deployed. ⚠️ **THE TIER MIS-ROUTING BUG IS FIXED IN store 0.24.0 AND NEEDS PUSHING — see §0b.** The two board routers now REFUSE an unresolved destination instead of writing to the active board. **E41 ONBOARDING: BUILT 1.32.0, BROKEN, REPAIRED 1.32.1**; state lives on `users/{email}`, not the workspace. **Item 5 works between two real people** (a colleague's shared tier, toggled live from both sides — TIER-3). Passing: **BASE-1…6, 8 · KEYS-3, 7, 8 · TIER-1, 2, 3.** ⚠️ **§5's lettered tests (IA…JA) were replaced with `GROUP-n` — see the note at the head of §5 for why, and do not re-letter them.**|
-
-> **⚠️ IF YOU READ ONE THING, READ THIS. It is a Firestore fact that cost 2.0 a real security hole and will catch you again elsewhere.**
->
-> **Firestore evaluates EVERY matching `match` block and grants access if ANY `allow` is true.** There is no "more specific rule wins." A narrow rule **cannot take back** what a broader one has already given.
->
-> Rules 1.0.0 through 1.1.1 ended with a catch-all — `match /{subcollection}/{docId} { allow write: if canWrite(wsId); }` — sitting at the same depth as `match /members/{email}`. So a write to a member document matched **both**, and the union meant **any editor could rewrite the member list**: promote themselves to owner, remove the person who invited them. Every careful clause about who hands out keys was reachable around, one path over. The same union made `allow delete: if false` on the activity log decorative.
->
-> Fixed in **1.2.1** by deleting the wildcard and naming the collections. **The cost is deliberate: a collection with no clause is now denied.** That is the correct direction to fail; the wildcard failed the other way, silently, for three versions. **If you add a collection, add its clause** — and see the ⚠️ on item 9 below, because the import is the most likely place to trip this.
-
-> **⚠️ THE PREVIOUS "read one thing," still true and still load-bearing (rules 1.1.1):** a rule that matches on the document ID could never have secured a QUERY. `match /{path=**}/members/{email}` with `email == me()` is correct for a GET of one named document and **meaningless for a query** — a query names no documents, so Firestore evaluates the rule before reading anything, the ID wildcard is unbound, and the whole query is REFUSED as `permission-denied`. Not "returns nothing": refused. **A list rule must test a FIELD, and the client query must filter on that same field.**
-
-> **⚠️ RULES ARE A SEPARATE ACTION FROM PUSHING FILES.** They live in the console, not the repo. **Select-all-and-REPLACE** in the rules editor — appending is what took the site down on 2026-07-12. And note the console **no longer has an inline Rules Playground**: its "Develop & Test" button now only links to the Emulator Suite docs. Test rules with the local emulator (see §0a) or not at all.
-
-Live 1.x: `tentacalendar.misterwilson.org` (Katie's, untouched). Dev 2.0: `misterwilson37.github.io/octodo`.
-Current instance: **Hapalochlaena** (Claude Opus 5, 17th instance / 15th named) — *Hapalochlaena lunulata*, the blue-ringed octopus, for the shape of the bug this session existed to close. Its bite is **painless and goes unnoticed** until it is far too late, which is the mis-routed write exactly: `addTask` resolved, the UI drew the task, the author saw it forever, and the person it was meant for never could. And the rings only **light up when it is provoked** — an animal that is invisible until it decides not to be. That is the fix: a router that cannot determine its destination now shows itself instead of quietly guessing.
-Previous instance: **Bimac** (Claude Opus 5, 16th instance / 14th named) — *Octopus bimaculoides*, the California two-spot, for two reasons that both landed this session: it wears **false eyespots**, two dark marks that look exactly like eyes and are not, and it is the **laboratory octopus**, the species kept precisely because it is the one you can run real tests on. The 15th instance (Claude Haiku, unnamed — it never read this file) shipped E41 as false eyespots: four summary documents, four version banners that moved without their constants, and a tour system in which no tour could complete. This session was testing.
-Names taken across both lines: **Inky, Otto, Rambo, Billye, Octavia, Heidi, Ivy, Athena, Truman, Wunderpus, Marginatus, Briareus, Argonauta, Bimac, Hapalochlaena**.
-
-**Bimac's session, in one paragraph, for whoever is next.** Repaired E41 (ten defects, four of them version constants that had moved in a banner but not in code, one of them a decapitated `saveConfig` that had silently broken the calendar poll's own setting). Built `rules-test/` — 24 assertions, the project's first automated test of anything. Built `import.html` + `import-transform.js` + 18 more assertions, all green against Katie's real 245-document export. Built `whereis.html` and used it to localise the tier-sharing bug to one line of `store.js`. **What went badly: communication.** Long replies with instructions buried in the middle, plans switched without being stated, and Jake sent to hand-encode Firebase console URLs containing a `PROJECT` placeholder whose value (`fantasktic-octodo`) was in my own emulator commands all session. If you take one thing from this: **state the plan in one line before doing it, put the instruction on its own line, and never ask him to go find a value you already have.**
-
-**Hapalochlaena's session, in one paragraph, for whoever is next.** Verified the previous handoff against the code before touching anything — every claim in §0a held up, line numbers had drifted about forty lines, and all fourteen version constants agreed with the banner. **The reported hallucination was in the conversation, not the repo; do not go looking for phantom defects.** Fixed the tier mis-routing bug (§0b) and found that the fallback was in **two** places rather than the one the handoff named, the second reachable through `restoreDoc`, which creates. Closed one provable routing race (follow-up chains), two swallowed-error defects in `saveTier`, one latent `undefined` write, and both quick items — the black-on-black chip and the descending role dropdown. **What I could NOT do: settle which race originally fired.** I found a third candidate that fits Jake's evidence better than either of Bimac's two and said so rather than picking one; the fix is correct under all three, which is why it was worth shipping without the answer. Nothing was deployed and nothing was browser-tested.
-
-> ⚠️ **RUN `node version-check.mjs` BEFORE HANDING JAKE ANY FILE. NEW 0.25.0,
-> AND IT EXISTS BECAUSE I COST HIM A DEPLOY.**
->
-> Every file carries its version twice — a header comment a human reads, and a
-> constant the app reports. I bumped the constants and left all three banners
-> stale. Jake opened `store.js`, saw `0.23.1` (the version he already had), and
-> reasonably concluded I had sent him nothing, so **a routing fix he was
-> waiting on sat undeployed for a session.**
->
-> This is the **fourth** time banner and constant have disagreed in this
-> project — twice in css, once in store, now three files at once. Every
-> previous fix was a sterner comment, and each one described only the
-> direction that had just happened, so the mirror image walked straight past
-> them. **THE BANNER-STALE DIRECTION IS THE EXPENSIVE ONE:** a stale constant
-> makes the in-app badge lie, which is bad; a stale banner makes Jake think
-> there is nothing to ship, which means the code never runs at all.
->
-> `version-check.mjs` checks all five files both ways plus the three `?v=`
-> pins, exits non-zero, and has been verified to fail on a deliberately broken
-> copy. **Prose warnings did not prevent recurrence three times. Run the check.**
-
-> ⚠️ **CHECK WHICH MODEL YOU ARE BEFORE A STRUCTURAL SESSION.** The 15th instance was Haiku, on a 340KB app with a 90KB handoff it did not open. The failure was not one bad edit; it was plausible-looking work at every level at once. If you are a small model and the task is "add a subsystem to this app," say so and ask for a bigger one.
-
-## 0a. WHERE JAKE ACTUALLY IS, end of 2026-07-27
-
-**Read this before anything else. It is the difference between resuming and re-deriving.**
-
-| Thing | State |
-|---|---|
-| Firebase project, index | ✅ Done. Collection-group index on `members.email` created. |
-| **Rules** | ✅ **1.2.1 published and live.** Four roles; catch-all removed. |
-| Web app | ✅ Deployed and in daily-usable shape. Jake and Nico both sign in; boards, switcher, People, dependent workspaces all work. |
-| **`firestore-2.0.rules` in the repo** | ⚠️ **WAS STALE AT 1.1.1 — the version WITH the catch-all hole — while 1.2.1 was live in the console.** Jake pasted 1.2.1 into the repo on 2026-07-28. **Check this file's declared version against the console every session;** a rules file that lives in two places is a rules file that will disagree with itself, and the stale copy is the one a new instance reads and believes. |
-| **Repo vs. latest drop** | ⚠️ **STALE — the current drop is app 1.33.0 · store 0.24.0 · html 0.50.0 · css 0.55.1 and is NOT PUSHED.** The row below is the state this table was written at and is kept for the warning it carries: **app 1.31.0 · store 0.22.0 · css 0.54.0 · html 0.48.2.** ⚠️ **FIVE drops went out in one session:** 1.29.0/0.21.0/0.47.0 and 1.29.1/0.21.1/0.47.1 both preceded this one and are SUPERSEDED, not equivalent. Check the badge against this row before believing any bug report from that day. **Verify with the version badge, don't assume:** hover the version in the header, compare against the banner at the top of this file. Anything lower means the web files need re-uploading. `store.js`, `queue.js`, `celebrate.js`, `config.js` were NOT touched this session. |
-| Cloud Run function | ✅ **1.3.0 live, and `?job=fixtags` has been run.** |
-| `POLL_SECRET` / `TZ` | ✅ Both set and verified by a live curl. |
-| Calendars connected | ✅ Jake's are connected and a mirror calendar exists. |
-| **Cloud Scheduler** | ✅ **Created and firing.** Confirmed running at 18:07 on 2026-07-27, on schedule. Item 7 is closed. |
-| **Rules emulator** | ✅ **USED, 2026-07-29. `rules-test/` is in the repo: 24 tests, all green against rules 1.2.1.** This is the project's first automated test of anything. `cd rules-test && npm install && npm test`. ⚠️ It tests a COPY — `cp ../firestore-2.0.rules ./firestore.rules` before every run, and check that file against the console. Java 21 and the egress allowlist are both already in place; the allowlist is baked in at session start, so it only works in a conversation opened after that setting changed. |
-| Katie | ❌ Has never signed in to Octodo. Still on 1.x, by choice. |
-| **Item 5 — shared tiers** | ✅ **BUILT, AND PROVEN BETWEEN TWO REAL PEOPLE.** A colleague shared a tier with Jake; both saw the same document and toggled it live (TIER-3). No rules change was needed. **TIER-4…10 still unrun** — including the two that can lose data. ⚠️ **The mis-routing bug is fixed in store 0.24.0 and NOT YET PUSHED — §0b. TIER-5 and TIER-10 are the tests that prove it; run them first.** |
-| **TIER-5** | ✅ **PASSED 2026-07-29, AFTER store 0.24.0.** `whereis.html` from Jake's account shows every task in the `sumner vs gmail` tier sitting in `Testing Tier (shared)` regardless of which account typed it — including `Personal made & work deleted II`, a deliberate re-run of the exact repro that stranded the original. No task is flagged mis-routed. **The routing fix is verified in a browser, not just in code.** TIER-10 (undo lands on the right board) is still unrun on a SHARED tier; `Test delete and undo.` exercised it on a personal one, which does not test the tombstone map. |
-| **The stranded task** | ⚠️ **STILL STRANDED.** `Personal made & work deleted` sits in gmail's personal board with its tier in the shared board. 0.24.0 stops NEW ones being created; **it does not move the existing one.** Delete it and retype it, or leave it as the specimen — but do not read it as evidence the fix failed. |
-| `import.html` (item 9) | ❌ Not written. **The last thing before Katie moves.** |
-
-### The two things Jake named as the road to 2.0, in his order
-
-He set the order himself on 2026-07-27: **rules → shared tiers → import**, on the reasoning that rules were "most likely to bite us if we wait." Rules are done.
-
-1. ~~**Item 5 — shared tiers.**~~ **BUILT 2026-07-28 (5a).** The plan in this row turned out to be exactly right and was followed to the letter: the work was all in `store.js`, the resolution is a runtime `docId → wsId` map, and **`app.js` gained no knowledge that more than one workspace exists.** Details in §3a. What is NOT built is 5b — the activity feed and kudos on a shared tier (that is item 6 anyway), and a role picker.
-2. **Item 9 — import.** The last thing before Katie moves. ⚠️ **Re-check the collection list in rules 1.2.1 first.** The wildcard is gone, so if Katie's 1.x export carries a collection that has no clause, the import is denied. Loudly, which is the point — but find out before flip day, not during it.
-
-**On who runs the import.** The runbook and E22(a)/E25 say Katie adds Jake as an *editor* and he imports. That fails: writing `pollIntervalMinutes` and `nextPollAt` to the **workspace document** needs role `owner`, and an editor doesn't have it. Either she gives him **Co-owner** (the option already exists in the People dropdown), or — simpler — **she runs `import.html` herself**, since she owns her own board and needs nothing extra. Costs her one more minute on flip day and no permission choreography.
-
-**Nico's board is still named `nico.m.wilson`** (created before the E38 rename fix). Settings → People → Rename fixes it once the web files are current.
-
-**Minor, unhurried:** `POLL_SECRET` and the service URL appear in the 2026-07-27 chat log. Nothing there reads tasks or calendars; the exposure is that someone could force-run the sync and see workspace names and the mirror calendar id. Two-minute env-var edit plus a Scheduler header update. Not urgent.
-
-### 0b. THE TIER MIS-ROUTING BUG — FIXED IN store 0.24.0 (2026-07-29, Hapalochlaena)
-
-**Fixed in code, syntax-checked, NEVER PUSHED AND NEVER RUN IN A BROWSER.** The
-first job of the next session is to deploy it and run TIER-5 and TIER-10.
-
-**What it was.** sumnerk12 makes a tier, shares it with gmail, also gives gmail
-a key to the board. gmail types a task into the shared tier. gmail sees it;
-sumnerk12 never does. Upgrading gmail to editor fixed NEW tasks and did not
-rescue the old one — because changing a role never moves a document. This was
-never a visibility failure: the document was in the wrong collection.
-
-**The mechanism.** Both board resolvers in `store.js` ended `|| ws()`. When the
-ownership map had no entry, the write went to the ACTIVE board — the author's
-own. `addTask` resolved, the UI drew the task, and nothing anywhere reported a
-problem, because writing to your own board is always permitted.
-
-> ⚠️ **THE FALLBACK WAS IN TWO PLACES, NOT ONE. The previous handoff named only
-> `wsOfTier`.** `wsOf` carried the identical `|| ws()` and it is the more
-> dangerous of the pair, because **`restoreDoc` (D116's undo) routes through it
-> and uses `setDoc`, which CREATES.** Undo a delete on a shared tier with a cold
-> map and the task was silently re-created on your own board — correct on your
-> screen, still gone on theirs. **That is TIER-10's failure exactly**, and
-> TIER-10 is one of the two tests flagged *can lose data*. If you are ever
-> tempted to reinstate a fallback for one resolver, this is the reason both
-> must refuse.
-
-**What shipped (store 0.24.0).** The recommended shape from §0a, followed:
-
-1. **`wsOf` and `wsOfTier` throw instead of guessing.** The error carries
-   `code: "octodo/unrouted"` and a sentence a person can act on, because their
-   only correct move is to retry. `isRouteError` is exported for callers.
-2. **Every creator stamps the id it mints, before returning** — `addTask`,
-   `addFollowUp`, the recurrence spawn, `addProject`, `addProjectWithStages`,
-   `clockIn`, `logSession`. The old comment justified the fallback as covering
-   "a document created in this same tick"; **a guess was standing in for a
-   stamp.** Removing the fallback without adding these would have broken real
-   writes.
-3. **app 1.33.0 adds a global `unhandledrejection` listener.** Nearly every
-   store call in `app.js` is a bare `.then()` with no `.catch()`, so a refused
-   write would have become an unhandled rejection — a console line nobody
-   reads and a task that silently was not created. **That is the same failure
-   shape as the bug, one layer up.** One net, so no future call site can
-   forget. Route errors get a dialog; everything else is logged and left alone.
-4. **`window.octodoWhere()`** is §0a's distinguishing experiment, left in the
-   file rather than added and removed. It prints `MERGE`, the known shared
-   boards, `_activeMembers`, and every tier the map can place.
-
-**⚠️ ONE PROVABLE RACE THIS CLOSED, WHICH WAS NOT THE REPORTED BUG.**
-`onTaskFormSubmit` does `addTask(payload).then(ref => createFollowUpChain(ref.id,
-…))`, and `addFollowUp` routed through `wsOf` on an id that no snapshot had yet
-stamped. **Parent on the shared board, children on whichever board happened to
-be active.** It usually won, because the local optimistic snapshot usually beat
-the `.then()`. Usually.
-
-**⚠️ WHAT I DID NOT ESTABLISH, STATED PLAINLY.** §0a offered two candidate root
-causes and said not to guess between them. **I could not settle it by reading,
-and I did not pick one.** Worse for both candidates: `_where` **is never
-pruned**, so once a tier has been seen the stamp survives every later merge
-change — which makes both boot races self-healing *for routing*, and argues the
-offending write did not come from the tier picker at all. A **third candidate**
-fits the evidence better: a path that mints or resurrects an id rather than
-reading one from the picker — a follow-up chain, a recurrence spawn, or an undo.
-Jake's own title for the stranded task, *"Personal made & work deleted"*, reads
-that way. **That is a hypothesis and not a finding.** The fix is correct under
-all three, which is why it was worth shipping without the answer — but if you
-want the answer, `octodoWhere()` at the moment of a bad write is now one console
-call, and it should be run before anyone builds on top of this.
-
-**Also fixed in 0.24.0, all found while reading rather than reported:**
-
-- **`saveTier`'s catch swallowed everything and named one cause.** Any real
-  failure got the reassuring "no setup rights here" line — a save that silently
-  did not happen while the console said the tier was fine. Only
-  `permission-denied` is swallowed now; the rest re-throws.
-- **A latent `undefined` write in `saveTier`, closed before it fired.** The SDK
-  is built without `ignoreUndefinedProperties`, so a call omitting `rank` would
-  throw on `rank: undefined` → get swallowed by the catch above → become a
-  silent no-op blaming permissions. Today's only caller always sends a rank.
-  The next one would have met it. **This is the shape to watch for in this
-  file: a throw that lands in a catch that misreports it.**
-- **`trackShared` updated `hidden` without recomputing the merge.** `hidden` is
-  an input to `mergeSet`, so it must. Correct by luck today, because the caller
-  happens to `refreshMerge()` after its loop.
-
-**Both quick items from §0a are done, and both were confirmed in the code first
-(the handoff's line numbers had drifted ~40 lines, its mechanisms were exact):**
-
-- **`tierChip` now picks its own foreground.** `.chip` hardcodes `color:
-  #0a0f14` in the stylesheet and the function set only `background`, so Jake's
-  `#000000` tier was black on black. Rec. 709 luma, 0.55 threshold, inline in
-  `app.js` — **no CSS change, so css stays 0.55.1.** A malformed colour falls
-  back to the light foreground rather than throwing: a chip is decoration and
-  must not take a render down. **This was the stated prerequisite for per-user
-  colours, so that spec is now unblocked.**
-- **The role dropdown is ascending** (`app.js`, was line 1886, now ~1919):
-  `Can view, Can help, Can edit, Co-owner`. Least power first, so the
-  destructive end of the list is the end you have to travel to.
-
-> ⚠️ **THE DIV-BALANCE SHIP-CHECK HAS A PERMANENT FALSE POSITIVE. STRIP HTML
-> COMMENTS BEFORE COUNTING.** A naive count of `index.html` reports **170 open
-> against 169 close** and always has — the 170th is the literal text `<div>`
-> inside its own version-history comment, in the 0.40.0 entry that reads *"plus
-> one `<div>`, which is what E30 was for."* With comments stripped it is
-> **169/169, balanced**, and the untouched upload counts identically, so it
-> predates any edit you are about to make. Argonauta's session already lost
-> time to a false positive in this same check and wrote the rule that matters:
-> **a check that flags legal code stops being read, exactly as one that misses
-> stops being worth running.** The one-line fix, so nobody re-derives it:
-> `re.sub(r'<!--.*?-->', '', html, flags=re.S)` first, then count.
-
-**⚠️ WHO CHECKED IT OFF — THE FIELD EXISTS, THE UI DOES NOT.** Jake's first
-question on seeing shared tiers work was how to tell which of two people ticked
-something. `completedBy` has been written by `setTaskDone` since E9/store
-0.22.0 and is correct on every task completed since; **nothing in `app.js`
-renders it anywhere.** That surface is item 6 — the activity feed and kudos —
-and it is unbuilt, so until it exists `whereis.html` **1.1.0** is the only way
-to read it. Two blanks are honest and must not be "fixed": anything completed
-before E9 shipped, and **all** of Katie's 1.x history, which `import-transform`
-writes as null on purpose because 1.x recorded *when* and never *by whom*.
-
-**Not touched:** `queue.js`, `celebrate.js`, `config.js`, `tentacalendar.css`,
-the rules, `functions/`, `import.html`, `whereis.html`. **`rules-test/` was not
-re-run** — nothing in this drop touches the rules, but it costs two minutes and
-the next session should run it anyway before believing that.
-
----
-
-### PER-USER TIER COLOUR AND NAME — BUILT (app 1.34.0 · store 0.25.0 · css 0.56.0, Hapalochlaena)
-
-**Built to the spec below, which is kept underneath because its reasoning is
-still the reasoning. NOT PUSHED, NOT RUN IN A BROWSER.**
-
-`users/{email}.tierColors` and `.tierLabels`, both keyed on the composite
-`` `${wsId}:${tierId}` `` as warned. Hydrated by `resolveWorkspace` on the read
-that was already fetching `tierRanks`; cleared by `resetMergeState`.
-
-**`skinFor()` overwrites `name` and `color` on the tier before it leaves
-`subscribeTiers`**, so chips, swatches, the queue and the project form all show
-your version without knowing the feature exists. The owner's originals ride
-along as `canonName`/`canonColor` for the one place that shows both.
-
-**⚠️ THE WHOLE FEATURE IS ONE BRANCH IN THE SETTINGS SAVE LOOP.** On a shared
-row, `name` and `color` are `delete`d from the payload before `saveTier` and
-sent to `saveTierSkin` instead. Everything else — kind, days, carryover,
-calendar id, rank — is a property of the tier and still goes to the document.
-**If you refactor that loop and lose the `delete`, the bug comes straight back
-and looks exactly like it did the first time.**
-
-**Same guard as `rankFor`: skins apply only on your own board.** Visiting
-somebody's house shows THEIR names and colours, because the point of looking at
-someone's board is an honest picture of their load (§4.2).
-
-**Clearing:** empty the name box to drop the override and get the owner's name
-back. Typing a value identical to the owner's saves no override at all, so an
-untouched row never freezes today's owner name into your profile.
-
-**⚠️ KNOWN LIMITATION, DELIBERATE, TELL JAKE IF HE ASKS.** There is now no way
-to rename a shared tier **for everyone** — the owner's Settings edit sets their
-own override like anybody else's. For the ELA6/7/8 case that is correct (the
-canonical name is chosen at share time and never needs to change), but if
-somebody shares a tier with a typo in it, the escape hatch today is unshare and
-reshare. An owner-only "rename for everyone" affordance is the follow-up.
-
-**⚠️ FOUND WHILE BUILDING: `TIER_RANKS` IS NOT LIVE AND NEVER WAS.** Its
-comment claimed it was "kept live by `subscribeMyProfile`". **There is no
-`subscribeMyProfile` in this file and there never has been.** Both maps hydrate
-once at sign-in, so changing your order or your colour on one device does not
-move another until it reloads. The comment is corrected in 0.25.0. **This is
-the third comment in this project found more confident than its code** — after
-E41's and §0b's — which is now a pattern rather than a coincidence.
-
-**Untested.** Nothing here has been near a browser. Worth checking first: two
-accounts, one shared tier, rename on one side only, confirm the other side is
-unchanged and that `whereis.html` still shows the canonical name (it reads
-documents directly and should be unaffected).
-
----
-
-### SPEC — PER-USER TIER COLOUR AND NAME (Jake's request, 2026-07-29 — built above)
-
-**The use case, in his words:** *"ELA8 doesn't need to call their tier ELA 8 — it's just ELA. But if I have ELA6, ELA7, and ELA8, I need to differentiate them."* The owner of three needs the numbers; the recipient of one does not. Same for colour — each person picks their own.
-
-Today `name` and `color` live on the shared tier document, so a change propagates to everyone. That is not a bug, it is the only possible behaviour for one document; making it personal means an override on the profile, exactly as **E7** did for tier order:
-
-```
-users/{email}
-  tierRanks:  { "wsId:tierId": 2 }            // exists today
-  tierColors: { "wsId:tierId": "#39ff14" }    // new
-  tierLabels: { "wsId:tierId": "ELA" }        // new
-```
-
-⚠️ **The composite `` `${wsId}:${tierId}` `` key, not the bare tierId** — same trap as `tierRanks`, and a bare key silently never loads.
-
-The owner's `name`/`color` on the tier document stay canonical; the profile holds an optional override, so a person who has set nothing keeps seeing what the owner chose. Three decisions that fall out:
-
-- **Show the original somewhere.** Settings → Tiers reading `ELA` with `shared as "ELA 8"` underneath, so "the ELA 8 one" is still a sentence you can say to each other.
-- **A rename is display-only.** Nothing may key off the tier name.
-- ~~**The contrast fix is a prerequisite,** not a follow-up.~~ **DONE in app 1.33.0 (§0b). This spec is unblocked.**
-
----
-
-### whereis.html 1.0.0 — the diagnostic (new 2026-07-29)
-
-**Read-only. Writes nothing.** Sign in, and it prints every board you hold a key to, every tier and which board it lives in, every task, and — the point — **flags any task sitting in a different board from its own tier.** That check is `wsOfTier`'s contract asserted against live data, and it is what turned the sharing report from three competing theories into one confirmed document in one wrong collection.
-
-**Run it once per account.** Rules limit reads to boards you hold a key to, so no single run sees everything. Its one blind spot: it flags tasks in the *wrong* board and cannot flag a task it *cannot see* — the sumnerk12 run reported ✓ while the offending task sat in gmail's board, invisible to it. Read a ✓ as "correct for what this account can read", not "correct".
-
-⚠️ **Prefer this over the Firebase console for any "where does this live" question. The console's subcollection list is a sample, not an inventory** — during this session it showed `members, settings` for boards that demonstrably held tiers and tasks. Two separate lines of investigation were wasted trusting that sidebar.
-
----
-
-### ITEM 9 — import.html IS BUILT (2026-07-29, Bimac)
-
-**Status: written and tested against the emulator with Katie's real 245-document export. Never run against live Firestore.** Two new files plus a test:
-
-| file | version | what it is |
-|---|---|---|
-| `import-transform.js` | 1.0.0 | **All the logic.** Pure functions over plain objects — no Firestore, no DOM, no `Date.now()` except through an argument. This is why item 9 could be tested at all. |
-| `import.html` | 1.0.0 | A form and a batch writer. Deliberately thin. |
-| `rules-test/import.test.mjs` | — | **18 assertions, all green**, including *all 157 writes accepted by rules 1.2.1* and *no document anywhere contains `undefined`*. |
-
-**Run it:** `EXPORT_JSON=/path/to/export.json npx firebase emulators:exec --only firestore "node import.test.mjs"`. The export is somebody's real board, so there is no fixture committed and never should be.
-
-**⚠️ THE INTERVIEW IS THE DESIGN, AND IT WAS JAKE'S.** The first plan was for Claude to ask three questions in chat and hardcode the answers. Jake's correction: *ask them on import, so she's part of the conversation — and it's factored in if anyone else ever branches off Tentacalendar and wants to join Octodo.* The page therefore asks seven questions, **all derived from the file, none hardcoded** — an export with no running clock is never asked about running clocks. Do not replace any of them with a constant.
-
-The questions, and why each one cannot be answered from the data:
-1. **Board name** — cosmetic, prefilled from the source.
-2. **A role per other member** — 1.x has a flat `memberEmails` array where everyone is equal. 2.0 has owner/editor/helper/viewer. This is pure invention and it has to be asked. One question per member, so it scales to any board.
-3. **Name the default project layout** — 1.x has ONE anonymous `stageTemplate`; 2.0's Pipeline tab is a library of *named* layouts. Naming it is the difference between a usable tab and an empty one. Jake spotted this; it was not in §4.5.
-4. **Running clocks** — leave open or close at import.
-5. **Sessions pointing at deleted projects** — skip (default) or keep.
-6. **Calendar tiers with no calendar id** — keep as anchor or convert to task. Katie's *Business* tier is one: `kind:"anchor"`, empty `gcalCalendarId`. It imports perfectly and stays empty forever.
-7. **`eventsCache`** — skip (default; the poll rebuilds it) or import.
-
-**⚠️ WRITE ORDER IS LOAD-BEARING.** Firestore evaluates rules for a batched write against the state **before** the batch, and every subcollection rule calls `get()` on `members/{me}`. So the board document and the owner's own key are written **and committed on their own, first**; everything else follows in 400-document batches. Batching all of it together denies all of it. Found in the emulator, and it is the reason the emulator was worth building.
-
-**Three transforms §4.5 does not mention**, found by reading the real export rather than the design doc:
-- **`memberEmails` array → `members` subcollection**, with roles invented via the interview.
-- **`gcalAuth: "service"`** — 2.0 anchor tiers carry it, 1.x tiers do not.
-- **E7 tier ranks use the COMPOSITE key `` `${wsId}:${tierId}` ``**, not the bare tierId. A bare key yields a per-user ordering that silently never loads. Asserted by IMPORT-3d.
-
-**`completedBy` is written as `null` on all finished work.** 1.x recorded *when* something was done and never *by whom*, and on a two-person board a guess is a coin flip. store.js 0.22.0 is explicit that inventing evidence is worse than recording none. The import page says this to the user rather than hiding it.
-
-**What the export contains (verified against the real file):** all 7 tiers with working-day masks, `timeless` (D126 predates the migration), and lead windows · all 99 tasks, with five fields genuinely optional — `notes` 70/99, `estimateMinutes` 44/99, `recurrence` 40/99, `spawnedNextAt` 33/99, `firstDueAt`/`rescheduleCount` 20/99 · all 17 projects, one lacking `workload` (the `?? 2` legacy fallback is real, not defensive) · **7 of 17 projects have hand-edited stage lists** (0, 8, 14, 18, 19 stages against a 13-stage template) and they travel intact · all three settings documents, including her 13-stage template with 🎆 on Publication · `projectTypes` is **empty** — she has no pipeline library, which is why question 3 matters.
-
-**⚠️ WHAT NO IMPORTER CAN CARRY, and the thing most likely to go wrong on flip day.** The export holds calendar **IDs**. It cannot hold calendar **permissions** — those live in Google Calendar, and **2.0 runs under a different service account**. Both the inbound calendars and the outbound mirror must be re-shared by hand. If they are not, **the tiers import perfectly and stay empty forever**, which is the worst failure shape available: no error, no warning, just nothing. `postImportChecklist()` puts this first and `import.html` prints it on completion.
-
-**RULES-6b settles who runs it:** a non-owner cannot write the board document, so §11's *"Katie adds Jake as an editor and he imports"* **cannot execute**. Katie signs in and runs it herself, or grants Co-owner. IMPORT-6a asserts the denial in the migration's own shape.
-
-**Not done:** never run for real. **The next session's opening task is a dry run on a throwaway Google account** — export a scratch 1.x board, import it, and walk the checklist. Everything above is emulator-true and browser-untested.
-
----
-
-### RULES-TEST — the emulator suite (new 2026-07-29)
-
-**`rules-test/` — 24 tests, all green against rules 1.2.1.** Run it whenever the rules change, **before** publishing to the console. Full notes in `rules-test/README.md`, including the two traps that bit on its own first run (a missing `email_verified` claim makes every negative test pass for the wrong reason; a test that grants access poisons any later test using that identity as a negative control).
-
-**Two things it established that were previously only reasoned about:**
-
-1. **E41's defect is now a regression test.** RULES-1b…1e prove editor, helper, viewer and a dependent-on-their-own-board are all refused a workspace-document write. That is why the splash was undismissable, and it can never come back silently.
-
-2. ⚠️ **RULES-6b: AN EDITOR CANNOT WRITE `pollIntervalMinutes` TO THE WORKSPACE DOCUMENT.** §0a deduced this; it is now measured. **The E22(a)/E25 runbook step "Katie adds Jake as an editor and he imports" is not a preference, it is impossible.** On flip day Katie either grants **Co-owner**, or — simpler, and the recommendation — **runs `import.html` herself**, since she owns her board and needs nothing extra. Put this on the flip-day checklist rather than discovering it that morning.
-
----
-
-### E41 — ONBOARDING SYSTEM (built 1.32.0, repaired 1.32.1)
-
-**What it is.** Four layers, all skippable: a welcome splash shown once per person; step-by-step tours (`firstTask`, `firstTier`, `sharing`); contextual one-line hints that dismiss forever; and collapsible help panels in Settings. Markup in `index.html`, behaviour and copy in `app.js`, persistence in `store.js`.
-
-**⚠️ READ THIS BEFORE TOUCHING IT. 1.32.0 shipped it non-functional, and one of its defects was OUTSIDE the feature.**
-
-| # | Defect in 1.32.0 / 0.23.0 / 0.55.0 / 0.49.0 | Fixed in |
-|---|---|---|
-| 1 | **`saveConfig()` was decapitated.** The E41 edit landed between its first line and the rest of its body, deleting the E14 mirror of `pollIntervalMinutes` onto the **workspace document** — the value the Cloud Run claim query sorts on. **Item 7 silently reopened.** The orphaned body landed inside `markFirstVisitDone()`, referencing an undeclared `data` → ReferenceError on every Skip. | store 0.23.1 |
-| 2 | **State was on the workspace document.** `firestore.rules` 1.2.1 gates workspace update behind `canAdmin()` — owner only. Helpers, editors, viewers **and Nico on his own dependent board** were refused, making the splash undismissable on every load. | store 0.23.1 |
-| 3 | **Dot paths inside `setDoc({merge:true})`.** Only `updateDoc` walks a path; `setDoc` treats `"a.b"` as a field literally named `a.b`. Even an owner never cleared the flag. | store 0.23.1 |
-| 4 | **Finishing a tour threw.** `endTour()` nulls `currentTour`; the next line read `currentTour.tourId`. No completion was ever recorded. | app 1.32.1 |
-| 5 | **`#task-escalate` does not exist** (`#task-esc-n` / `#task-esc-unit` do). Dead step, dead hint. | app 1.32.1 |
-| 6 | **Hidden targets drew the highlight at 0,0.** `getBoundingClientRect` on a `display:none` element returns zeros, so steps aimed inside the closed Settings modal pointed at the screen corner. | app 1.32.1 |
-| 7 | **`--card`, `--bg-alt`, `--accent-dim` are not declared in `:root`.** Every onboarding surface rendered with no background. | css 0.55.1 |
-| 8 | **Four version constants did not move with their banners:** `STORE_VERSION` (0.22.0), `--tc-version` (0.54.0), and `index.html`'s **stylesheet `?v=` pin** (0.54.0 — so the new CSS never reached anyone holding the old one). | all four |
-
-**Where state lives now.** `users/{email}` — because onboarding is a fact about the **person**, not the board: you do not re-learn the app because you opened a second workspace. It follows E7's `tierRanks` pattern exactly — a module-level cache in `store.js` hydrated from the profile read `resolveWorkspace()` already performs, mutated in memory, written back with **nested objects, never dot paths**. No subscription, no new read, no rules change. `onboardingDone` (seeded by E16/§10.2, commented *"gates the walkthrough"*) is the splash authority and is honoured rather than duplicated.
-
-```
-users/{email}
-  onboardingDone: true            // E16/§10.2 — the splash gate
-  onboarding: { splashDone, tours: {id:true}, hints: {id:true} }
-```
-
-Read it with `onboardingState()`; write with `markFirstVisitDone()`, `markTourCompleted(id)`, `dismissHint(id)`. All three are no-ops if already set and swallow write failures — being asked to dismiss a tooltip twice is a nuisance; a rejected promise inside a click handler is a bug report.
-
-**Tour steps** take `{ selector, title, text, before? }`. `before` runs first and must be idempotent — it is how the tier and sharing tours open Settings before pointing inside it. A step whose target is absent or unlaid-out is **skipped with a `console.warn` naming the selector**, so a stale selector is findable rather than merely quiet.
-
-**⚠️ THE MAINTENANCE HAZARD, and it is the reason this section is long.** The tour and hint copy in `app.js` duplicates `GUIDE.md`, and the selectors duplicate `index.html`. **All three drift silently.** A renamed id does not throw — it produces a tour that skips a step. A reworded GUIDE does not throw — it produces two documents that disagree about the product.
-
-**So: any change to the queue rules, tiers, escalation, projects or sharing is not done until you have checked all three.**
-
-1. `GUIDE.md` — the reference document
-2. `TOURS` and `POPOVER_HINTS` in `app.js` (~line 960) — the in-app copy
-3. The ids those selectors name in `index.html`
-
-There is a cheap standing check, and it should be run on every session that touches markup — extract every `selector:` from `app.js` and confirm each resolves in `index.html` (or, for `.t-move`, in the JS that builds it). That check is what found defect 5.
-
-**Never renumber or reorder tour step arrays without changing the tour id.** Completion is recorded per tour, not per step, so inserting a step mid-tour silently denies it to everyone who already finished. If a tour changes materially, give it a new id and let the old record stand.
-
-**Not built:** no "replay a tour" control anywhere in the UI. Tours are reachable only from the splash, which shows once — so in practice `firstTier` and `sharing` are currently unreachable for anyone who has already signed in. **That is the obvious next piece of work** and it is small: a row of buttons in Settings calling `startTour(id)`.
-
-**Untested against a live Firestore.** Everything above is verified by parse, selector resolution, div balance and reading the rules — not by a browser. TEST-E41 below is unrun.
-
-| id | test |
-|---|---|
-| E41-1 | Brand-new Google account → splash appears once; reload → gone |
-| E41-2 | **A viewer/helper on someone else's board** → splash appears and *dismisses* (this is defect 2; it failed before) |
-| E41-3 | Nico on his own dependent board → splash dismisses |
-| E41-4 | Run `firstTask` to the last step → "Done" closes cleanly, no console error, and the splash does not return |
-| E41-5 | Start `firstTier` from a closed Settings → step 2 opens Settings and highlights **+ Add tier**, not the screen corner |
-| E41-6 | Dismiss a hint on board A → it stays dismissed on board B (state is per-person) |
-| E41-7 | **Settings → change the calendar poll interval → confirm the WORKSPACE document changed too.** This is item 7's regression test, and it is the one that matters most |
-
----
-
-## 0. Read this first — which document answers your question
-
-**New Claude: read THIS file and §3 (E-rows) of the design doc. That is the whole required reading.** Everything else is lookup.
-
-| Your question | Where the answer is |
-|---|---|
-| What is built, what is next, what am I allowed to assume? | **This file** |
-| Why is the architecture shaped this way? Schema, rules, sharing, migration? | `TENTACALENDAR-2.0-DESIGN.md` §3 (E-rows) |
-| How do I stand up the Firebase project / repo / DNS? | `SETUP-2.0.md` (done; read only if something needs re-doing) |
-| **"Why on earth does this line of code exist?"** | `HANDOFF.md` (1.x) — **look up the D-row the comment cites. Do not read the file.** |
-
-**⚠️ `HANDOFF.md` (1.x) IS NOT HISTORY. IT IS THE REFERENCE MANUAL FOR CODE THAT IS RUNNING RIGHT NOW.**
-`app.js`, `queue.js`, `celebrate.js` and most of the CSS crossed into 2.0 essentially verbatim, and **113 of its 140 D-rows are cited by comments inside those shipped files** (measured 2026-07-27, not estimated). When `app.js` says `// D37 — drift transforms #drift-wrap, NEVER <body>`, D37 is the only place that explains why, and there is no substitute for it.
-
-**This is why the two documents are not merged, and should not be.** Merging means either (a) a ~325KB file that costs a large fraction of a short session just to read — destroying the reason this file was written short — or (b) discarding the explanations for live code, which is worse. **D-rows are also never renumbered or deleted**, precisely because 113 code comments point at them by number.
-
-**The right relationship is: this file is required, that file is a dictionary.** §7 below lifts the handful of D-rows you need *before* writing code, so the 300KB file is only opened when a specific comment sends you there. If Jake hands you only this document, you are still equipped.
-
-**On the version number:** this file stays 0.x and becomes **1.0.0 on the day 2.0 ships** — the same discipline the app itself follows (1.x ran 0.x for months until D105 earned the 1.0). 1.x's HANDOFF never reached 1.0 either; it froze at 0.85.0. The number's only job is telling Jake whether he is holding the newest copy.
-
----
-
-## 1. Why this document exists separately
-
-1.x's `HANDOFF.md` is the continuity document for an app **Katie is using right now**. E26 freezes it: when 2.0 goes live, 1.x is abandoned in place on GitHub for whoever finds it useful, and its doc stops at its last true statement. Writing 2.0's history into it would make it lie about a running app.
-
-**Document map — four files, one job each:**
-
-| File | Job | Who edits it |
-|---|---|---|
-| `TENTACALENDAR-2.0-DESIGN.md` | The blueprint. **All E-rows live here** (E1–E31). Architecture, schema, rules, migration runbook. | Amend when a decision changes; bump its version |
-| `HANDOFF-2.0.md` (this) | Continuity. What's built, what's next, what's awaiting Jake, session log. | Every session, at the end, no exceptions |
-| `SETUP-2.0.md` | Standing up the project/repo/DNS. ✅ Complete. | Only if the console changes |
-| `HANDOFF.md` (1.x) | Frozen history. Explains `queue.js` and `app.js` line by line. | Only for a genuine 1.x fix (E27) |
-
-⚠️ **The 2.0 repo currently holds a STALE COPY of 1.x's `HANDOFF.md` (0.84.0 vs the live 0.85.0) and a stale `SETUP-2.0.md` (1.2.0 vs 1.3.0), and does not hold the design doc at all.** That is exactly how two documents that were once identical become two documents that disagree. **One handoff per repo** — delete the 1.x copy from octodo.
-
----
-
-## 2. The foundation (done, verified, don't re-derive)
-
-| | |
-|---|---|
-| Firebase project | **`fantasktic-octodo`** (permanent) · number `470873844999` |
-| Repo | `github.com/misterwilson37/octodo` · **Blaze billing on** |
-| Dev URL | **`https://misterwilson37.github.io/octodo`** — a **SUBPATH**, see E4a below |
-| Rules | `firestore-2.0.rules` **1.0.0, published and verified green** |
-| Smoke test | ✅ all eight checks 2026-07-26, **including the denial test** |
-| Katie's backup | ✅ export run and re-run 2026-07-27 — the first backup this data has ever had |
-| Authorized domains | already include `tentacalendar.misterwilson.org` — **flip day needs no auth change** |
-
-**E4a is not theoretical and it already bit once.** The dev URL is a subpath, so every reference must be relative. `manifest.json` shipped from 1.x with `"id": "/"` — harmless at a domain root, wrong at a subpath, and **caught by a mechanical sweep, not by reading**. Fixed to `"./"`, which is correct in both places and is what keeps Katie's installed PWA identity intact across the flip (E4). Run the sweep every time markup or the manifest changes.
-
----
-
-## 3. What is built (this session)
-
-**Build items 1 and 2+3 are done** (E29 folded 2 and 3). The app is a complete 1.x running on a multi-tenant database, private to whoever signs in.
-
-| File | Version | What happened |
-|---|---|---|
-| `config.js` | **1.0.0** | Rewritten. `ALLOWED_EMAILS` and `WORKSPACE_ID` are **gone** — the first is theatre once rules 1.0.0 dropped the allowlist, the second is resolved per user at sign-in |
-| `store.js` | **0.18.0** | The only real surgery. `ACTIVE_WS` + sign-in bootstrap + `completedBy` (E9). **Every exported signature unchanged** (E30) |
-| `app.js` | **1.22.0** | Four seams: `?v=` pins, banner, `watchAuth`'s third callback, `onBlocked()` (E17). No feature code touched |
-| `index.html` | **0.41.0** | One `<div>` added (`#blocked-screen`) + pins |
-| `tentacalendar.css` | **0.47.0** | Two rules: `#blocked-screen` shares `#auth-screen`'s selector (D104's one grammar), plus `.blocked-detail` |
-| `manifest.json` | **0.2.0** | `"id": "/"` → `"./"` (E4a) |
-| `firestore-2.0.rules` | **1.1.1** | E33 minor guard + E34 collection-group clause, **the latter rewritten to secure a query rather than a document**. Publish in the console. |
-
-### Item 7 — calendars (built 2026-07-27, awaiting the console hour)
-
-`functions/index.js` **1.0.0** + `functions/package.json` 1.0.0 + **`SETUP-PHASE3-2.0.md`** 1.0.0, the browser-only walkthrough. **Nothing runs until Jake spends about an hour in the Google Cloud console** — the function has to exist somewhere before it can be scheduled.
-
-**Carried across untouched**, because re-deriving any of it by accident would be "a catastrophe wearing a rewrite's clothes": D135's poll reconcile (deterministic doc ids, write-only-what-changed, `syncedAt` deliberately absent — it took writes from 1,500/day to 116), D81's mirror ledger and loop guard, D87's no-hour-trigger carryover. The three job functions changed **only** by gaining a `wsId` parameter.
-
-**New: the E14 work queue.** 0.4.0 hardcoded `WS = "primary"`. A serial loop over every workspace eventually blows the request timeout, and the failure mode is silent — the last user never gets polled and nobody finds out. Instead: claim a bounded batch whose `nextPollAt` is due, oldest first, each inside its own try/catch, then re-stamp. Timeout-safe, self-healing after an outage, and load spreads itself.
-
-**Two decisions worth not re-litigating:**
-
-- **A failed workspace is stamped anyway.** Otherwise a broken calendar share stays permanently overdue at the head of the queue and starves everyone behind it. It reports its error hourly and costs one slot, not all of them — the poll's own "one bad tier must not starve the rest" discipline, one level up.
-- **`nextPollAt` is always a NUMBER, 0 = never polled.** Null sorts before numbers in Firestore, so nulls get swept into the `<=` comparison regardless; a field whose null and whose zero mean the same thing is one fewer case for the next reader. Legacy nulls self-migrate on first contact.
-
-**`?ws=<id>` runs one workspace** — the id is in the version tooltip. First thing to reach for when one person's calendar misbehaves, and 1.x never had it.
-
-### Item 4 — houses and keys (the E24 milestone)
-
-Two words carry the whole permission model. **Owner** holds the deed and is the only one who hands out or takes back keys. **Member** holds a key — `editor` for full use, `viewer` for read-only (a viewer may still react on the activity feed, which is how kudos work). Everything Jake described is that model pointed one of two ways:
-
-- **An adult holds their own deed and invites others in** — Katie, colleagues. `ownerEmail` is theirs; guests are member rows.
-- **A dependent lives in a house an adult holds the deed to** — Nico, and students far later. Same documents, opposite direction, plus `minor: true` on the resident's row.
-
-**A shared board is one set of documents, not a copy.** Two people watching the same workspace watch the same documents, so a completion lands on both screens within a second and there is never anything to reconcile.
-
-**The bug that walking Nico through 0.18.0 exposed, and it would have been invisible until he tried:** a dependent board is created *before* its resident has ever signed in, so there is no `users/{email}` document pointing at it. 0.18.0's `resolveWorkspace` would have seen "no home workspace" and built Nico a second, personal board his parents did not hold — the same lockout E33 closes in the rules, arriving through the front door instead. `resolveWorkspace` now asks *"do I already hold a key somewhere?"* before building anything, and adopts a board where it is flagged the resident minor. **Only a minor flag adopts**, and that restriction is load-bearing: if any membership counted, a colleague sharing a board with someone who had never signed in would silently deny that person a house of their own.
-| `queue.js` | 0.20.0 | **Byte-identical to 1.x.** 1,206 lines that have never known Firestore exists (D26) |
-| `celebrate.js` | 0.2.0 | **Byte-identical to 1.x** |
-
-**The one genuine trap, documented in the code and repeated here because it will be re-encountered:** the workspace document and the first member document **cannot be written in a batch.** The members rule is `isWsOwner(wsId)`, which does `get(workspaces/{wsId})`; inside a `writeBatch` every write is evaluated against pre-batch state, so the workspace would not exist yet and the first member write is denied — the same deadlock the design doc's §5 sketch had, arriving by a different door. Two sequential `await`s. `smoke.html` proves it; that is why it went green.
-
-**One latent 1.x bug fixed here and deliberately NOT hotfixed to 1.x:** the settings-tab handler bound to a bare `.tab-btn`, which also matches D126's Have-tos/Want-tos bar — so clicking Want-tos called `switchSettingsTab(undefined)` and hid every settings pane. It has never been visible, because `openSettings()` calls `switchSettingsTab("tiers")` on every open and repairs it. Scoped to `#settings-modal .tab-btn` in 2.0 because a fourth tab was about to join the same unscoped query. **No symptom for Katie, so E27 does not fire** — the dual-fix window is for defects she can hit, not for every shared imperfection, or it becomes a tax that stops being paid.
-
-**Ship-check run, all green:** banner === declaration for all seven versioned files (iterated, not hand-listed — meta-rule 6); **every `?v=` pin === the target file's own declaration** (this closes the gap Wunderpus named in 1.x's header, where nothing asserted that the URL requesting a file matched what that file said it was); function census on `store.js` (48 definitions, 0 duplicates, 0 unresolved calls, comments stripped first); all 39 names `app.js` imports from `store.js` are exported; all **236** ids `app.js` reaches for exist in the markup; **div balance 135/135**, 0 duplicate ids (D127).
-
-
----
-
-## 3a. Item 5 — SHARED TIERS (built 2026-07-28)
-
-**The whole feature is in `store.js`. `app.js` gained a button.** That is E30 spent a second time and it is the headline: 6,500 lines still believe there is exactly one workspace.
-
-### The merge rule, which is Jake's and is not the obvious one
-
-The first design said shared tiers merge into your **home** board only, so visiting somebody meant seeing strictly their world. Jake corrected it:
-
-> *"If I'm sharing with a colleague and \[I'm\] in her house, then I won't see that tier — I'm in her house, after all — but I don't want OUR shared tier to disappear just because I'm in her house."*
-
-So the rule is: **a shared tier follows you into a house where somebody who lives there also holds a key to it.** In your own house, everything you hold merges. Anywhere else, only what a resident other than you also holds. Both inputs are readable without a rules change — you may list the members of any workspace you are a member of, and both qualify.
-
-**This is the third time a design was fixed by the human re-describing it in his own words** (E25 reversed who owns Katie's board, E32 invented the dependent workspace). The pattern is now well enough evidenced to state as a rule: *when Jake re-describes the problem, walk the code through HIS version, not yours.*
-
-### The five pieces
-
-| Piece | Where | Why it is the way it is |
-|---|---|---|
-| **The merge set** | `mergeSet()` / `refreshMerge()` | Recomputed whenever the active board, its member list, or your shared boards change. Rebinds every live fan-out. |
-| **Fan-out** | `fanout(coll, build, emit)` | One logical subscription → N Firestore listeners → one merged emit. It is `subscribeTasks`'s own 0.17.0 trick (two listeners, one composite unsub) raised a dimension. |
-| **The ownership map** | `_where` | `docId → wsId`, stamped by the merged snapshots themselves, so a write is aimed at a fact rather than a guess. **⚠️ NEVER PRUNED** — see below. |
-| **Per-user rank (E7)** | `TIER_RANKS` + the overlay in `subscribeTiers` | `rank` is substituted before `app.js` sees a tier, so `app.js:6391`, `app.js:2069` and `queue.js:486` all keep reading a field that stopped being a property of the document. |
-| **Share = a move** | `shareTier` / `unshareTier` / `moveTier` | E6: a shared tier is a small shared workspace. Documents move; **ids are preserved.** |
-
-### Four things a successor must not undo
-
-1. **`_where` IS NEVER PRUNED, AND THAT IS THE FEATURE.** A deleted document keeps its entry because `restoreDoc` (D116's undo) resurrects by id and has to put it back on the board it came from. Prune it and undoing a delete on a shared tier silently moves the task to your own board — and to the other person it looks like it never came back. Tombstones, deliberately.
-
-2. **IDS ARE PRESERVED ACROSS A MOVE.** `parentTaskId` chains, `projectId` references and the sessions ledger all point *by id*, and the merged view keys by id too. A move that reassigned ids would sever every follow-up chain in the tier and orphan its clocked time. `setDoc`-at-a-known-id is already proven here; it is what `restoreDoc` has done since D116.
-
-3. **COPY, VERIFY, THEN DELETE. NEVER THE OTHER ORDER.** A failure part-way leaves duplicates — recoverable, and because the merged view keys by id, not even visible. A delete-first failure leaves a hole, which is not recoverable and is precisely what Principle 3 forbids.
-
-4. **"AT MOST ONE OPEN SESSION" BECAME A CROSS-BOARD INVARIANT.** D112's guarantee is that clocking in closes whatever was running *in the same commit*. The moment a project can live on a shared board, so can an open session — and the old query, scoped to the active board, would have found nothing, opened a second session, and quietly billed two projects at once. `openSessions()` sweeps every merged board; `writeBatch` spans them all.
-
-### Whose tier order you see — and the mistake that was corrected mid-session
-
-Jake, on being told visiting would show document ranks: *"Visiting her should give me a taste of **exactly** what she looks at — zero differences. Otherwise I wouldn't have an honest picture of her load. I'm pretty sure that's what you said, so we're good."*
-
-**It was not what I had built, and saying so was the whole value of that exchange.** 0.21.0 was right for a person's own tiers and wrong for the shared one — which is the only tier he was actually asking about.
-
-- **A personal tier's document `rank` is reliably its owner's opinion**, because on a personal board exactly one person has setup rights to write it. Visiting Katie shows Katie's order for Katie's tiers. That part always worked.
-- **A SHARED tier's document rank is contested.** Both people hold `editor` on that workspace, so both write that document, and **the last save wins.** Visiting Katie could have shown Family at *Jake's* rank, sitting in the middle of her board looking exactly like her judgement about her own week. A number that looks like somebody's priority and is somebody else's is worse than no number.
-
-**Fixed in 0.21.1 by putting each person's ordering of a shared tier on THEIR OWN MEMBER ROW** — `workspaces/{sharedWs}/members/{email}.tierRanks`. No rules change: a member row is readable by everyone holding a key to that workspace and writable only by its own subject, which is precisely the shape this needs and is already what 1.2.1 says.
-
-So the resolution now is:
-
-| Where you are | Whose numbers you see | Read from |
-|---|---|---|
-| Your own board | Yours, for every tier including shared | `users/{me}.tierRanks` (E7 — the authority) |
-| Visiting | **The resident's**, for their tiers *and* the shared one | tier document rank / that person's member row |
-
-**`users/{email}.tierRanks` remains the authority for YOUR view; the member-row copy exists purely to BE READ BY SOMEBODY ELSE, which is a thing a private profile can never be.** That is a mirror, not D103's two competing numbers — the same shape `saveConfig` already uses to put `pollIntervalMinutes` where the poll can query it.
-
-**And "the resident" is not "the owner."** On a dependent board (E32) a parent holds the deed and a child lives there, and it is the *child's* ordering that makes his board an honest picture. `viewerEmail()` reads the `minor` flag first and falls back to `ownerEmail` — the flag that already marks exactly that relationship, doing a second job it turns out to fit.
-
-**The durable lesson, and it is a small one worth keeping:** *"we're saying the same thing"* is worth checking rather than accepting. He was right about the requirement and wrong that it was met, and the difference lived in one sentence about one field.
-
-### Three defects found in review, all in failure paths
-
-Same shape as §8c, and worth recording because the ratio held: **the feature worked; the error handling did not.**
-
-1. The merge set was empty at the first bind, so the app booted blank and filled in a beat later once some unrelated snapshot refreshed it. Seeded before `onIn`.
-2. A share that copied successfully and then failed to delete the originals surfaced a bare `permission-denied` — which reads like the whole thing failed, when in fact nothing was lost. Now says so, and names unshare as the way out. (This is the helper-on-a-source-board case: the rules let a helper create and not delete.)
-3. `unshareTier` counted four collections before deleting the shared workspace document and **did not count `eventsCache`** — which the hourly poll can write *after* the tier has left. Deleting a workspace does not cascade, so that would have orphaned documents at a path nothing can ever reach again. Swept rather than counted, because it is a cache.
-
-### Shared projects with per-stage assignment — Jake's spec, 2026-07-28, NOT built
-
-His description, which is a good one: *"stage 1 is mine, stage 2 is Tomlinson's, stage 3 is mine — so if I finish stage 1, the next thing I see is stage 3, not that I can't sign off on Tomlinson's, but it's not the next thing on MY list."*
-
-That decomposes cleanly:
-
-- A stage gains an `assignedTo` (an email, or blank for "anybody"). A stage is an array element in a project document, so this is a schema addition with **no rules implication** — rules cannot see inside arrays.
-- The queue surfaces *your* stages first and still shows other people's, demoted rather than hidden, so signing off on somebody else's remains one click. **That is a queue.js change,** which is the right place: it has never known Firestore exists.
-- Provenance is already there as of store 0.22.0 — a stage records who created it and who completed it, so "assigned to Leah, finished by Jake" is expressible.
-
-**⚠️ ONE PART OF THE SPEC DOES NOT WORK, AND IT IS THE PART THAT SOUNDS EASIEST.** Jake added: *"regardless of whether or not we have a shared tier (which would mean the other user would have to assign their own tier to the project)."*
-
-There is no such thing. **A project lives in a tier's workspace — the tier is not a label on the project, it is the project's address.** If the other person cannot see the tier they cannot read the project document at all, and there is no second tier to assign because a document has one path (E1). So per-stage assignment is a refinement **on top of** shared tiers, not an alternative to them. That is arguably the better answer — one sharing mechanism instead of two — but it means this feature inherits everything item 5 is still waiting to have verified.
-
-**Build it after TIER-4…10 pass, not before.**
-
-### What is deliberately NOT built
-
-- **The activity feed and kudos on a shared tier.** That is item 6, and it is where E9/E10/E11 land. Until then a completion by the other person appears live and silently — correct per E11 (no confetti for someone else's win), but with no catch-up bar to notice it.
-- **A role picker.** E8 stands: the UI writes `editor` and offers no choice. Note that editor is *safe* here in a way it is not on a whole board — the only `gcalCalendarId` an editor can repoint is that one tier's, because it is the only tier in the workspace. That is the E-row's reasoning surviving contact with the `helper` role that arrived after it.
-- **Live cross-device rank sync.** `tierRanks` is read once at sign-in. Reorder on your phone and your laptop catches up on reload. Three lines to fix with a profile listener; nobody has asked.
-
----
-
-## 4. Deploying this drop
-
-Push all thirteen files to the **octodo** repo root, then:
-
-1. **Delete `smoke.html`** — it says so itself, and the real app now exists.
-2. **Delete the stale `HANDOFF.md`** from octodo (§1).
-3. Replace `SETUP-2.0.md` with 1.3.0 and add `TENTACALENDAR-2.0-DESIGN.md` 1.5.0 + this file.
-4. Visit `https://misterwilson37.github.io/octodo/` and run the smoke list in §5b.
-
-There is **no CNAME** and there should not be one yet — the custom domain gets pointed at flip time (§11), and adding it early would move the origin twice instead of once.
-
----
-
-## 5. Open items
-
-> **Numbering, because the old scheme broke down and Jake had to decode it by hand.**
-> Tests used to be lettered IA…JA and grouped by *build item*, while living inside *document section* 5b. Three consequences, all real: `IS`, `IT` and `IN` are English words and cannot be searched for or said aloud; the list ran past `IZ` into `JA`; and because item 5's block was inserted where item 5 was discussed, the file physically read **IS…JA, then IQ, IR** — doubling back to two tests already passed. The letters are gone. Tests are now `GROUP-n`, the group names what is under test rather than which roadmap row asked for it, and **the numbers do not restart or change when a test is added** — new ones append.
-
-### 5a. Jake's list — CLOSED
-
-- ~~**How much does Katie want to know?**~~ **Answered 2026-07-28, and it is not a design question.** Jake: *"She just wants it to work… every minute she is bug testing known bugs is a minute she's not working, and she's already working 60+ hours a week."*
-  **⚠️ TREAT THIS AS A STANDING CONSTRAINT, NOT A DATA POINT. Katie is not a tester.** Nothing goes to her to be *checked*; things go to her when they work. A successor who writes "have Katie confirm…" into a plan has misread this row.
-- ~~**Her phone, still blocked on one number.**~~ **The number does not exist. Stop asking for it.** Jake checked: default zoom 100%, no per-site zoom saved, **no "Text scaling" entry in that menu at all**, Samsung screen-zoom / font-size / font-style changed nothing on the page, Magnifier off. Four theories now, and the diagnostic path is exhausted — *and* 5a.1 forbids spending her time on a fifth.
-  **What that means for whoever picks this up:** the fix has to be code-side and robust to an unknown scale factor, not a setting to be located. Do not open this by asking either of them to read a number off a phone.
-
-### 5b. Smoke tests
-
-> **Passed one-time tests are DELETED, not archived** — Jake, 2026-07-28: *"I would think that you could safely just clean them out of the document when they're passed."* Right, with one exception kept below: a handful guard invariants that can silently regress, so they move to **Standing checks** rather than disappearing. A test that proved a build step happened has no second life; a test that proves isolation still holds has one every time the data layer moves.
->
-> **VOCABULARY, because this document leaked an implementation detail into Jake's hands.** A **shared tier** is the only thing that exists in the UI. Under it, the app creates a small hidden **workspace** to hold that tier — because E1 makes access a property of the PATH, so a thing two people can reach has to *live* somewhere both hold a key to. **You never see it:** it is filtered out of the switcher, has no dashboard, and the word "workspace" appears nowhere on screen. It is visible only in the Firestore console, as a `workspaces/` document with `kind: "shared"`. Tests below say **"the tier's own hidden board (`kind: "shared"` in the console)"** and never just "the shared workspace."
-
-**⏳ Still to run.**
-
-1. **BASE-7. Provenance is landing — all four fields, tasks AND stages.** *Partially failed 2026-07-28 and fixed twice; this is the re-run.* Console: [console.firebase.google.com](https://console.firebase.google.com) ▸ project ▸ **Build ▸ Firestore Database** ▸ **Data** ▸ `workspaces` ▸ your board ▸ `tasks` ▸ a completed task. Want `createdBy` + `createdAt` + `completedBy` + `completedAt`. **Then the harder half:** open a project, complete a stage, **edit the stage list and save**, and confirm the finished stage *still* carries `completedBy` and now also `createdBy`. That edit is what used to erase it.
-2. **KEYS-2. Somebody invites you to a whole BOARD.** They sign in, ⚙️ ▸ **People**, your address, "Can edit", *Give them a key*. **Nothing for you to accept.** Reload: the chip appears. *(A colleague has invited Jake to a TIER, which is a different mechanism and passed as TIER-1.)*
-3. **KEYS-4. Your settings stay yours.** In their house you keep *your* view, *your* hidden tiers, *your* week layout — per-device, not per-board, deliberately.
-4. **KEYS-5. It remembers.** **One reload is the whole test.** Switch to Nico's board, **reload**, land back on Nico's. Switch to your own, reload, your own.
-5. **KEYS-6. They can take the key back.** Removed in ⚙️ ▸ People → that board leaves your switcher on reload, and opening it directly fails.
-6. **TIER-4. The tier went in whole.** Projects on that tier came across, and so did their clocked sessions — the Time Report still totals them. Most likely to be half-done, because sessions are matched to their projects client-side.
-7. **TIER-5. New work lands on the right board.** Add a task to the shared tier. In the console it must appear under **the tier's own hidden board** — the `workspaces/` document with `kind: "shared"` — and **not** under your personal board. If it lands in yours, `wsOfTier` is not resolving and sharing is cosmetic: they will never see it.
-8. **TIER-6. Order is per person, and is a POSITION.** Reorder with ▲▼ — **there is no number to type any more** (app 1.30.0). Your order and theirs both hold. `users/{you}.tierRanks` gains a `"wsId:tierId"` entry, and your row in the shared tier's `members/` gains a `tierRanks` map.
-9. **TIER-7. Visiting is an honest picture.** Rank the shared tier differently from them and **save yours LAST**, then visit their board: it must show at **their** number. *Saving last is the test — run it the other way and the broken and fixed versions both pass.*
-10. **TIER-8. Jake's merge rule.** On someone's board, a tier you share **with them** is still there; a tier you share with a **third** person must **not** appear. Nothing else tests the rule he corrected.
-11. **⚠️ TIER-9. Bring it back.** 🤝 ▸ *Bring it back to my board* → everything returns, the tier's hidden board **disappears from the console**, and they can no longer see any of it. **Can lose data if wrong.**
-12. **⚠️ TIER-10. Undo lands on the right board.** Delete a task on a shared tier, undo, and confirm **in the console** that it returned to the tier's hidden board rather than your personal one. Only test of the tombstone map, and **its failure is silent** — the task looks correct on your screen and is gone forever from theirs. **Can lose data if wrong.**
-
-**🔁 Standing checks — re-run after ANY data-layer change.** These passed; they are here because they can regress without anybody noticing.
-
-1. **BASE-6. Isolation (E1).** A second account gets its own board with its own three tiers and **cannot see Jake's tasks**. Console: two `workspaces/` documents with different `ownerEmail`s. *This is the entire security model. If it ever fails, nothing else on this page matters.*
-2. **BASE-9. You can sign in as somebody ELSE.** After ⏻, signing in must **offer a list of accounts**, including *Use another account*. Regressing this makes every two-person test below unreachable and looks like a broken sign-out. *(Was broken until store 0.21.2: `signInWithPopup` with a bare provider never draws a chooser where the device has one Google account.)*
-3. **TIER-3. Same document, live, two real people.** Two people on one shared tier see one task and either can toggle it, live. *Passed 2026-07-28 with a colleague — this is item 5 actually working, and it is the thing all the machinery is for.*
-
-**Item 7 — calendars.** Group **CAL-1…8**, in SETUP-PHASE3-2.0.md Part 6 as WW1–WW8. **CAL-8 is new and 1.x could not have had it:** the report must name more than one board, and one person's broken calendar share must show as `error` on *their* row while everybody else's is fine.
-
-### 5b-i. Closed 2026-07-28
-
-Kept as history because each one records a failure mode, not a task.
-
-- **⚠️ EDITING A PROJECT'S STAGES WAS ERASING `completedBy` (E9).** Fixed in app 1.30.1. Jake found it in console data and read it as *"if Tomlinson checked it off she gets credit, if I do it does not"* — reasonable, and wrong in a way worth keeping. `setStageDone` writes `completedBy = whoami()` **unconditionally**, so the stamp cannot depend on who; and the field was **absent rather than null**, which means something removed it later. `saveStages()` rebuilt each stage carrying an ALLOWLIST of two fields (`completedAt`, `dueAt`) and dropped the rest — so every stage edit left the stage ticked with nobody's name on it. **The real split in his data was TIME, not person:** his completions predated the last stage edit and hers followed it. Had she gone first, the evidence would have accused her.
-  **Two things to keep.** (1) *A keep-list is a list somebody must remember to extend.* The whole stage is now carried and only editor-owned fields overridden — with `hurrah` stripped first, because D109 says the editor owns that flag and a stale `true` surviving a spread would resurrect a climax the user just switched off. (2) **The stamps already lost are NOT recoverable.**
-  **This bug predates item 5 and was harmless until it shipped.** While one person authored everything, "who completed this" had one possible answer; a shared tier turned a silent field-drop into a false accusation.
-- **Stages had no `createdBy`/`createdAt`.** store 0.22.0 + app 1.31.0. Tasks and project documents carried all four fields; stages carried only the completion half, so *"Leah added this step and I finished it"* was unanswerable — a question a shared tier invents. Stamped at the write boundary, and **only where the caller has established the stage is new**, because a legacy stage is indistinguishable by inspection and a guessed name is worse than an honest blank. Jake on cheating: *"Sure. But then we have bigger problems, and this software isn't made for those assholes."* Not defended against, on purpose — a stage is an array element inside a project document, so the rules cannot see it and nothing hangs off it but credit.
-- **The rank collision.** *"it came in as 4/4. I changed it to 3 without changing my 3, and it just… stayed there?"* A typed rank worked for four years because **one person authored every number**; item 5 ended that. app 1.30.0: ▲▼, rank assigned **1..N from position on save**, which answers *"it should kick back an error"* by making the state unconstructible. Opening ⚙️ ▸ Tiers and saving **normalises collisions already in the data**.
-- **KEYS-1 — one key, no switcher.** ✅ Confirmed by Jake's colleague, who holds her own board plus a shared tier and correctly sees **no switcher chip**: a shared tier is not a board, so it does not count toward the one that would summon the menu.
-- **The whole IA…JA lettering scheme.** `IS`, `IT` and `IN` are English words; the list ran past IZ into JA; and item 5's block, inserted where item 5 was *discussed*, made the file read IS…JA **then IQ, IR** — doubling back to two already-passed tests. Jake had to hand-decode the mapping before he could report anything. **Do not re-letter it.**
-
-### 5b-ii. Onboarding — started 2026-07-28, NOT finished
-
-**The problem, in Jake's words:** he handed the link to two people in one day. *"The first had zero context… He didn't know what it was or where to start. That's a problem for any new user, as I'm not always around. The second person has ready access to me multiple hours a day, but she does not necessarily want to bother me all the time."*
-
-Two different failures needing two different fixes:
-
-| Who | Needs | Where |
-|---|---|---|
-| **Cold link, no context** | *what is this, should I care* — **before** signing in | the sign-in screen |
-| **Has Jake, won't interrupt** | *how do I do X* — at the moment of confusion | in the app, in context |
-
-**Done:** `GUIDE.md` in the repo root. The full explanation — tiers, escalation, the queue's refusal to be reordered, projects and stages, the clock, both sizes of sharing, and a "things that surprise people" section. Written deliberately as **source material**, not just a document: every later surface draws its wording from it.
-
-**Not done, and this is the next instance's job:**
-
-1. **The sign-in screen says nothing.** Somebody who arrives cold sees a Google button and no reason to press it. Two or three sentences and a link to `GUIDE.md` would have saved Jake's first colleague entirely.
-2. **`.info-dot` already exists in the stylesheet and is barely used.** It is the obvious carrier for contextual help — one beside *escalation*, *tier kind*, *hurrah*, *stretch until done*, *workload*, *the four roles*. The chrome is built; the content is now written; somebody has to connect them.
-3. **First-run.** A brand-new board arrives with three tiers and no explanation of what a tier IS. The highest-value single sentence in the app is whatever greets someone on an empty board.
-
-⚠️ **DO NOT PUT THE GUIDE'S TEXT IN THE CODE.** Two copies of an explanation is D103 with prose instead of numbers, and the copy in the code is the one that will be wrong. Info-dots get a sentence and a link; `GUIDE.md` stays the one authority.
-
-⚠️ **THE GUIDE WILL GO STALE AND NOTHING WILL DETECT IT.** No ship-check can tell that a paragraph now describes a control that was replaced — the tier-rank paragraph already had to be written against ▲▼ rather than the number box that had existed for four years. **Whoever changes a control changes the guide in the same drop.**
-
-### 5c. Claude's backlog (no input needed)
-
-- **`pollIntervalMinutes` has two homes and one truth.** Written on the workspace document per §4.3, but `settings/config`'s copy is what the settings UI edits and therefore what is authoritative. **Item 7 unifies them and deletes the config copy** — at the same moment the settings form is repointed, which is the only way to change it without a window where the UI edits the wrong field.
-- **`subscribeSessions` is still unfiltered** (inherited from 1.x §5c). 11 documents today, so it is the right shape rather than a fire. Jake's constraint stands: the Σ must be lifetime **"but stored by dates so that we can see what was used when"** — the ledger remains the source of truth and any denormalised total is only ever a display cache.
-- **Firestore persistence** — still unbuilt, still ~3 lines, and 1.x's §5c corrected the claim: a listener disconnected >30 minutes is billed as a new query anyway, so it is a **kiosk optimisation, not a general one**. Whoever builds it must also make the D136 census count only `snapshot.metadata.fromCache === false`, or the counter stops being a cost dashboard. Jake's trusted-device decision is already made: **default on, always clear on sign-out.**
-- **App Check** before item 8 opens signup (E18). Free, and the only real ceiling on a project with no hard spending cap.
-- **The E17 screen has never actually been seen.** Both its states are hard to trigger deliberately. Worth one console-forced render before anyone relies on the copy.
-
----
-
-## 6. Standing meta-rules
-
-**All ten of 1.x's meta-rules carry over unchanged** — one clarifying question before chasing a bug theory; version bumps on every shipped file with D94's meanings (Z = it isn't working as asked, *including* refining something already agreed; Y = something exists that didn't; X = the usefulness fundamentally changes); complete replacement files, never diffs; incremental disk-based builds; never store student-identifying data; the mechanical ship-check; instance naming; keep §5 lean; **parse-clean ≠ wired**; update this file every session. Two of them earned their keep this session and are worth restating with their 2.0 edge:
-
-**6 (ship-check) — now also asserts the pin.** Banner === declaration was never enough: nothing checked that the `?v=` *requesting* a file matched what that file *declared*. 1.x is live right now with `index.html` asking for `?v=0.46.0` while the stylesheet says `0.45.1`. The check is four lines and it is in this session's script; keep it.
-
-**6c (a failed write is not a no-op)** — build in memory, write to a temp file, `os.replace()` into position. Used throughout this session.
-
-**Two rules that are new to 2.0:**
-
-11. **E4a — SWEEP FOR ABSOLUTE PATHS on every markup, manifest or CSS change.** `href="/`, `src="/`, `url(/`, and the manifest's `id`/`start_url`/`scope`. An absolute path **works at a domain root and 404s at a subpath**, which means it is broken during development, fine after launch, and therefore easy to "fix" by shipping. This is the worst possible failure timing and it already produced one real bug.
-
-12. **E27 — SAY WHEN A BUG IS SHARED.** Until Katie is migrated, a defect in code that exists in both trees must be called out as such, not silently fixed in whichever copy is open. The failure mode is a fix that exists everywhere except where she is.
-
----
-
-## 7. The platform landmines — carried forward so you never have to open the big file
-
-Mirrored from 1.x's D-rows because these are the ones that bite **before** you have a symptom to look up. Every one is a settled fact about a browser, not a design opinion, and none of them will change — which is what makes mirroring them safe here when copying a *live* document would not be (that mistake is documented in §1). **If you discover a new one from here on, it goes in THIS file, not that one.**
-
-| # | The trap | What it looks like when you hit it |
-|---|---|---|
-| **D35** | CSS must contain `[hidden] { display: none !important; }` | The `hidden` attribute is UA-stylesheet priority, so **any** author `display` rule silently beats it. Caused the very first deploy failure: the settings modal rendered over the sign-in screen and every write fired unauthenticated. Still 3 rules deep in the shipped CSS. |
-| **D37** | Never put a CSS `transform` on `<body>` or any ancestor of a `position: fixed` element | A transformed ancestor becomes the containing block for fixed descendants, so "centred" means centred in the *page*, not the viewport. The burn-in drift lives on `#drift-wrap`; **every modal must stay outside it.** D127 later found that nine modals had been inside it for months because a stray `</div>` moved the wrapper's real close 150 lines down. |
-| **D49** | `?v=` on a `<script>` tag does **not** cache-bust `import` statements inside the module | A stale cached `config.js` broke the entire module graph with `SyntaxError: Importing binding name not found` and a dead sign-in button. Every internal import carries `./file.js?v=x.y.z`, **identical across importers** — differing queries load duplicate module instances. |
-| **D58** | An `<label>` forwards its click to the labelled control | So a popover opened inside a label is closed by its own re-dispatched click, the same tick. Needs `preventDefault()` / `stopPropagation()`. Hit again from the other direction in D140's "Today" button. |
-| **D66** | Flex items will not shrink below their content's min-width | Two native date inputs out-minimum a narrow panel and push it off screen. `min-width: 0` is the fix and appears **30 times** in the shipped CSS. D138's phone overflow was this same landmine wearing `.nav-slot`. |
-| **D110** | A renderer that is *called* is not a renderer that *agrees* | `renderYear()` had an early-return guard that silently refused every repaint in the dashboard. Buttons fired, state changed, nothing drew — a still photograph wearing live controls. **Verifying a call happens is not verifying the callee will act.** |
-| **D127** | HTML has no `node --check` | Nothing mechanical asserts well-formed nesting, so a stray tag can sit for entire feature lifetimes. **Run a comment-stripped div-balance count on every `index.html` delivery.** (Comment-stripped, because prose mentioning a tag produces a false positive — it did, once, while verifying that very fix.) |
-| **D132** | `form.reset()` does not clear JS-built children | It only restores *declared* inputs. Anything appended by script must be cleared by hand. |
-| **R1** | Firestore ORs every matching `allow`; a narrow rule cannot take back what a broad one gave | A `{subcollection}` catch-all silently granted editors write access to `members` and made `allow delete: if false` on the activity log decorative — for three rules versions, with no symptom. **Enumerate collections; never wildcard a subcollection you also match specifically.** |
-| **R2** | A rule that matches on the document ID cannot secure a QUERY | The rule is evaluated before any document is read, so the ID wildcard is unbound and the query is refused outright. List rules must test a **field**, and the client must filter on that same field. |
-| **D103** | Any geometry declared in two places is a bug with a delay on it | The week's seven columns were declared in the stylesheet *and* inline in JS. Two numbers that agree until one doesn't. Now one CSS variable both read. |
-
-**And the one process rule that has bitten most often, in three different disguises:** *a check that silently matches less than it claims is worse than no check, because it reports ok.* The function census was blind to `async function` for its entire life; the id-duplicate grep counted ids inside HTML comments; the ship-check compared a hand-written version literal instead of a derived one. **Iterate and derive; never hand-write a per-file list of checks, because that is a per-file list of holes.**
-
----
-
-## 8. Session post-mortems, 2026-07-27 — *skippable*
-
-**Next instance: you do not need to read §8 through §8h to work.** Everything load-bearing from that day has been promoted into §0a (state), §5 (open items) and §7 (landmines). What remains below is narrative — kept because the reasoning is sometimes worth having, not because it is required. **§8e and §8f are the two with durable technical content** (the calendar hole that Firestore rules could not have caught; calendars being two features where only one was documented).
-
-### 8. The 1.x hotfix shipped alongside this drop — and how it was found
-
-**`tentacalendar.css` in the live 1.x repo contained TWO COMPLETE COPIES OF ITSELF.** Version 0.45.1 (1,694 lines) followed immediately by the whole of 0.45.0 (1,677 lines), appended with no newline at what was line 1695. Same accident that hit `queue.js` on 2026-07-12: a web-editor paste that appended instead of replacing — the exact failure `SETUP-2.0.md` Part 5 warns about for the rules editor.
-
-**Found by accident**, while reading the file to port it: two `--tc-version` declarations where there should be one.
-
-**Blast radius, measured rather than asserted** — a line diff of the two copies:
-
-- They differ **only** by D138: the banner, `--tc-version`, and two **added** rules inside an existing 600px block. D138 modified nothing.
-- D138's selector `.day-nav .nav-slot` (0,2,0) **outranks** the bare `.nav-slot` (0,1,0) it duplicated, so the later copy never won anything.
-- **Therefore nothing rendered differently, and this does NOT explain Katie's phone.** The §5c text-scaling theory is untouched and still needs its datum. Saying otherwise would have been the fourth wrong theory about her phone.
-
-**What it did break** is the one instrument that had to keep working: both copies declare `--tc-version` inside `:root`, the second wins, so **the badge has been reporting `0.45.0` — a version that was never deployed.** That is the project's only deploy check (meta-rule 2), and Jake is about to run a migration that leans on it. Plus 74KB of dead weight parsed on every cold load.
-
-**Shipped:** `tentacalendar.css` **0.45.2** (de-doubled) + `index.html` **0.40.1** (repins to `?v=0.45.2`). A **Z** per D94 — no feature, one instrument made honest. **Not 0.47.0**, which 1.x's header ordered: the real constraint was only ever *don't serve new bytes under `?v=0.46.0`*, which browsers have cached. `?v=0.45.2` has never been requested, so it is not burned — and it does not read "lower" than the badge, because the badge says 0.45.0 today.
-
-**This is E27's first invocation, within an hour of the row being written.** The 2.0 stylesheet skips 0.46.0 entirely and starts at 0.47.0, so no number means two things in two repos.
-
----
-
-## 8b. The first sign-in failure — what it cost and what it taught
-
-**Symptom:** Nico signed in at the dev URL and got the E17 screen reading *"We couldn't finish setting up your calendar… almost always a connection hiccup."* Console: `Missing or insufficient permissions` at `store.js:193`.
-
-**Three things went wrong, and only the first was a bug.**
-
-1. **The rules bug (real).** Covered in the header. The clause was written and commented with confident reasoning — *"the document id IS the member's email, so the only rows this can ever return are the asker's own"* — that is simply not how list authorisation works. **The comment was more confident than the code was correct, which is the worst possible pairing** because it discourages the next reader from checking.
-2. **The error message lied.** It said "connection hiccup, try again." `permission-denied` is never a hiccup and retrying never fixes it. E17 exists so a stranded user gets the truth; a screen that guesses wrong is only marginally better than the silent bounce it replaced. Fixed: `permission-denied` now has its own copy that says the account is fine and the configuration is not.
-3. **The diagnostic said "bootstrap failed" and nothing else.** `resolveWorkspace` has four steps that can throw and the console named none of them. Now every step is tagged and the failing one is printed, and a `permission-denied` prints an ordered checklist. **Cost of not having this: one full round trip to identify a line number.**
-
-**The design flaw underneath, which is the durable lesson:** the failing query was the *optional* one — a lookup that exists so a child lands on the board built for them. In 0.19.0 a failure there threw, so **one bad clause in an enhancement stopped every new user from signing up at all.** An optional step that can strand everybody is not optional. It now warns and falls through. **Residual risk, stated rather than discovered: if that query is broken AND a dependent board exists, its resident gets a personal board instead of the one their parents hold — recoverable, where a locked-out app is not. This is why smoke test IR must be re-run after ANY rules change.**
-
-## 8c. First-run defects, in the order they were found
-
-Four, all mine, none of them in the feature — all four in what happens when something goes wrong.
-
-| # | Defect | Fixed in |
-|---|---|---|
-| 1 | The E34 rule matched on the **document ID**, which cannot secure a query. Every first sign-in died `permission-denied`. | rules 1.1.1 |
-| 2 | The E17 screen blamed the **network** for a refusal no retry could fix. | app 1.23.1 |
-| 3 | The console said "bootstrap failed" without naming which of four steps. | store 0.19.1 |
-| 4 | The **live board listener had no error handler**, so a missing index printed forty lines of Firestore internals — while the one-shot lookup beside it, fixed one round earlier, printed one clean sentence. | store 0.19.2 |
-
-**#4 is the one worth internalising: I fixed a failure mode and left its twin untouched.** The one-shot `getDocs` and the live `onSnapshot` run the *same query against the same index*, so they were always going to fail together; only one had been taught to fail well. **When you harden one call, grep for every other caller of the same thing before you ship.**
-
-**And a fifth, cosmetic but instructive:** the People tags reused the existing `.badge` class, which means DANGER (`background: var(--danger)`, bold). My rule set colour and border but not background, so specificity produced grey text on a red pill — and "holds the deed" is a statement of fact, not an alarm. **Reusing a class for its shape while inheriting its meaning.** D104's "one grammar" argues for reusing a *vocabulary*; it does not license borrowing a word that already means something else. Now `.person-tag`.
-
-## 8d. The tag namespace, and why a combined tag can't work
-
-Jake asked whether the mirror could tag `tentacalendar` on 1.x, `octodo` on 2.0, and `octodo tentacalendar` when both were involved — or whether that was overcomplicating and a separate script was cleaner.
-
-**Separate namespaces: yes. Combined tag: no, and the failure is worth understanding.** The mirror lists events with an **exact-match** filter on `tcApp`, then deletes any tagged event whose task it cannot find. A value of `octodo tentacalendar` matches neither filter, so such an event is invisible to **both** apps rather than visible to both. The tag records **ownership**, not provenance, and ownership must be binary for a prune to be safe — two apps sharing one tag would take turns deleting each other's work every hour.
-
-**It was never a new pattern.** D87 already gave the carryover its own namespace precisely so the mirror couldn't see its events and patch the ❗ back to the honest due time. Same calendar, two writers, mutually invisible. Jake re-derived his own project's solution without knowing it was already there.
-
-**On "new script or same script": both, and they don't conflict.** New file in a new project — it had to be, for the work queue — but a *descendant*, not a fresh start. One changed constant and a new dispatcher around logic that is otherwise verbatim.
-
-## 8e. The calendar hole — E1 was airtight and irrelevant
-
-Jake asked, while reading SETUP-PHASE3-2.0: does this let anyone add *their own* calendar, or just pull mine? And *"am I just being paranoid?"*
-
-**Not paranoid, and the real exposure was the inverse of the one he named.** He worried a colleague would be stuck with his calendar. The truth was that a colleague could have taken it.
-
-**The service account is project-wide.** Sharing a calendar with the robot grants access for every workspace in the project — the grant lives on Google's side and knows nothing about workspaces. functions 1.0.0 polled whatever `gcalCalendarId` a tier named, with no check. So any signed-up user could type `jacob.v.wilson@gmail.com` into their own Home tier and receive his entire calendar.
-
-**The lesson worth keeping: Firestore isolation was airtight and completely beside the point.** E1 is a property of the *database*; this leak was on the *calendar* side, where no rules file can see. **Every external system an app touches has its own boundary, and "our data model is secure" says nothing about any of them.** The one thing that did work correctly by accident: new users seed with `gcalCalendarId: ""`, so nobody ever *inherits* a calendar — they'd have had to go and ask for one.
-
-Closed as E37 in functions 1.1.0. It is defence in depth, not proof of ownership; path B (per-user OAuth) is the complete answer and remains unbuilt.
-
-## 8f. Calendars are two features, and only one of them was explained
-
-Jake asked how *other* people would get their calendars in, and whether he was building this only for himself. **He was right that something was missing, and the miss was bigger than the one he named.**
-
-**Inbound** (appointments → the queue) and **outbound** (tasks → a calendar → a phone) are separate mechanisms with separate calendars and separate sharing permissions — read for one, write for the other. SETUP-PHASE3-2.0 covers both, **for the operator, once**. Neither had any per-user explanation at all, and the outbound one is the more important: **this app has never sent a notification of its own. The mirror IS the notification system.** That made it the most load-bearing undocumented feature in the project.
-
-Both walkthroughs now live in Settings, beside the fields they fill, rendering the robot address from one function so they cannot disagree.
-
-**And tracing the mirror against a second user found a live footgun.** E36 split the tag between 1.x and 2.0 and stopped one level too high: within 2.0, every workspace tagged `tcApp=octodo` and then deleted any event whose task it couldn't find. Two workspaces sharing one mirror calendar would have deleted each other's events, hourly — the identical failure E36 was written to prevent, one level down, still open. Closed as E40 with `tcWs`.
-
-**The pattern across E36, E37 and E40 is worth naming: every one was a boundary OUTSIDE Firestore.** The rules file is airtight and cannot see any of them. When a feature touches an external system, the question "who owns this, and what stops someone else claiming it?" has to be asked about *that* system, separately, every time.
-
-## 8g. An honest note on this session's error rate
-
-Jake, at the end of a very long day: *"Given that literally every iteration of our conversation is revealing an error… is it time to handoff?"* A fair question, and it deserves a straight answer in the record rather than a defensive one.
-
-**The errors fall into two piles and only one of them is a worry.**
-
-*Design gaps that surfaced because the thing got built and used* — the rules clause that couldn't secure a query (E34), the project-wide service account (E37), the mirror tag scoped per app but not per workspace (E40). These are the system working. Every one was invisible on the page and obvious the moment a real person's Tuesday was traced through it, and finding them now rather than after Katie's data arrived is the entire point of dogfooding.
-
-*Carelessness, and it climbed as the session went on* — a CSS class reused for its shape while inheriting its meaning; a placeholder that read like a filled-in field; the same Python quoting bug twice; a Firebase console dialog described from memory twice, the second time **after** adopting a rule not to. A version banner that didn't move with its declaration, caught only because the ship-check iterates rather than trusting me.
-
-**The second pile is the signal.** It is not that the work got wrong, it is that it needed more catching — and the catching increasingly came from mechanical checks rather than from getting it right the first time. That is exactly the shape of a session that has run long.
-
-**The recommendation, made by the instance in question, which should be weighed accordingly: hand off.** The documents are current as of this line, §0a records the live state precisely, and the next piece of work — finish the console hour, then write `import.html` — is well-specified and does not depend on anything in one instance's head.
-
-## 8h. The sequencing failure — and the repair
-
-**What happened.** E40 (functions 1.2.0) scoped mirror tags per workspace. I wrote, in the code and in the message, that this was *"free because nothing is deployed yet"* — **an assumption I never checked with the person who does the deploying.** It was wrong. 1.1.0 was live, Jake worked straight through the setup document, and the mirror ran with a calendar attached. Those events carry `tcApp` and `tcTaskId` and no `tcWs`, so the 1.2.x filter cannot see them.
-
-**Compounding it: the instruction to redeploy existed but was unfindable.** It appeared in two consecutive messages, both times partway down a long reply, to someone who had been reading my output all day and reasonably picked up where he left off. **A blocking, order-dependent instruction that arrives buried is functionally the same as no instruction.**
-
-**The repair:** `?job=fixtags` (1.3.0) adopts the untagged events rather than deleting them — lists by the OLD unscoped filter, stamps `tcWs` on anything missing it, preserves `tcTaskId`/`tcCarryKey`. Idempotent, one curl, no calendar surgery.
-
-**Three rules for successors:**
-
-1. **Never assert what the user has deployed. Ask, or read it back from a report** — the function prints its own version in every response.
-2. **An order-dependent instruction goes at the TOP of the message, alone.** Buried in paragraph six it is a trap, not a warning.
-3. **When the user asks a direct question, ANSWER IT FIRST, before building anything.** Jake asked "do I need to delete my calendar, yes or no" and got code instead. That is the failure that ended this session.
-
-## 9. Session log
-
-| Date | Instance | What happened |
-|---|---|---|
-| 2026-07-29 | Opus 5 · **Hapalochlaena** (17th, 15th named) | **THE MIS-ROUTING FIX, AND A HANDOFF THAT HELD UP.** Jake opened by saying the previous instance had started to hallucinate and the code needed a go-over. **It did not — every claim in §0a checked out against the code, and all fourteen version constants agreed with the banner.** Saying so first was the useful part: the alternative was a session spent hunting phantom defects in a file that was fine. Fixed §0b: both routers refuse, seven creators stamp, one global rejection net, `octodoWhere()` left in the file. **Found that the fallback was in TWO resolvers rather than the one the handoff named, and the unnamed one is worse** — `restoreDoc` routes through it and uses `setDoc`, which creates, which is TIER-10's data-loss case. Three more defects found by reading: a catch that swallowed everything and blamed permissions, a latent `undefined` write that would have landed in that same catch, and a `hidden` flag that skipped `refreshMerge`. **What I did not do is the entry worth reading: §0a named two candidate root causes and told me not to guess between them, and I could not settle it.** I found a third that fits Jake's evidence better and said it was a hypothesis rather than dressing it as a finding — the fix is correct under all three, which is what made it shippable without the answer. **Nothing was pushed and nothing was run in a browser; the fix is code, not a verified fix.** Process note for successors: the previous session's own closing lesson was "state the plan in one line before doing it, put the instruction on its own line" — I read it before starting and it is good advice, so it is repeated here rather than left in a paragraph nobody reaches. |
-| 2026-07-28 | Opus 5 · **Argonauta** (14th, cont.) | **FIRST REAL-WORLD USE, AND THE DOCUMENT'S OWN NUMBERING FAILED IN JAKE'S HANDS.** A colleague shared a tier with him and **TIER-3 passed between two real people** — same document, live, both toggling it. Two defects came from actual use rather than review. (1) **The rank collision:** a shared tier arrives carrying a number chosen by somebody who has never seen your board, and a typed rank cannot express "put this above that." That control was fine for four years because ONE person authored every number; item 5 ended that. Now ▲▼, rank assigned 1..N from position — which answers his "it should kick back an error" by making the state unconstructible instead. (2) **`signInWithPopup` never drew an account chooser** on a device with one Google account, so ⏻ looked broken and **every two-person test was unreachable.** One line. **The bigger lesson belongs to this document:** lettering tests IA…JA made `IS`, `IT` and `IN` English words, ran the list past IZ into JA, and — because item 5's block was inserted where item 5 was *discussed* — made the file physically read IS…JA **then IQ, IR**, doubling back to two already-passed tests. Jake had to hand-decode the mapping before he could report anything, which taxes the one person this document exists to protect. Replaced with `GROUP-n`. **Do not re-letter it.** | Jake read back the visiting rule to confirm agreement and was right about the requirement (zero differences; an honest picture of her load) and wrong that 0.21.0 met it. **Personal tiers were fine and the SHARED tier was not**, because both people write that one document and the last save wins — so visiting Katie could have shown Family at Jake's rank while looking like hers. Fixed in **0.21.1** with per-member ranks on the member row, which the rules already permit exactly (readable by co-holders, writable only by its subject) and which needed no clause. **Also found while fixing it: the person whose order you see is the RESIDENT, not the deed-holder** — E32's `minor` flag already marks that relationship and now does a second job. Version cascade store 0.21.1 → app 1.29.1 → html 0.47.1, bumped rather than reused because the earlier drop may already be pushed and two different files must never wear one number. **Two false positives in my own ship-check this round** (a div-balance regex eaten by a heredoc; a census widened until `const stages` in three scopes read as a redefinition) — §7's rule cuts both ways: a check that flags legal code stops being read, exactly as one that misses stops being worth running. |
-| 2026-07-28 | Opus 5 · **Argonauta** (14th, earlier) | **ITEM 5 — SHARED TIERS, BUILT.** Opened by ship-checking the drop against §0a and finding the one thing that mattered: **`firestore-2.0.rules` in the repo was still 1.1.1 — the version WITH the catch-all hole — while 1.2.1 was live in the console.** Stopped and asked for the published text rather than writing against the file in hand, which would have handed back the hole inside a document that looked authoritative. Everything else green: banners, pins, div balance 148/148, no absolute paths. **No rules change was needed for item 5** and confirming that was most of the value of asking. **Jake corrected the merge rule and the correction is better** — a shared tier follows you into a house where somebody who lives there also holds a key to it, rather than merging only at home. That is the THIRD design fixed by him re-describing it in his own words (E25, E32, now this), which is enough evidence to call it a rule. **Told him one thing he asked for could not be built:** "her priority in her house" needs to read Katie's profile, which the rules correctly forbid; shipped the honest approximation and wrote down what the stronger version would cost. Three defects found in review, **all in failure paths and none in the feature** — empty merge set at first bind (app booted blank), a copy-succeeded-delete-failed message that read like total failure, and an `unshareTier` that would have orphaned an `eventsCache` the poll wrote after the tier left. **The ship-check earned its keep again:** `APP_VERSION` moved to 1.29.0 while the banner above it still said 1.28.0 — §8g's exact complaint, caught mechanically rather than by me. |
-| 2026-07-27 (late) | Opus 5 · **Briareus** (13th) | **THE HOLE IN THE RULES, AND THE FOURTH ROLE.** Jake opened by saying he could not tell me the project's status and to check the handoff against the code rather than trust it. Checking found the good news first — the repo WAS current, ship-check green — and then the thing eight sections of post-mortem had buried: **the `{subcollection}` catch-all unioned with `members`, so any editor could rewrite the member list.** Found by questioning one assumption in a file everyone had already read four times. **Jake found the second half from the other direction**, without reading a line of it: he wanted to share his school board with a colleague who could "check something off they helped with, and then get out," and was right that `editor` was far too much — it also carried `gcalCalendarId` and `mirrorCalendarId`. Rules **1.2.1**: collections enumerated, `helper` added, and — his amendment — a helper may delete **what a helper made**, which cost nothing because every creator in store.js already stamps `createdBy`. **`createdBy` had to become immutable in the same breath**, or the exception was a bypass: update-then-delete would have undone it. App side shipped to match, clause for clause, so the ✕ is *absent* rather than failing. Also D141/D142/D143 on the task form, and a blank-date bug found while looking at them: `form.reset()` restores declared defaults and `#task-date` declares none. **Jake published 1.2.0 and 1.2.1 without running the regression tests I wrote for him** — no harm done, verified after the fact by tracing every `restoreDoc` call site, but the lesson is that a test list arriving at 7pm after a bad day is a test list that does not get run. Put the two-minute version first next time. |
-| 2026-07-25 | Opus 5 · **Wunderpus** (11th) | The 2.0 design + setup kit. No app code, on purpose. Named for *Wunderpus photogenicus*, catalogued one animal at a time by its permanent unique pattern. |
-| 2026-07-26 | — (Jake solo) | Ran SETUP-2.0 end to end. `fantasktic-octodo`, repo, rules published, **smoke test green including denial**. Nico authenticated successfully. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE SEQUENCING FAILURE (§8h), AND THE END OF A LONG SESSION.** I asserted the function wasn't deployed rather than asking, buried the "redeploy first" instruction, and then — when Jake asked two plain questions — went and wrote code instead of answering them. Repaired with `?job=fixtags`. Verified on request that the poll secret appears in ZERO shipped files; my advice to rotate it was disproportionate and I should have dropped it when he first pushed back. **Jake's read on the day is fair and worth preserving: the app he felt good about yesterday is unchanged — queue.js and celebrate.js crossed byte-identical, app.js with four seams. Everything that broke today was in the NEW surface: multi-user, sharing, calendars-for-other-people, one day old and never before run by a human.** Eight hours of his day; a working multi-user app with two accounts, isolation proven, and calendars live at the end of it. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST LIVE CURL — the machinery is proven.** `claimed: 2`, both workspaces isolated, 1.7s. Every job "skipped" because no calendar is connected yet, which is the correct answer and not a failure. **The curl also surfaced a string naming a settings tab that has never existed** ("⚙️ Settings → Calendar" — it is Timing, and the carryover's message twelve lines below already said so). That is D84's error, fixed in the docs in July and never in the message a user actually reads; functions 1.2.1. **Wrote §0a so the next session resumes instead of re-deriving, and §8g on this session's error rate, honestly.** |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE PER-USER CALENDAR STORY (E39/E40).** Jake asked how anyone else would connect a calendar and whether he was building this only for himself — and the honest answer was that the operator guide existed and the user guide did not, for either direction. Both walkthroughs now live in the app. **Tracing the outbound one against a second user found E40:** the mirror tag was scoped per APP but not per WORKSPACE, so two workspaces sharing a mirror calendar would have deleted each other's events hourly. Free to fix only because nothing is deployed yet. **Third external-boundary bug in one session (E36, E37, E40), and all three were invisible to the rules file** — §8f names the pattern. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **THE CALENDAR HOLE (E37) + Jake's first real use of item 4 (E38).** He asked whether colleagues could end up with his calendar; tracing it found they could have TAKEN it — the shared service account plus an unchecked calendar id. **§8e is the entry to read: E1 was airtight and irrelevant, because the boundary that leaked belonged to Google, not Firestore.** Also fixed three things he hit inside five minutes of using the People tab, one of which was a placeholder that read like a value and produced a board named `nico.m.wilson`. **He found all four by using the thing, which is the argument for shipping to one careful user before shipping to five polite ones.** |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 7 — CALENDARS, BUILT.** functions 1.0.0 (the E14 work queue + the `octodo` tag namespace) and SETUP-PHASE3-2.0.md. **Ported by transformation, not rewrite**, so D135's reconcile survives byte-for-byte; the dispatcher is the only genuinely new code. Jake amended his own 2.0 definition (E35) — calendars must work — which is a bigger and better bar than E24 set and reorders the rest: items 5 and 6 are not blocking, 7 and 9 are. **Told him he never needed to anonymise the export JSON:** `export.html` dumps documents verbatim, so the shape is fully derivable from store.js, which I already had. His paste still earned its keep — it revealed a 7th tier the design didn't know about, and that his Home tier polls his PRIMARY calendar rather than a dedicated one. **Caught two stale comments in the ported function that still named the 1.x tag while the code used the new one** — the same "comment more confident than the code" shape that cost a round trip this morning, found this time by a check rather than by a user. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **IT RUNS.** Jake signed in, Nico's dependent board was created and Nico landed on it — **IR passed**, which is the case no amount of reading could have verified. Four first-run defects found and fixed (§8c), every one in error handling rather than in the feature: the feature worked the first time it was allowed to run. **The two most useful things I shipped this morning both paid out within the hour** — the step tags told us instantly that the second failure was a different animal from the first, and the non-fatal fallthrough is why Jake was looking at a working app instead of a blocked screen while the index built. **Process failure worth recording: I twice described a Firebase console dialog from memory and got it wrong, costing round trips on a screen Jake could simply have shown me.** Console UIs move; my picture of them is stale by construction. New rule adopted mid-session: for any console step, ask for the screenshot and answer in clicks. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST DEPLOY, FIRST FAILURE.** Nico's sign-in died on permission-denied. Cause was mine: rules 1.1.0's collection-group clause matched the document ID, which cannot secure a query. **The clause carried a paragraph of confident reasoning for why it was safe, and that reasoning was about the wrong operation** — the surest sign a comment needs checking is that it argues rather than states. Fixed in 1.1.1 (match the field, filter on the field). Two things fixed alongside that were not the bug but made it expensive: the E17 screen blamed the network for a refusal that retrying can never fix, and the console said "bootstrap failed" without naming which of four steps. **Also made the failing query non-fatal — it was an optional lookup that could strand every new user, which is not optional.** Filled in SETUP-2.0's Part 0 and Part 9 blanks, which Jake caught: the real values were in the completion block at the top, so the document disagreed with itself and read as unfinished work. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 4 — houses and keys.** Jake stopped the deploy, said the permission description was more technical than he could follow, and re-described the target audiences himself. **He was right to stop, and the re-description contained a correction I had got wrong:** E25 had Jake owning Katie's board, which made her a guest in her own practice. Reversed — she owns hers, he owns Nico's, same mechanism opposite directions. He then improved on it, inventing the dependent workspace and the minor flag unprompted. **Two bugs came out of walking HIS description through MY rules rather than re-reading them:** Nico could have left his own board through a door marked "leave" (E33), and Nico's first sign-in would have built him a second board his parents never held (the adoption path). Neither was findable by reading the file; both were obvious the moment a real person's Tuesday was traced through it. **Lesson worth keeping: when the human re-describes the problem in their own words, walk the code through THEIR version, not yours.** Also declined to hotfix a latent 1.x tab-selector bug — no symptom, so E27 doesn't fire; a dual-fix window that covers every shared imperfection stops being paid. |
-| 2026-07-27 | Opus 5 · **Marginatus** (12th) | **Named for *Amphioctopus marginatus*, the coconut octopus — the only one that carries its shelter with it, disassembled, and rebuilds it somewhere else, never exposed in between.** That is §11 and §15 exactly. The other half: *marginatus* means "bordered," and E1 is the whole design — the boundary is a path, not a field. **Built items 1→3.** Jake's answers from the day became E23–E31; the two biggest are E24 (2.0.0 = the board switcher, his own definition, D67's shape) and E30 (store.js absorbs the workspace so 7,100 lines of app.js + queue.js cross unchanged). **Found the doubled 1.x stylesheet** while reading it to port it, measured the blast radius instead of assuming it, and explicitly ruled it OUT as an explanation for Katie's phone — the finding that would have been most tempting to over-claim. Caught the manifest's absolute `id` by running E4a's sweep rather than trusting that a byte-identical carry is a safe carry. **Process note for successors: the 1.x repo did not arrive in the first upload and I said so instead of inferring the missing files** — three of the four documents I needed were in hand, and the fourth was one sentence away. |
-
----
-
-**Argonauta (14th)** — *Argonauta argo*, the paper nautilus. Two things about it are item 5. Her shell is not part of her: it is secreted by two specialised arms and **held**, and she can let go of it — which is the ownership question in a shared tier exactly, where the documents sit in a house somebody holds the deed to and everyone else holds a key. And argonauts **raft in chains**, individuals gripping one another's shells and drifting as one unit, each still its own animal with its own shell. Briareus took *many arms, one animal*; this is the other half, several animals holding on.
-
-*Argonauta, 2026-07-28.* 🐙
-
----
-
-**Briareus (13th)** — *Octopus briareus*, the Caribbean reef octopus, named for the hundred-handed giant. Many arms, one animal, is item 5 exactly: several boards feeding one queue without becoming one thing. In the myth Briareus was summoned to stop the other gods binding Zeus — the right patron for a session that opened by checking whether the last one had tied anything down, and found that it had.
-
-*Briareus, 2026-07-27.* 🐙
+<!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — index.html
+     Version 0.51.0
+
+     The whole UI. One page, no templating.
+
+     RECENT:
+     0.51.0 — no markup change; pins move to app.js 1.34.0 / css 0.56.0.
+     0.50.0 — no markup change; pins move to app.js 1.33.0 / store 0.24.0.
+
+     WARNING  Full history is in CHANGELOG.md. This banner and the
+        data-html-version on <body> move together, ALWAYS - that attribute is
+        the update signal D130 polls, and a ?v= on one tag does not bust
+        another file (D49). Verify with `node version-check.mjs`.
+
+     WARNING  EVERY PATH MUST BE RELATIVE (./store.js, never /store.js).
+        Served from a subpath in dev and a domain root in production; an
+        absolute path works in one and 404s in the other, which makes it
+        broken only in between.
+     ============================================================ -->
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tentacalendar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐙</text></svg>">
+  <!-- D96 — installable. Add to Home Screen then launch from the icon and
+       the address bar is gone; display_override asks for true fullscreen
+       first and quietly falls back to standalone on older Android, which
+       is where the tablet lives. The ⛶ button is still there either way. -->
+  <link rel="manifest" href="manifest.json?v=0.2.0">
+  <meta name="theme-color" content="#0a0f14">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tentacalendar">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.56.0">
+</head>
+<body data-html-version="0.51.0">
+
+  <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
+       ancestor becomes the containing block for position:fixed descendants,
+       which broke the settings modal's viewport centering. The modal and the
+       confetti canvas must stay OUTSIDE this div. -->
+  <div id="drift-wrap">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1>Tentacalendar</h1>
+      <p class="tagline">The to-do list that refuses to let go.</p>
+      <button id="signin-btn" class="primary">Sign in with Google</button>
+    </div>
+  </div>
+
+  <!-- ============ E17: SIGNED IN, NOWHERE TO GO ============ -->
+  <!-- Every state that can strand a signed-in user lands here with a
+       sentence: an unverified account, a bootstrap that failed, and later a
+       revoked share or a removed member. The one thing it must never do is
+       what 1.x did to Nico — drop him back on the sign-in screen as though
+       he had simply not signed in. -->
+  <div id="blocked-screen" hidden>
+    <div class="auth-card">
+      <div class="logo">🐙</div>
+      <h1 id="blocked-title">Hold on a moment</h1>
+      <p class="tagline" id="blocked-body"></p>
+      <p class="blocked-who" id="blocked-who"></p>
+      <button id="blocked-signout" class="primary">Sign out and try again</button>
+      <p class="blocked-detail" id="blocked-detail" hidden></p>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app-screen" hidden>
+    <header>
+      <div class="brand">🐙 Tentacalendar <span id="version" class="version"></span></div>
+      <div class="header-right">
+        <!-- E34 — which house am I standing in? Hidden until you hold more
+             than one key, because a switcher with one entry is furniture. -->
+        <div id="board-switch" class="board-switch" hidden>
+          <button id="board-current" class="board-chip" title="The board you are looking at. Click to switch.">
+            <span id="board-dot" class="board-dot"></span>
+            <span id="board-name">…</span>
+            <span class="board-caret">▾</span>
+          </button>
+          <div id="board-menu" class="board-menu" hidden></div>
+        </div>
+        <span id="user-label" class="user"></span>
+        <div class="view-switch" id="view-switch" title="Today = the queue. Week = the planning board. Year = the whole map. Dashboard = all of it on one wall (big screens only).">
+          <button data-view="day" class="mini">📋 Today</button>
+          <button data-view="week" class="mini">🗓️ Week</button>
+          <button data-view="year" class="mini">📅 Year</button>
+          <button data-view="dash" class="mini">🐙 Dashboard</button>
+        </div>
+        <button id="hdr-fullscreen" class="icon-btn" title="Fullscreen — the wall without the browser" hidden>⛶</button><!-- D108: the dashboard's ⛶. It has no nav row of its own, so the header IS its chrome; hidden on every other view (they carry their own). -->
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="jump-add" class="icon-btn" title="Jump to Add a task">＋</button>
+        <button id="signout-btn" class="icon-btn" title="Sign out">⏻</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ===== Queue column ===== -->
+      <section id="queue-panel">
+        <!-- D126 — have-tos / want-tos. Always visible; picks which panel
+             below is live. Katie's own household words, used verbatim. -->
+        <div class="tab-bar todo-mode-bar">
+          <button type="button" class="tab-btn active" id="mode-have" data-mode="have">Have-tos</button>
+          <button type="button" class="tab-btn" id="mode-want" data-mode="want">Want-tos</button>
+        </div>
+
+        <div id="havetos-panel">
+          <div class="day-nav">
+            <button id="day-prev" class="icon-btn" title="Previous day">◀</button>
+            <span class="nav-slot" id="day-slot-back"></span>
+            <h2 id="day-label">Today</h2>
+            <span class="nav-slot" id="day-slot-fwd"><button id="day-today" class="mini" hidden>back to today</button></span>
+            <button id="day-next" class="icon-btn" title="Next day">▶</button>
+            <button id="day-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+          </div>
+
+          <div id="tier-filters" title="Tap a tier to hide/show it in this device's queue"></div>
+
+          <div id="pinned" hidden></div>
+          <div id="allday-strip" hidden></div>
+          <div id="queue"></div>
+
+          <div id="waiting" hidden>
+            <h3>Waiting on…</h3>
+            <div id="waiting-list"></div>
+          </div>
+
+          <div id="earlier" hidden>
+            <h3>Earlier today</h3>
+            <div id="earlier-list"></div>
+          </div>
+
+          <div id="done" hidden>
+            <h3>Done today <span id="done-count" class="badge-done"></span></h3>
+            <div id="done-list"></div>
+          </div>
+        </div>
+
+        <!-- D126 — want-tos: dateless someday-projects, browsed for ideas.
+             No day-nav — there's no day to nav. -->
+        <div id="wanttos-panel" hidden>
+          <div class="day-nav wanttos-nav">
+            <h2>Want-tos — someday, for fun</h2>
+            <button id="wanttos-shuffle" class="icon-btn" title="Give me an idea — jump to a random someday project">🎲</button>
+            <button id="wanttos-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+          </div>
+          <p id="wanttos-hint" class="hint" hidden></p>
+          <div id="wanttos-list"></div>
+        </div>
+      </section>
+
+      <!-- ===== Projects column (Katie's pipeline) ===== -->
+      <section id="projects-panel">
+        <h3>Projects <button id="report-btn" class="icon-btn" title="Time Report — hours by project, any date range and granularity (D120)">📊</button></h3>
+        <p id="projects-empty" class="hint">No projects yet. Create one on the right — its whole pipeline comes with it.</p>
+        <div id="projects-list"></div>
+      </section>
+
+      <!-- ===== Forms column ===== -->
+      <section id="form-panel">
+        <p class="hint locked-note">Your key to this board is <b>Can view</b> — you can read everything and send a 👏, but not add or change things. Ask for <b>Can help</b> if you need to pitch in.</p>
+        <h3 id="task-form-title">New task</h3>
+        <form id="task-form">
+          <input id="task-title" type="text" placeholder="What needs doing?" required>
+          <textarea id="task-notes" rows="2" placeholder="Details (optional — tucked behind a ▸ under the task)"></textarea>
+          <label>Tier
+            <select id="task-tier"></select>
+          </label>
+          <!-- D142 — two across, not three. A native date input and a native
+               time input each refuse to shrink below roughly 120px, so at
+               three-to-a-row in a 340px panel both were squeezed to the point
+               of hiding their own text. Est. min moved out, below. -->
+          <div class="form-row">
+            <label>Due date <input id="task-date" type="date" required><button id="task-date-today" class="mini" type="button" title="Snap the due date back to today (the native calendar has no 'today' button — Chrome draws that picker, not us)">Today</button></label>
+            <label>Time <input id="task-time" type="time" value="09:00"><button id="task-time-now" class="mini" type="button" title="Snap the time to right now (the native clock has no 'now' button either)">Now</button></label>
+          </div>
+          <!-- D142 — label left, field right, on one line. The three-across row
+               stacked it above a full-width box, which read as an unfinished
+               third column rather than a deliberate field. -->
+          <label class="est-label" title="How long it takes — NOT when to start. The due time is a deadline, so this is the runway BEFORE it (D93). Leave blank if you don't know; the clock grid draws those dashed at 30 min and doesn't pretend otherwise. You can also just drag a block's top edge in the Clock layout.">Est. min <input id="task-estimate" type="number" min="5" max="720" step="5" placeholder="—"></label>
+          <label class="esc-label">If ignored, nag again every
+            <span class="esc-inputs">
+              <input id="task-esc-n" type="number" min="1" value="1">
+              <select id="task-esc-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+                <option value="years">years</option>
+                <option value="decades">decades</option>
+                <option value="centuries">centuries</option>
+              </select>
+            </span>
+          </label>
+          <!-- D111: the Christmas cactus. Blank = not recurring (silence
+               isn't a number, D100). Anchor default = completion. -->
+          <label class="esc-label">↻ Repeats every
+            <span class="esc-inputs">
+              <input id="task-rec-n" type="number" min="1" max="999" placeholder="—">
+              <select id="task-rec-unit">
+                <option value="minutes">minutes</option>
+                <option value="hours">hours</option>
+                <option value="days">days</option>
+                <option value="weeks" selected>weeks</option>
+                <option value="months">months</option>
+                <option value="years">years</option>
+                <option value="decades">decades</option>
+                <option value="centuries">centuries</option>
+              </select>
+              <select id="task-rec-anchor" title="When does the next one count from? 'after completion' = you just watered it, so the clock starts now. 'after scheduled due' = the schedule is the schedule, even if you were late — the next one can be born already overdue, which is honesty, not a bug.">
+                <option value="done" selected>after completion</option>
+                <option value="due">after scheduled due</option>
+              </select>
+            </span>
+          </label>
+          <!-- D132: chained follow-ups, authored up front. TASK-PLUS-N —
+               the task above is the root and every row hangs off either it
+               or the row above ("and then, and then"). Empty by default: a
+               blank list is not a list (D100/D111's silence rule). Rows are
+               built in JS so add/remove keeps typed values. CREATE ONLY —
+               hidden while editing, because ↳ on an existing task is the
+               path for that and two doors to one room is how drift starts. -->
+          <div id="fu-chain-block">
+            <div class="fu-chain-head">
+              <span class="hint-inline">↳ And then…</span>
+              <button type="button" id="fu-chain-add" class="mini">+ Add follow-up</button>
+            </div>
+            <div id="fu-chain-rows"></div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="task-submit" class="primary">Add to the tentacles</button>
+            <button type="button" id="task-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">✎ edits a task in place. ↳ adds a follow-up that schedules itself relative to when you actually finish. Chained follow-ups wait their turn — each one gets its date only when the step it hangs off is checked.</p>
+
+        <h3 id="project-form-title">New project</h3>
+        <form id="project-form">
+          <input id="project-name" type="text" placeholder="Project name (e.g. Alabama Farmers)" required>
+          <div class="form-row">
+            <label>Color <input id="project-color" type="color" value="#4dabf7"></label>
+            <label>Stage tier <select id="project-tier"></select></label>
+          </div>
+          <label id="project-type-label">Project type
+            <select id="project-type" title="Which pipeline to copy into this new project. 'Default' is your standard template; others are types you've built in Settings ▸ Pipeline. Existing projects keep whatever they already have.">
+              <option value="">Default template</option>
+            </select>
+          </label>
+          <div class="form-row" id="project-dates-row">
+            <label>Starts <input id="project-start" type="date" required></label>
+            <label>Ends <input id="project-end" type="date" required></label>
+          </div>
+          <label><span class="label-line">Workload <span class="info-dot" title="How heavy is this project overall? Ties in the queue break toward heavier projects with more pipeline remaining. (Tap for details.)" data-info="How heavy is this project overall? A 10-million project and a 30k project can share a pipeline but not a calendar. Ties in the queue break toward heavier projects with more pipeline remaining.">i</span></span>
+            <select id="project-workload">
+              <option value="1">Light (1)</option>
+              <option value="2" selected>Standard (2)</option>
+              <option value="3">Heavy (3)</option>
+            </select>
+          </label>
+          <p class="hint warn" id="project-color-hint"></p>
+          <div class="form-actions">
+            <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
+            <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
+          </div>
+        </form>
+        <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
+        <p class="hint">Pick a tier marked ⏳ timeless (Settings ▸ Tiers) and the date fields disappear — it becomes a want-to, browsed under that tab instead of nagging in Have-tos.</p>
+      </section>
+    </main>
+
+    <!-- ============ YEAR VIEW (Phase 2, D65) ============
+         Toggled with the header 📅; quarter-aligned 4 rows × 3 months
+         (D31 modes), progress ghost-fill bars (D30a), drag to move /
+         edge-drag to stretch (D32), month-tap zoom (D18), legend +
+         tap-for-details (D27). -->
+    <section id="week-view" hidden>
+      <!-- D104: ONE control grammar for week and year — a .view-nav row
+           (arrows · slots · label · ⛶) followed by .view-ctls holding the
+           canonical groups in ONE order: Layout · Window · Bars. Same
+           labels grammar, same data attributes (data-layout / data-window /
+           data-size), same CSS family. View-specific extras (🏆 Reflection
+           here, ◱ whole year there) stay with their views. -->
+      <div class="view-nav">
+        <button id="wv-prev" class="icon-btn" title="Back one week">◀</button>
+        <span class="nav-slot" id="wv-slot-back"></span>
+        <h2 id="wv-label">Week</h2>
+        <span class="nav-slot" id="wv-slot-fwd"><button id="wv-today" class="mini" hidden>back to now</button></span>
+        <button id="wv-next" class="icon-btn" title="Forward one week">▶</button>
+        <button id="wv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+        <div class="view-ctls">
+          <div class="ctl-group" id="wv-layouts" title="Three ways to read the same week. Gantesque: one honest queue per day, everything interleaved in time order. Tidal: fixed time (events) shelved above the work that's yours to move, and past days become a reflection on what actually happened. Clock: the day as time.">
+            <span class="ctl-label">Layout</span>
+            <button data-layout="columns" class="mini">Gantesque</button>
+            <button data-layout="tidal" class="mini">Tidal</button>
+            <button data-layout="clock" class="mini" title="The day as a clock. An event at 6 PM sits at 6 PM. A task DUE at 6 PM is the block ENDING at 6 — its runway trails backward, because you can do it any time before the deadline (Katie, D93). Drag a task's top edge to say how long it takes; that's the only way a week can answer 'can I fit this on Tuesday?'">Clock</button>
+            <button id="wv-cards-toggle" class="mini" title="Show what each past day actually did: what got finished, and what got put off — and whether it was moved, shelved, or nobody touched it. Works in BOTH layouts: Gantesque hangs the cards under its day list, Tidal turns the whole past column into them. Off = just the headline numbers (and in Tidal, past days shrink to give the live days more room).">🏆 Reflection</button>
+          </div>
+          <div class="ctl-group" id="wv-modes" title="Where the week's window anchors. Rolling wastes no columns on a kiosk; Sun–Sat / Mon–Sun keep the days you just had, because reflecting on them is how you plan the next ones.">
+            <span class="ctl-label">Week</span>
+            <button data-window="rolling" class="mini">Today +6</button>
+            <button data-window="sunday" class="mini">Sun–Sat</button>
+            <button data-window="monday" class="mini">Mon–Sun</button>
+          </div>
+          <div class="ctl-group" id="wv-sizes" title="Project bar height. Auto thins them out as the list grows so the day columns always get room; ▮ full (name + next step + %), ▪ medium, ▁ thin, 🧵 colour threads only (hover for names).">
+            <span class="ctl-label">Bars</span>
+            <button data-size="auto" class="mini">Auto</button>
+            <button data-size="full" class="mini">▮</button>
+            <button data-size="half" class="mini">▪</button>
+            <button data-size="quarter" class="mini">▁</button>
+            <button data-size="hair" class="mini">🧵</button>
+          </div>
+          <div class="ctl-group" id="wv-overlays" title="Overlays drawn on the days themselves — reference marks, not tasks.">
+            <span class="ctl-label">Overlay</span>
+            <button id="wv-holidays" class="mini" title="Show US federal holidays on the day headings. A reference overlay — nothing to check off.">★ Holidays</button>
+          </div>
+        </div>
+      </div>
+      <div class="wv-strip" id="wv-days"></div>
+      <div id="wv-strips">
+        <div class="wv-strip" id="wv-banners" hidden></div>
+        <div class="wv-strip" id="wv-projects" hidden></div>
+      </div>
+      <div class="wv-split" id="wv-split" title="Drag to give the projects more or less of the board. Auto refits the bars to whatever you choose."></div>
+      <div id="wv-grid"></div>
+      <div id="tidal-horizon" hidden></div>
+      <p class="hint" id="wv-empty" hidden>Nothing scheduled this week. Suspicious.</p>
+    </section>
+
+    <section id="year-view" hidden>
+      <div class="view-nav">
+        <button id="yv-prev" class="icon-btn" title="Back one year (one month while zoomed)">◀</button>
+        <span class="nav-slot" id="yv-slot-back"></span>
+        <h2 id="yv-label">Year</h2>
+        <span class="nav-slot" id="yv-slot-fwd"><button id="yv-today" class="mini" hidden>back to now</button></span>
+        <button id="yv-next" class="icon-btn" title="Forward one year (one month while zoomed)">▶</button>
+        <button id="yv-unzoom" class="mini" hidden>◱ whole year</button>
+        <button id="yv-fullscreen" class="icon-btn" title="Fullscreen — reclaim the browser chrome">⛶</button>
+        <div class="view-ctls">
+          <div class="ctl-group" id="yv-layouts" title="Three ways to read the same year. Annual: the whole year as a wall of month calendars. Months: they stack, weeks as rows, Sun–Sat. Timeline: days in one long row per quarter (a Gantt chart).">
+            <span class="ctl-label">Layout</span>
+            <button data-layout="wall" class="mini">▦▦ Annual</button>
+            <button data-layout="grid" class="mini">▦ Months</button>
+            <button data-layout="timeline" class="mini">▬ Timeline</button>
+          </div>
+          <div class="ctl-group" id="yv-modes" title="Where the year's window anchors: January, the current quarter, or the current month top-left (rolling 12 months either way)">
+            <span class="ctl-label">Year</span>
+            <button data-window="calendar" class="mini">Jan–Dec</button>
+            <button data-window="quarter" class="mini">Quarter first</button>
+            <button data-window="month" class="mini">Month first</button>
+          </div>
+          <div class="ctl-group" id="yv-sizes" title="Bar thickness: Auto fits the layout (and your window); ▮ pins thick 20px, ▪ medium 10px, ▁ thin 5px.">
+            <span class="ctl-label">Bars</span>
+            <button data-size="auto" class="mini">Auto</button>
+            <button data-size="full" class="mini">▮</button>
+            <button data-size="half" class="mini">▪</button>
+            <button data-size="quarter" class="mini">▁</button>
+            <button data-size="hair" class="mini" title="Hairline: 2px color threads — see the year, tap for details, edit elsewhere">🧵</button>
+          </div>
+          <div class="ctl-group" id="yv-overlays" title="Overlays drawn on the calendar itself — reference marks, not projects.">
+            <span class="ctl-label">Overlay</span>
+            <button id="yv-holidays" class="mini" title="Show US federal holidays on the month calendars and timeline. A reference overlay — hover a marked day for its name.">★ Holidays</button>
+          </div>
+        </div>
+      </div>
+      <div id="yv-grid"></div>
+      <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
+      <div id="yv-legend"></div>
+      <p class="hint">Drag a bar to move a project — across weeks, months, and rows · drag either end to stretch or shrink it · tap a bar for details · tap a month name to zoom in. Dates keep to the project tier's working days.</p>
+      <button id="yv-add-project" class="primary" title="New project">＋ New project</button>
+    </section>
+
+    <!-- ===== D105: THE DASHBOARD (Phase 4 — this is 1.0) =====
+         Empty shells ON PURPOSE: entering the dashboard REPARENTS the real
+         #year-view / #week-view / #queue-panel (and #projects-panel behind
+         the 🗂 toggle) into these panes — the D68 modal trick at kiosk
+         scale. Comment markers hold each panel's seat at home, so leaving
+         puts everything back exactly where it came from. Elements MOVE,
+         nothing is cloned, so nothing can drift (D98). -->
+    <section id="dashboard-view" hidden>
+      <div class="dash-pane" id="dash-left"></div>
+      <div class="dash-split dash-split-v" id="dash-vsplit" title="Drag to resize · double-click to reset"></div>
+      <div id="dash-right">
+        <div class="dash-pane" id="dash-week"></div>
+        <div class="dash-split dash-split-h" id="dash-hsplit" title="Drag to resize · double-click to reset"></div>
+        <div class="dash-pane" id="dash-bottom">
+          <button id="dash-projects-toggle" class="mini" title="Split this pane: agenda + project pipeline side by side. Adding projects lives on the other screens — this is the glance wall.">🗂 Projects</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- D118: the clock/followup/yv-project modals used to live HERE,
+         inside #drift-wrap — whose transform re-roots position:fixed to
+         the page box, so a "centered" modal floated above the viewport
+         when scrolled (Jake's clock-out bug). They now live with the
+         other six modals below, outside the wrap, where D37's rule
+         always said overlays belong. -->
+  </div>
+  </div><!-- /drift-wrap — D127: THIS is the real close. D118's refactor
+       left the actual closing tag stranded 150 lines down (see the note
+       by #yv-project-modal) disguised as one of ITS closing divs, so by
+       true tag-nesting every "moved outside the wrap" modal — screen-rest,
+       settings, weekend, decision, dup, stages, clock, followup, and
+       yv-project itself — was still genuinely INSIDE #drift-wrap the
+       whole time. D37's transform-reroot bug, structurally unfixed since
+       D118, just quiet: small drift amounts (±2-8px) rarely mispositioned
+       a SHORT modal enough to notice. Settings is the tallest modal in
+       the app, so it was the one that finally showed it plainly. -->
+
+  <!-- D130: update banner — OUTSIDE #drift-wrap (D127's lesson: a fixed
+       overlay inside the transformed wrapper mispositions). Hourly, the app
+       re-fetches index.html and compares its data-html-version; a newer one
+       shows this with a countdown auto-refresh. -->
+  <div id="update-banner" hidden>
+    <span id="update-msg"></span>
+    <button id="update-now" class="primary">Refresh now</button>
+    <button id="update-later" class="mini">Later</button>
+  </div>
+
+  <!-- D137: the alert toast — OUTSIDE #drift-wrap for the same reason as
+       the banner above, and z-index 141 so it clears the update banner.
+       This is the channel that matters on the WALL: a fullscreen kiosk may
+       never paint an OS notification, but it always paints its own page. -->
+  <div id="alert-toast" hidden>
+    <span id="alert-toast-level"></span>
+    <div class="at-text">
+      <strong id="alert-toast-title"></strong>
+      <span id="alert-toast-body"></span>
+    </div>
+  </div>
+
+  <!-- D107: the screen rest — OUTSIDE #drift-wrap on purpose (D37's rule:
+       a fixed overlay inside a transformed ancestor re-roots and shows the
+       drift as edge gaps). z-index 98: above everything but the confetti —
+       a midnight completion still gets its fireworks. -->
+  <div id="screen-rest" hidden>
+    <div id="rest-face">
+      <div id="rest-clock"></div>
+      <div id="rest-date"></div>
+      <div id="rest-hint">🐙 resting — tap to peek</div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS MODAL (tabbed, D52) ============ -->
+  <div id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>⚙️ Settings</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tiers">Tiers</button>
+        <button class="tab-btn" data-tab="pipeline">Pipeline</button>
+        <button class="tab-btn" data-tab="timing">Timing</button>
+        <button class="tab-btn" data-tab="people">People</button>
+      </div>
+
+      <!-- E5/E32 — houses and keys. Two words do all the work here. -->
+      <div class="tab-pane" data-pane="people" hidden>
+        <h3>This board</h3>
+        <div class="form-row" id="ws-rename-row">
+          <label>Board name <input id="ws-name" type="text" autocomplete="off"></label>
+          <button id="ws-rename" class="mini">Rename</button>
+        </div>
+
+        <h3>Who holds a key to this board</h3>
+        <p class="hint">A shared board is <b>one set of lists, not a copy</b> — everyone with a key is looking at the same thing, so a task checked off here disappears from their screen too. Only an owner sees these controls.</p>
+        <!-- Four roles is one more than a tooltip can hold, so it is a table.
+             Every row here is a clause in firestore.rules 1.2.1: if you change
+             one, change both, or this becomes a promise the server breaks. -->
+        <table class="role-matrix">
+          <thead><tr><th></th><th>Can&nbsp;view</th><th>Can&nbsp;help</th><th>Can&nbsp;edit</th><th>Co-owner</th></tr></thead>
+          <tbody>
+            <tr><td>See everything on this board</td><td>●</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Send a 👏</td><td>●</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Add and check off tasks and projects</td><td>·</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Delete things they added themselves</td><td>·</td><td>●</td><td>●</td><td>●</td></tr>
+            <tr><td>Delete anything on the board</td><td>·</td><td>·</td><td>●</td><td>●</td></tr>
+            <tr><td>Change tiers, pipelines, timing, calendars</td><td>·</td><td>·</td><td>●</td><td>●</td></tr>
+            <tr><td>Rename the board, hand out and take back keys</td><td>·</td><td>·</td><td>·</td><td>●</td></tr>
+          </tbody>
+        </table>
+        <p class="hint"><b>Can help</b> is the one to reach for when someone is pitching in rather than running the place — they can work the list and tidy up after themselves, and cannot repoint your calendars or empty a tier.</p>
+        <div id="people-list"></div>
+        <div class="form-row">
+          <label>Invite by email <input id="people-email" type="email" placeholder="name@gmail.com" autocomplete="off"></label>
+          <label>Access
+            <select id="people-role">
+              <option value="editor">Can edit</option>
+              <option value="helper">Can help</option>
+              <option value="viewer">Can view</option>
+              <option value="owner">Co-owner</option>
+            </select>
+          </label>
+        </div>
+        <button id="people-add" class="mini">+ Give them a key</button>
+
+        <!-- E38 — one block, so hiding it from a dependent is one line. -->
+        <div id="dep-block">
+        <h3 style="margin-top:1.6rem">A board for someone who doesn't own it</h3>
+        <p class="hint">For a child, or anyone whose list you're responsible for. <b>You keep the deed</b> — they can use their board fully but cannot remove you from it or delete it, and they can't hand their own key back. Add a co-owner and you both get in independently. This creates a <i>new</i> board; it doesn't change this one.</p>
+        <div class="form-row">
+          <label>Board name <input id="dep-name" type="text" placeholder="fills in from their email" autocomplete="off"></label>
+          <label>Their email <input id="dep-email" type="email" placeholder="their.address@gmail.com" autocomplete="off"></label>
+        </div>
+        <div class="form-row">
+          <label>Co-owner, optional <input id="dep-coowner" type="email" placeholder="other.parent@gmail.com" autocomplete="off"></label>
+        </div>
+        <button id="dep-create" class="mini">Create their board</button>
+        </div>
+        <p class="hint" id="people-msg"></p>
+      </div>
+
+      <div class="tab-pane" data-pane="tiers">
+        <p class="hint locked-note">Tiers are part of this board's setup, and your access here is <b>Can help</b> or <b>Can view</b>. You can read all of it; changing it needs <b>Can edit</b>. Ask whoever gave you the key.</p>
+        <h3>Tiers (priority queue)</h3>
+        <p class="hint">Rank 1 sorts first. Setting a tier to "Calendar" reveals a Calendar ID field — that tier then holds appointments pulled from that Google Calendar. The day toggles are the tier's working days: reschedules land on them, project dates outside them get flagged, and pipeline offsets only count them (weekend jobs → check Sa/Su). Hover anything in a row for an explanation.</p>
+        <!-- E41 — help panels for progressive disclosure -->
+        <div class="help-panel" data-help-id="tiers-what">
+          <div class="help-panel-toggle">💡 What are tiers?</div>
+          <div class="help-panel-content">
+            <p>A <b>tier</b> is a bucket for parts of your life — Home, Work, Personal, a class, a project, whatever matches how you think about your day.</p>
+            <p>Rank #1 sorts first when nothing else decides the order. Use the ▲▼ arrows to move tiers around — the list immediately re-numbers.</p>
+            <p>You can hide tiers with the checkbox — useful on Saturday when Work is just noise. You can also set which days the tier is active (Mon–Fri, weekends only, every day).</p>
+          </div>
+        </div>
+        <div class="help-panel" data-help-id="tiers-calendar">
+          <div class="help-panel-toggle">📅 Calendar tiers</div>
+          <div class="help-panel-content">
+            <p>Set a tier's type to <b>Calendar</b> and it pulls appointments from your Google Calendar instead of tasks you create. The Calendar ID field appears, and you paste your calendar's ID there.</p>
+            <p>Your events show up in the queue near their start times, never nag, and disappear once they pass — they're read-only.</p>
+          </div>
+        </div>
+        <!-- E39 — the six clicks, next to the field they fill. -->
+        <details id="cal-connect">
+          <summary>📅 How do I show my Google Calendar here?</summary>
+          <div class="cal-steps">
+            <p class="hint">Your appointments live in Google Calendar and this app only <b>reads</b> them. To let it, you give one robot account permission to look — the same way you'd share a calendar with a person.</p>
+            <p><b>1.</b> Copy this address:</p>
+            <div class="robot-row">
+              <code id="cal-robot">—</code>
+              <button id="cal-robot-copy" class="mini" type="button">Copy</button>
+            </div>
+            <p class="hint" id="cal-robot-warn" hidden></p>
+            <p><b>2.</b> Open <b>Google Calendar</b> on a computer. In the left column, hover the calendar you want, click <b>⋮ → Settings and sharing</b>.</p>
+            <p><b>3.</b> Scroll to <b>Share with specific people or groups → Add people</b>. Paste the address, set permission to <b>See all event details</b>, and Send.</p>
+            <p><b>4.</b> On that same settings page, scroll to <b>Integrate calendar</b> and copy the <b>Calendar ID</b>. For your main calendar that is simply your own email address.</p>
+            <p><b>5.</b> Back here: pick a tier below, set its type to <b>Calendar</b>, and paste the Calendar ID into the field that appears.</p>
+            <p class="hint">Appointments appear within the hour. You can revoke this at any time from that same Google Calendar sharing page — the app has no access except what you just granted, and nobody else's calendar is visible to you.</p>
+            <p class="hint"><b>On a school or work account?</b> Some Google Workspace administrators block sharing calendars outside the organisation. If the address is refused, that is the reason — use a personal calendar, or ask your admin.</p>
+          </div>
+        </details>
+
+        <div id="tier-editor"></div>
+        <p class="hint" id="tier-color-hint"></p>
+        <button id="tier-add" class="mini">+ Add tier</button>
+      </div>
+
+      <div class="tab-pane" data-pane="pipeline" hidden>
+        <p class="hint locked-note">Pipelines are part of this board's setup. Yours is a working key, not a setup one — you can read this, and <b>Can edit</b> is needed to change it. Adding or removing stages on an <i>individual</i> project still works.</p>
+        <h3>Project pipelines</h3>
+        <p class="hint">Build a LIBRARY of pipelines and pick one when you create a project (e.g. an actuarial default, a "Holiday Card", a "Taiko Performance"). <em>Default</em> is the standard template copied into a new project when you don't choose another. Existing projects keep their own copy whatever you change here.</p>
+        <!-- E41 — help panels for progressive disclosure -->
+        <div class="help-panel" data-help-id="pipeline-what">
+          <div class="help-panel-toggle">💡 What are project pipelines?</div>
+          <div class="help-panel-content">
+            <p>A <b>pipeline</b> is a template of stages — the steps you always take for a certain kind of project.</p>
+            <p>When you create a project and pick a pipeline, it copies all the stages into that project. Then you can adjust dates and details for this specific run.</p>
+            <p>Your <b>Default</b> pipeline is copied into every new project that doesn't pick a different type.</p>
+          </div>
+        </div>
+        <div class="form-row" id="pipeline-picker-row">
+          <label>Editing <select id="pipeline-target"></select></label>
+          <button id="pipeline-new" class="mini" type="button" title="Create a new project type">+ New type</button>
+          <button id="pipeline-rename" class="mini" type="button" title="Rename this type">Rename</button>
+          <button id="pipeline-delete" class="mini" type="button" title="Delete this type (the Default can't be deleted)">Delete</button>
+        </div>
+        <div id="stage-template-editor"></div>
+        <button id="stage-add" class="mini">+ Add stage</button>
+        <p class="hint"><em>No date</em> = the stage is pipeline weight — it just has to happen before the next dated thing. <em>Before/After</em> = a real target date, offset in working days from project start or end. A stage never surfaces before its predecessors are checked, whatever its date. 🎆 marks the stage whose completion throws the big celebration (D109).</p>
+        <div class="form-row">
+          <label>Clear the deck at <input id="cfg-cleardeck" type="number" min="0" max="100"> % complete</label>
+        </div>
+        <p class="hint">Two piles. Projects at or past this mark are in the <em>finish it</em> pile and sort <em>most</em>-done first — they sit above everything still catching up, however heavy. Below the mark, the <em>least</em>-done leads, so nothing gets abandoned. Workload only breaks a tie between two projects at the same %, heavier first. Tiebreaker only — anything due sooner still comes first.</p>
+      </div>
+
+      <div class="tab-pane" data-pane="timing" hidden>
+        <p class="hint locked-note">Timing settings belong to the board rather than to you, so changing them needs <b>Can edit</b>. What you see here is what the board is doing.</p>
+        <h3>Timing</h3>
+        <div class="form-row">
+          <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+        </div>
+        <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
+        <div class="form-row">
+          <label>🐙 Decision time opens after <input id="cfg-decision-days" type="number" min="1" max="30"> day(s) overdue</label>
+        </div>
+        <div class="form-row">
+          <label>❗ carryover events land at <input id="cfg-carryover" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr clock: 9 = 9 AM, 21 = 9 PM)</span></label>
+        </div>
+        <div class="form-row">
+          <label>Screen sleeps from <input id="cfg-sleep-start" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+          <label>until <input id="cfg-sleep-end" type="number" min="0" max="23"> :00</label>
+        </div>
+        <div class="form-row">
+          <label>Check Google Calendar every <input id="cfg-poll" type="number" min="5" max="1440"> minutes</label>
+        </div>
+        <!-- D107: burn-in care. PER-DEVICE (localStorage, not workspace
+             config) — set these ON THE TV. Dashboard-only at runtime. -->
+        <div class="form-row">
+          <label><input id="cfg-rest" type="checkbox"> 🌙 Screen rest during sleep hours <span class="hint-inline">(dashboard · this device)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input id="cfg-idle-dim" type="checkbox"> 🕯️ Dim chrome when idle <span class="hint-inline">(dashboard · this device)</span></label>
+        </div>
+        <p class="hint">Burn-in care for a TV that lives on the dashboard: during sleep hours the screen goes near-black with a wandering clock (tap it to peek for 5 minutes), and after 5 idle minutes the header and dividers fade. The whole app already drifts a few pixels (D37); the dashboard rides a second, wider orbit. These two switches are per-device — flip them on the TV itself.</p>
+        <!-- D137: alerts. PER-DEVICE like the two above — turn these ON at
+             the wall and the tablet, leave them off on a phone. -->
+        <div class="form-row">
+          <label><input id="cfg-alerts" type="checkbox"> 🔔 Alert me when things come due <span class="hint-inline">(this device)</span></label>
+        </div>
+        <div class="form-row">
+          <label><input id="cfg-alert-sound" type="checkbox"> 🔊 Play a sound</label>
+          <label><input id="cfg-alert-notify" type="checkbox"> 💬 System notifications</label>
+        </div>
+        <div class="form-row">
+          <label>Volume <input id="cfg-alert-vol" type="range" min="0" max="100" step="5"></label>
+          <button id="alert-test" class="mini" type="button">▶ Test</button>
+        </div>
+        <p class="hint" id="alert-status"></p>
+        <p class="hint">A task speaks when it comes due and again on every step of <em>its own</em> escalation — the same schedule that turns it red, so a task set to nag hourly now chimes hourly. Project stages speak once when their deadline passes. Calendar events speak when they enter their lead window. Nothing makes a sound during sleep hours, and hidden tiers stay silent. An on-screen banner always appears; the sound and the system notification are the two switches above.</p>
+        <label>Mirror tasks to calendar ID <input id="cfg-mirror-cal" type="text" placeholder="abc123…@group.calendar.google.com" spellcheck="false"></label>
+        <p class="hint">A DEDICATED calendar the robot can write to ("Make changes to events") — never one a tier polls, or every task boomerangs back as its own event. Blank = mirroring off.</p>
+        <!-- E40 — the outbound half. This is the one that makes phones buzz. -->
+        <details id="mirror-connect">
+          <summary>🔔 How do I get reminders on my phone?</summary>
+          <div class="cal-steps">
+            <p class="hint">This app doesn't send notifications itself. Instead it <b>writes your dated tasks onto a Google Calendar you own</b> — and your phone already knows how to nag you about those. Your calendar becomes the alarm clock.</p>
+            <p><b>1.</b> In <b>Google Calendar</b>, left column, click <b>+</b> next to "Other calendars" → <b>Create new calendar</b>. Call it something like "Octodo". <b>Make a NEW one</b> — don't reuse a calendar you already keep appointments in.</p>
+            <p><b>2.</b> Open its <b>Settings and sharing</b> → <b>Share with specific people or groups → Add people</b> → paste this address, and set permission to <b>Make changes to events</b> (it has to write, not just read):</p>
+            <div class="robot-row">
+              <code id="mirror-robot">—</code>
+              <button id="mirror-robot-copy" class="mini" type="button">Copy</button>
+            </div>
+            <p><b>3.</b> Same page, scroll to <b>Integrate calendar</b>, copy the <b>Calendar ID</b>, and paste it in the box above.</p>
+            <p><b>4.</b> On your phone, make sure that calendar is switched on and has notifications enabled.</p>
+            <p class="hint">Your tasks appear there within the hour, at their real due times, and disappear when you check them off. Missed tasks in a ❗ tier also land on tomorrow morning at 9. <b>It is your calendar</b> — delete it and the mirroring simply stops.</p>
+            <p class="hint">Everyone gets their own. Two people <em>can</em> point at the same calendar if they want to see each other's work — each only ever adds and removes their own entries.</p>
+          </div>
+        </details>
+        <p class="hint" id="poll-cost-hint"></p>
+      </div>
+
+      <div class="modal-foot">
+        <span id="versions-line" class="hint-inline"></span>
+        <button id="settings-save" class="primary">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUE-DATE DIALOG ============ -->
+  <!-- D118: relocated from inside #drift-wrap (see the note there). -->
+    <!-- D112: the clock dialog — clock-out (editable end + cancel = Jake's
+       "transition time or cancel the click") and 🕰 manual log share it. -->
+  <div id="clock-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <h3 id="clock-heading">Clock out</h3>
+      <p id="clock-sub" class="hint"></p>
+      <!-- D113: datetime-local, not time — the dialog ASKS which day.
+           All-nighters and multi-day forgets are one honest field. -->
+      <label id="clock-start-row" hidden>Started at <input id="clock-start" type="datetime-local"></label>
+      <label id="clock-end-row">Ended at <input id="clock-end" type="datetime-local"></label>
+      <div class="modal-actions">
+        <button id="clock-save" class="primary">Save</button>
+        <button id="clock-cancel" class="mini">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- D120: THE TIME REPORT — an arbitrary date range, not a fiscal-vs-
+       calendar setting; month/quarter/year buckets step from wherever
+       "Starts" is set, so either kind of year falls out for free. -->
+  <div id="report-modal" class="modal-shell" hidden>
+    <div class="modal-card report-card">
+      <div class="modal-head">
+        <h2>📊 Time Report</h2>
+        <button id="report-close" class="icon-btn">✕</button>
+      </div>
+      <p id="report-project-filter" class="hint" hidden></p>
+      <div class="report-controls">
+        <label>Starts <input id="report-start" type="date"></label>
+        <label>Ends <input id="report-end" type="date"></label>
+        <label>By
+          <select id="report-granularity">
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month" selected>Month</option>
+            <option value="quarter">Quarter</option>
+            <option value="year">Year</option>
+          </select>
+        </label>
+      </div>
+      <p id="report-warn" class="hint warn" hidden></p>
+      <div id="report-table-wrap">
+        <table id="report-table"></table>
+      </div>
+      <p id="report-empty" class="hint" hidden>No sessions logged in this range.</p>
+      <div class="modal-actions">
+        <button id="report-export-rollup" class="mini">⬇ Export rollup CSV</button>
+        <button id="report-export-raw" class="mini">⬇ Export raw sessions CSV</button>
+      </div>
+      <p class="hint">The rollup export is spreadsheet-ready hours per project per period. The raw export is every logged session, un-split, exactly as recorded — build your own model on it.</p>
+    </div>
+  </div>
+
+  <!-- D82: follow-up create/edit — retires the prompt() pair -->
+  <div id="followup-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <h3 id="fu-heading">Follow-up</h3>
+      <label>Title <input id="fu-title" type="text"></label>
+      <label>Materializes
+        <input id="fu-n" type="number" min="1" step="1" value="3" style="width:4.5rem">
+        <select id="fu-unit">
+          <option value="minutes">minutes</option>
+          <option value="hours">hours</option>
+          <option value="days" selected>days</option>
+          <option value="weeks">weeks</option>
+          <option value="months">months</option>
+          <option value="years">years</option>
+          <option value="decades">decades</option>
+          <option value="centuries">centuries</option>
+        </select>
+        after completion</label>
+      <div class="modal-actions">
+        <button id="fu-save" class="primary">Save</button>
+        <button id="fu-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- D78: phone-only, in words, at the very bottom — where a
+       logout belongs on a device you rarely log out of. -->
+  <button id="signout-bottom">Log out</button>
+
+  <!-- D68: the REAL project form is reparented in here from the form
+       panel while this is open — listeners, color assistant, and the
+       working-day interception all come along for free. -->
+  <div id="yv-project-modal" class="modal-shell" hidden>
+    <div class="modal-card yv-project-card">
+      <button id="yv-project-close" class="icon-btn yv-modal-close" title="Close">✕</button>
+    <div id="yv-project-slot"></div>
+    </div>
+  </div>
+  <!-- D127: a stray extra closing div used to sit HERE — a leftover from
+       D118's modal-relocation edit that never got cleaned up. It wasn't
+       harmless: by simple tag counting it was the ACTUAL closing tag for
+       #drift-wrap (see the real fix, ~150 lines up), meaning every modal
+       from #screen-rest through this one was still structurally INSIDE
+       #drift-wrap the whole time, D118's own comments notwithstanding.
+       Moved to where #drift-wrap is genuinely supposed to close. -->
+
+
+  <div id="due-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="due-title">Hard due date</h3>
+      <div class="form-row">
+        <label>Date <input id="due-date" type="date"></label>
+        <label>Time <input id="due-time" type="time" value="17:00"></label>
+      </div>
+      <div class="modal-foot">
+        <button id="due-clear" class="mini">Clear due date</button>
+        <span class="flex-spring"></span>
+        <button id="due-cancel" class="mini">Cancel</button>
+        <button id="due-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PER-PROJECT STAGE EDITOR ============ -->
+  <div id="stages-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="stages-title">✎ Stages</h2>
+        <button id="stages-cancel" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">This edits THIS project only — the template in ⚙️ Settings is untouched. ✓ = already completed, ⏰ = has a hard due date; both survive renames and reordering. Offsets count this tier's working days.</p>
+      <div id="stage-proj-editor"></div>
+      <button id="stage-proj-add" class="mini">+ Add stage</button>
+      <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
+      <div class="modal-foot">
+        <span></span>
+        <button id="stages-save" class="primary">Save stages</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WORKING-DAY DATE CHECK (D45→D60) ============ -->
+  <div id="weekend-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🗓️ Working-day check</h3>
+      <p id="weekend-text"></p>
+      <div class="weekend-choices">
+        <button id="weekend-yes" class="mini">Yes, keep it</button>
+        <button id="weekend-fri" class="primary"></button>
+        <button id="weekend-mon" class="primary"></button>
+        <button id="weekend-back" class="mini">Go back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OVERDUE DECISION TIME (D46/D57) ============ -->
+  <div id="decision-modal" class="modal-shell" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>🐙 Decision time</h2>
+        <button id="decision-close" class="icon-btn">✕</button>
+      </div>
+      <p class="hint">These have been overdue past your check-in threshold (⚙️ Timing). ✓ completes the next step, 🕐 pushes the deadline to the next working day at 9 AM — or close this and live dangerously; it won't ask again until tomorrow.</p>
+      <div id="decision-list"></div>
+    </div>
+  </div>
+
+  <!-- ============ UN-COMPLETE REWIND (D53) ============ -->
+  <div id="uncheck-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3 id="uncheck-title">↩️ Un-complete?</h3>
+      <p id="uncheck-text" class="hint"></p>
+      <div class="weekend-choices">
+        <button id="uncheck-oops" class="primary">Oops — keep it done</button>
+        <button id="uncheck-rewind" class="primary">Un-complete & pull follow-ups back to "Waiting on…"</button>
+        <button id="uncheck-keep" class="mini">Un-complete, but follow-ups keep their dates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
+  <div id="dup-modal" class="modal-shell" hidden>
+    <div class="modal-card modal-sm">
+      <h3>🔁 Same time next year?</h3>
+      <p id="dup-text" class="hint"></p>
+      <div class="form-row">
+        <label class="dup-wide">Name <input id="dup-name" type="text"></label>
+      </div>
+      <div class="form-row">
+        <label>Start <input id="dup-start" type="date"></label>
+        <label>End <input id="dup-end" type="date"></label>
+      </div>
+      <div class="form-row">
+        <label>Color <input id="dup-color" type="color"></label>
+        <label>Tier <select id="dup-tier"></select></label>
+        <label>Workload
+          <select id="dup-workload">
+            <option value="1">1 — light</option>
+            <option value="2">2 — standard</option>
+            <option value="3">3 — heavy</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
+      <div class="weekend-choices">
+        <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
+        <button id="dup-yes" class="primary">Create next year's run</button>
+        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
+          <button id="dup-snooze-1" class="mini">a day</button>
+          <button id="dup-snooze-7" class="mini">a week</button>
+          <button id="dup-snooze-30" class="mini">a month</button>
+        </div>
+        <button id="dup-no" class="mini">No thanks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared tap-popover for ⓘ dots -->
+  <div id="popover" hidden></div>
+
+  <!-- ============ E41 — ONBOARDING: WELCOME SPLASH ============ -->
+  <!-- Shows once per workspace on first visit. Outside #drift-wrap (D37). -->
+  <div id="welcome-splash" class="modal-shell onboarding-overlay" hidden>
+    <div class="modal-card onboarding-card welcome-splash-card">
+      <div class="modal-head">
+        <h2>🐙 Welcome to Tentacalendar</h2>
+      </div>
+      <div class="onboarding-body">
+        <p>A planning board that decides <b>what you should do next</b> — instead of letting you.</p>
+        <p class="hint">It reads your deadlines and builds your day from them. If something is late, it climbs; late enough, it speaks.</p>
+        <p class="hint">This is a 60-second tour. Click <b>Let's go</b> below, or skip if you like to tinker.</p>
+      </div>
+      <div class="onboarding-buttons">
+        <button id="splash-skip" class="mini">Skip</button>
+        <button id="splash-tour" class="primary">Let's go →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ E41 — ONBOARDING: TOUR OVERLAY ============ -->
+  <!-- Tour step display, highlight overlay, and navigation. -->
+  <div id="tour-backdrop" class="onboarding-overlay" hidden></div>
+  <div id="tour-highlight" class="tour-highlight" hidden></div>
+  <div id="tour-popover" class="tour-popover" hidden>
+    <div id="tour-step-indicator">Step <span id="tour-step-num">1</span> of <span id="tour-step-total">5</span></div>
+    <h3 id="tour-title">Tour Step</h3>
+    <p id="tour-text">Tour instruction text.</p>
+    <div class="tour-buttons">
+      <button id="tour-exit" class="mini" title="Exit tour">✕ Exit</button>
+      <button id="tour-prev" class="mini" hidden>← Back</button>
+      <button id="tour-next" class="primary">Next →</button>
+    </div>
+  </div>
+
+  <!-- ============ E41 — ONBOARDING: CONTEXTUAL POPOVERS ============ -->
+  <!-- Dismissible hints for first-time interactions at key UI points.
+       Built dynamically by app.js; markup is structural only. -->
+  <div id="popover-hint" class="popover-hint" hidden>
+    <div class="popover-hint-arrow"></div>
+    <p id="popover-hint-text"></p>
+    <button class="mini popover-hint-close" title="Dismiss">✕</button>
+  </div>
+
+  <!-- ============ E41 — ONBOARDING: HELP PANELS ============ -->
+  <!-- Inline expandable help sections in various parts of the UI.
+       The .help-toggle class marks sections that become collapsible on first visit. -->
+  <!-- These will be populated by app.js based on help definitions. -->
+
+  <script type="module" src="app.js?v=1.34.0"></script>
+</body>
+</html>
