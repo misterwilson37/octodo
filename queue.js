@@ -1,129 +1,22 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.20.0 — D120: THE TIME REPORT engine. reportPeriods() steps
-// day/week/month/quarter/year buckets FORWARD from an arbitrary range's
-// own start (via addMonths — now exported — for calendar-correct month
-// math), not from a calendar epoch: start a range Jan 1 and quarters/
-// years land calendar-aligned, start it Jul 1 and they land fiscal-
-// aligned, same code either way. This is the actual answer to the
-// fiscal-vs-calendar question parked for Katie back at D120 — don't
-// pick one, let the range be arbitrary and both fall out for free.
-// rollupSessions() buckets the sessions ledger into those periods,
-// SPLITTING any session that crosses a boundary (a 10pm-2am session
-// gives 2h to each side of midnight — decide once, split at boundaries,
-// never guess which side "owns" it); open sessions count to `now`.
-// rollupToCSV/sessionsToCSV round out the "CSV export of BOTH the
-// rollup AND the raw sessions" the spec asked for — raw stays UN-split,
-// the respectful export for an actuary building her own models. 19
-// verbatim assertions against this exact module (not reimplemented)
-// before wiring into app.js — a 20th line in the same script was
-// self-contradictory (asserted a string both did and didn't appear),
-// caught as a script bug rather than chased as a product one.
-// (prev) Version 0.19.0 — D126: TIMELESS CONTAINMENT. Katie's want-tos projects
-// carry null startDate/endDate on purpose (D126, app.js/store.js) — this
-// file is the deadline spine, so it's the one place that MUST refuse to
-// turn "no dates" into an accidental date. Two structural guards, not one:
-// (1) stageScheduledAt returns null outright when project.startDate or
-// .endDate is null, REGARDLESS of a stage's own direction/offset — a
-// timeless project's stages read as undated weight no matter what a
-// pipeline template says, so a mis-set directional stage can't silently
-// compute an epoch-anchored (1970) deadline. (2) buildQueue AND buildWeek's
-// project loops both additionally skip any project on a timeless tier
-// outright — belt and suspenders, and load-bearing in buildWeek's case:
-// its own "nothing silently disappears" rescue (a project whose window
-// is entirely in the past still gets a bar stretched to today, D89) would
-// otherwise read a timeless project's epoch-zero window as "deeply
-// overdue" and paint a bar from 1970 to today. dayReflection needed no
-// extra guard — guard (1) alone makes its put-off path see `null` and
-// skip; its victory path is left open on purpose, since finishing a
-// someday-project stage today is a real, dated accomplishment worth
-// showing in the daily reflection even though the project itself isn't.
-// (prev) Version 0.18.0 — D123: US federal holidays, client-computed. usFederalHolidays(year)
-// is a pure per-year function (fixed dates + floating rules — MLK 3rd Mon Jan,
-// Memorial last Mon May, Thanksgiving 4th Thu Nov, …), Juneteenth from 2021;
-// holidaysForRange(a,b) → a day-keyed Map for a render window. Local Date math
-// throughout so a holiday lands on the day the wall draws. Observed on the true
-// date (no Sat/Sun→Monday shift — a planning wall should SHOW that July 4 is a
-// Saturday, not hide it). No new dependencies; no infrastructure (D75 moot).
-// (prev) Version 0.17.0 — D111: nextNag speaks the harmonized unit ladder
-// (months/years/decades/centuries step calendar-correct via addMonths).
-// (prev) Version 0.16.0
-// 0.16.0 (D100): THE CLOCK GRID's geometry — clockBlocks() + weekClockWindow().
-// Built on D93, NOT on D91's diagram, and the difference is the whole point:
-// a task time is a DUE date, so a task's block ENDS at its deadline and its
-// runway trails BACKWARD — [due − estimate, due]. D91 drew it forward to
-// midnight, which says "start this at 6 PM" when the truth is "have this done
-// by 6 PM". Only the OVERDUE state extends forward, from the deadline to now,
-// because that's the one thing that really is growing. Events are the other
-// animal entirely: they own [start, end] outright (D93/D80) — nothing to
-// estimate, nothing to infer.
-// 0.15.0 (D97): REFLECTION — dayReflection() answers the two questions a
-// past day is actually for: what got DONE (victories) and what got PUT OFF.
-// Both were promised by 5a-bis and neither was derivable from buildWeek's
-// columns, because (a) `expired` is gated on viewingToday by design, so a
-// past column's items are ALL expired:false — a Wake filtering on it renders
-// nothing, forever; (b) a task moved off Tuesday is not IN Tuesday's items
-// at all (buildQueue filters on the CURRENT dueAt), so the evidence of the
-// put-off lives only in firstDueAt; and (c) doneToday was computed per-day
-// by buildQueue all along and then thrown away. Reflection scans the raw
-// task/project arrays against the day instead. Cols gain victories/putOffs;
-// buildWeek returns `waiting` so a layout can show pending inventory.
-// 0.14.1 (D90): spans carry activeStageIndex — the clickable bar needs
-// it to open the due dialog on the right stage.
-// 0.14.0 (D89): projectSpans now sort by PRIORITY, not the alphabet —
-// expired first, then next deadline, then the D86 piles (Jake: "projects
-// should be in priority order"; ten bars sorted A–Z said nothing about
-// what matters). Spans carry deadlineAt/expired/nextStageName. Also
-// weekAnchorFor(): Sun–Sat / Mon–Sun / rolling today+6, because
-// reflecting on the week just gone IS how you plan the next one — the
-// past columns aren't dead space (Jake corrected me on this).
-// 0.13.0 (D88): buildWeek() — N honest days (one buildQueue per column,
-// so expiry/off-days/the D86 piles all come free) + the two spanning
-// strips: projectSpans (bars with stage pips) and bannerSpans (one bar
-// per all-day event). Projects DON'T repeat down the columns: D48 rides
-// them through their whole window, which would render a 3-month project
-// seven times — a stage row lands only on its deadline day (plus today
-// if expired), and the SPAN goes up top where a span belongs. Also
-// addDaysLocal(): calendar day-stepping, because ts+DAY_MS repeats a
-// date across DST fall-back and would drop a day from the week.
-// 0.12.0 (D86): the clear-deck tiebreaker is now GROUPED, not blended.
-// D85 multiplied workload by pct-or-1-pct, which made a U: urgency rose
-// at both ends and SAGGED in the middle, so a 30%-done project outranked
-// a 65%-done one (Jake: "too confusing"). Now two piles split at
-// CLEAR_DECK_THRESHOLD, pile first: past-threshold (MOST done first),
-// then catch-up (LEAST done first), then tasks/events. Workload only
-// breaks an exact-pct tie — heavier first. Four equal projects at T=60%
-// sort 95 → 65 → 30 → 40. Still tiebreaker ONLY (Jake's option A).
-// 0.11.0 (D85): CLEAR-THE-DECK priority — first cut, the blended weight
-// superseded by D86 above. setClearDeckThreshold/the config rail land here.
-// 0.10.0 (D82): timed events whose window has PASSED (end — or start
-// +1h grace when endless — is behind now) leave the live list for a
-// passedEvents array, TODAY only; viewing other days shows everything
-// in place (a past day is all "passed"; a future day, none).
-// 0.9.0 (D80): ALL-DAY events split out of the chronological queue
-// into a BANNERS list — "things that are happening" (Zoo Camp week,
-// parents in town) vs "things to go to at a time." Banners carry
-// day-N-of-M span math (all-day ends are EXCLUSIVE, per Google), sort
-// tier-rank-then-start, respect hidden tiers, never pin, never expire,
-// and never demand a checkbox. Timed events are unchanged: queue rows
-// at their slot, pinned in their lead window, aging off at midnight.
-// 0.8.0 (D61): the queue respects tier working days — when the VIEWED
-// day isn't in a tier's allowedDays, that tier's tasks and project
-// stages don't appear (Katie's Saturday is clear of Work items; the
-// project cards still show everything, and Monday brings it all back,
-// including the decision modal). Events/anchors are unaffected, as
-// are Done-today and Waiting.
-// 0.7.0 (D51/D60): configurable deadline hour (default 16 = 4 PM,
-// set from settings via setDeadlineHour) + per-tier ALLOWED DAYS.
-// "Weekday math" is now "working-day math": every tier declares
-// which days of the week count (default Mon–Fri). Stage offsets,
-// pipeline windows, date interception, and reschedule targets all
-// count only the owning tier's allowed days. isWeekend/addWeekdays/
-// weekendNeighbors remain as Mon–Fri wrappers for compatibility.
-// 0.6.0 (D50): UNDATED stages are first-class — direction:"none".
+// Version 0.20.1
+//
+// Pure scheduling logic: priority, pipelines, week and clock geometry,
+// holidays. Has never known Firestore exists — that is why it is testable.
+//
+// RECENT:
+// 0.20.0 — see CHANGELOG.md.
+//
+// ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
+//    it grew to hundreds of lines, which is how the banner and the
+//    constant below drifted apart four times. The constant sits on the
+//    next line on purpose: you cannot edit one without seeing the other.
+//    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const QUEUE_VERSION = "0.20.0";
+export const QUEUE_VERSION = "0.20.1";
+
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
