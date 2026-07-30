@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — whereis.html
+     Version 1.0.0 — a read-only diagnostic. Answers "where does this
+     document actually live", which the Firebase console cannot reliably do
+     because its subcollection list is a sample, not an inventory.
+
+     WRITES NOTHING. Every call in this file is a read.
+
+     WHY IT EXISTS: tier sharing produced tasks visible to one person and not
+     the other, and finding out which workspace they landed in meant
+     hand-encoding Firestore console URLs. That is not a thing to ask a person
+     to do. This page signs in and prints the answer.
+
+     THE MAIN EVENT is the mismatch check at the bottom. A task belongs in the
+     same workspace as its tier — that is item 5's whole routing rule
+     (wsOfTier in store.js). Any task whose tier lives somewhere else is
+     mis-routed, and this page finds them without anybody having to eyeball
+     two tables side by side.
+
+     ⚠️ RULES LIMIT READS TO BOARDS YOU HOLD A KEY TO. Run it once per account
+     to see the whole picture.
+     ============================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tentacalendar — where is it?</title>
+<style>
+  :root { --bg:#0a0f14; --panel:#101822; --panel2:#16212e; --ink:#dce7f0;
+          --dim:#8fa3b5; --line:#1f2d3d; --accent:#4dd0c4; --bad:#ff6b6b; --ok:#69db7c; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:1.2rem; background:var(--bg); color:var(--ink);
+         font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  h1 { font-size:1.25rem; margin:0 0 .2rem; }
+  h2 { font-size:1rem; color:var(--accent); margin:1.8rem 0 .5rem; }
+  p.sub { color:var(--dim); margin:0 0 1.2rem; }
+  button { background:var(--accent); color:#06231f; border:0; border-radius:6px;
+           padding:.55rem 1rem; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:var(--panel2); color:var(--ink); border:1px solid var(--line); font-weight:400; }
+  input { background:var(--panel); color:var(--ink); border:1px solid var(--line);
+          border-radius:6px; padding:.45rem .6rem; font:inherit; min-width:18rem; }
+  table { border-collapse:collapse; width:100%; margin:.4rem 0 1rem; font-size:13px; }
+  th { text-align:left; color:var(--dim); font-weight:600; padding:.35rem .5rem;
+       border-bottom:1px solid var(--line); white-space:nowrap; }
+  td { padding:.35rem .5rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr.bad td { background:rgba(255,107,107,.10); }
+  code { background:var(--panel); padding:.08rem .3rem; border-radius:4px; font-size:12px; }
+  .dim { color:var(--dim); }
+  .bad { color:var(--bad); font-weight:600; }
+  .ok  { color:var(--ok); }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+         padding:.9rem 1rem; margin:0 0 1rem; }
+  .verdict { font-size:1.05rem; }
+</style>
+</head>
+<body>
+
+<h1>🔍 Where is it?</h1>
+<p class="sub">Read-only. Lists every board you hold a key to, everything in it, and flags any task sitting in a different board from its own tier.</p>
+
+<div class="box">
+  <button id="go">Sign in and scan</button>
+  <span id="who" class="dim"></span>
+  <p class="dim" style="margin:.7rem 0 0">Rules only let you read boards you hold a key to, so run this once as
+  <b>each</b> account to see everything. Sign out of Google between runs, or use two browser profiles.</p>
+</div>
+
+<div id="out"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, collection, collectionGroup, query, where }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[<>&]/g, c => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c]));
+const app = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const SUBS = ["tiers", "tasks", "projects", "sessions", "settings", "eventsCache"];
+
+$("#go").onclick = async () => {
+  $("#go").disabled = true;
+  let me;
+  try {
+    const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+    me = (cred.user.email || "").toLowerCase();
+  } catch (e) { $("#out").innerHTML = `<p class="bad">Sign-in failed: ${esc(e.message)}</p>`; $("#go").disabled = false; return; }
+  $("#who").textContent = ` — signed in as ${me}`;
+  $("#out").innerHTML = `<p class="dim">Scanning…</p>`;
+
+  // Which boards do I hold a key to? Same query the app uses.
+  let keys = [];
+  try {
+    const snap = await getDocs(query(collectionGroup(db, "members"), where("email", "==", me)));
+    keys = snap.docs.map(d => ({ wsId: d.ref.parent.parent.id, role: d.data().role || "viewer" }));
+  } catch (e) {
+    $("#out").innerHTML = `<p class="bad">Could not list your keys: ${esc(e.message)}</p>`;
+    return;
+  }
+  if (!keys.length) { $("#out").innerHTML = `<p class="bad">You hold no keys to any board with this account.</p>`; return; }
+
+  // Read each board and everything under it.
+  const boards = [];
+  for (const k of keys) {
+    const b = { ...k, meta: null, docs: {}, denied: [] };
+    try { const w = await getDoc(doc(db, "workspaces", k.wsId)); b.meta = w.exists() ? w.data() : null; } catch { }
+    for (const sub of SUBS) {
+      try {
+        const s = await getDocs(collection(db, "workspaces", k.wsId, sub));
+        b.docs[sub] = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch { b.denied.push(sub); b.docs[sub] = []; }
+    }
+    boards.push(b);
+  }
+
+  // tierId -> the board its tier document actually lives in
+  const tierHome = new Map();
+  const tierName = new Map();
+  for (const b of boards) for (const t of b.docs.tiers) {
+    tierHome.set(t.id, b.wsId);
+    tierName.set(t.id, t.name);
+  }
+  const label = wsId => {
+    const b = boards.find(x => x.wsId === wsId);
+    return b?.meta ? `${b.meta.name} (${b.meta.kind})` : wsId;
+  };
+
+  // THE CHECK. A task belongs in the same board as its tier — wsOfTier.
+  const rows = [];
+  for (const b of boards) for (const t of b.docs.tasks) {
+    const home = tierHome.get(t.tierId) || null;
+    rows.push({
+      title: t.title, taskWs: b.wsId, tierId: t.tierId,
+      tierWs: home, tier: tierName.get(t.tierId) || null,
+      by: t.createdBy, done: t.completedAt ? "done" : "",
+      bad: home ? home !== b.wsId : "unknown"
+    });
+  }
+  const mismatched = rows.filter(r => r.bad === true);
+  const unknown = rows.filter(r => r.bad === "unknown");
+
+  let h = "";
+
+  // ---- verdict first. This is the answer; everything else is evidence. ----
+  h += `<div class="box verdict">`;
+  if (mismatched.length) {
+    h += `<p class="bad">✗ ${mismatched.length} task(s) are in a different board from their own tier.</p>
+          <p class="dim">That is the bug. A task typed into a shared tier must land in the tier's board or the other
+          person can never see it. Details in the first table below.</p>`;
+  } else if (unknown.length) {
+    h += `<p class="bad">? ${unknown.length} task(s) point at a tier this account cannot see.</p>
+          <p class="dim">Either the tier was deleted, or it lives in a board you hold no key to. Run this as the other
+          account before concluding anything.</p>`;
+  } else {
+    h += `<p class="ok">✓ Every task is in the same board as its tier.</p>
+          <p class="dim">Routing is correct for everything this account can read. If a task is still invisible to
+          somebody, the problem is in reading — merging or rules — not in where it was written.</p>`;
+  }
+  h += `</div>`;
+
+  const tbl = (head, body) => `<table><tr>${head.map(x=>`<th>${x}</th>`).join("")}</tr>${body}</table>`;
+
+  if (mismatched.length || unknown.length) {
+    h += `<h2>Mis-routed tasks</h2>` + tbl(
+      ["task", "sits in board", "its tier", "tier lives in", ""],
+      [...mismatched, ...unknown].map(r => `<tr class="bad">
+        <td>${esc(r.title)}</td>
+        <td>${esc(label(r.taskWs))}<br><code>${esc(r.taskWs)}</code></td>
+        <td>${esc(r.tier || "—")}<br><code>${esc(r.tierId)}</code></td>
+        <td>${r.tierWs ? esc(label(r.tierWs)) + `<br><code>${esc(r.tierWs)}</code>` : `<span class="bad">not visible to you</span>`}</td>
+        <td class="dim">${esc(r.by || "")} ${esc(r.done)}</td></tr>`).join("")
+    );
+  }
+
+  h += `<h2>Boards you hold a key to (${boards.length})</h2>` + tbl(
+    ["name", "kind", "owner", "your key", "tiers", "tasks", "projects", "sessions", "settings", "events", "id"],
+    boards.map(b => `<tr>
+      <td>${esc(b.meta?.name ?? "?")}</td><td>${esc(b.meta?.kind ?? "?")}</td>
+      <td class="dim">${esc(b.meta?.ownerEmail ?? "?")}</td><td>${esc(b.role)}</td>
+      ${SUBS.map(s => `<td>${b.denied.includes(s) ? '<span class="bad">denied</span>' : b.docs[s].length}</td>`).join("")}
+      <td><code>${esc(b.wsId)}</code></td></tr>`).join("")
+  );
+
+  h += `<h2>Every tier, and which board it lives in</h2>` + tbl(
+    ["tier", "board", "kind", "rank", "colour", "id"],
+    boards.flatMap(b => b.docs.tiers.map(t => `<tr>
+      <td>${esc(t.name)}</td><td>${esc(label(b.wsId))}</td><td>${esc(t.kind)}</td><td>${esc(t.rank)}</td>
+      <td><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${esc(t.color)};vertical-align:middle"></span>
+          <code>${esc(t.color)}</code></td>
+      <td><code>${esc(t.id)}</code></td></tr>`)).join("")
+  );
+
+  h += `<h2>Every task (${rows.length})</h2>
+        <p><input id="filter" placeholder="filter by title…"> <button class="ghost" id="clear">clear</button></p>`
+    + `<div id="tasktbl">` + tbl(
+    ["", "task", "board", "tier", "created by"],
+    rows.map(r => `<tr class="${r.bad === true ? "bad" : ""}" data-t="${esc((r.title||"").toLowerCase())}">
+      <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
+      <td>${esc(r.title)} <span class="dim">${esc(r.done)}</span></td>
+      <td>${esc(label(r.taskWs))}</td>
+      <td>${esc(r.tier || r.tierId)}</td>
+      <td class="dim">${esc(r.by || "")}</td></tr>`).join("")
+  ) + `</div>`;
+
+  $("#out").innerHTML = h;
+
+  const filter = $("#filter");
+  const apply = () => {
+    const q = filter.value.trim().toLowerCase();
+    for (const tr of $("#tasktbl").querySelectorAll("tr[data-t]"))
+      tr.style.display = !q || tr.dataset.t.includes(q) ? "" : "none";
+  };
+  filter.oninput = apply;
+  $("#clear").onclick = () => { filter.value = ""; apply(); };
+};
+</script>
+</body>
+</html>
