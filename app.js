@@ -941,8 +941,9 @@ import {
   saveWorkspace, forgetWorkspaceCache,                             // E38 rename
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
   mergedWorkspaceIds,                                              // item 5
-  onboardingState, markTourCompleted, dismissHint, markFirstVisitDone   // E41
-} from "./store.js?v=0.23.1";
+  onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
+  isRouteError, routingSnapshot                                    // 0.24.0
+} from "./store.js?v=0.24.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -953,7 +954,7 @@ import {
 } from "./queue.js?v=0.20.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
-export const APP_VERSION = "1.32.1";
+export const APP_VERSION = "1.33.0";
 const $ = sel => document.querySelector(sel);
 const DAY_MS = 86400000;
 
@@ -1261,6 +1262,39 @@ const S = {
 };
 
 // ---------- Boot ----------
+/**
+ * 1.33.0 — A REFUSED ROUTE HAS TO REACH THE PERSON.
+ *
+ * store 0.24.0 made the two board resolvers throw instead of guessing, which
+ * is the right direction but only pays out if somebody is told. Almost every
+ * store call in this file is a bare `.then()` with no `.catch()`, so an
+ * unrouted write would have become an unhandled rejection: a console line
+ * nobody reads, and a task that silently did not get created. That is the
+ * SAME failure shape as the bug being fixed, one layer up.
+ *
+ * So the net is global rather than twenty added `.catch()` clauses: one
+ * listener, so no future call site can forget. Route errors get a sentence
+ * (the person's correct move is to retry, and the message says so); anything
+ * else is logged loudly and left alone, because inventing a dialog for every
+ * possible rejection is how you train somebody to dismiss dialogs.
+ *
+ * `routingSnapshot` is exposed on `window` for the same reason: it is the
+ * distinguishing experiment §0a asked for, and it should be one console call
+ * rather than an edit-and-redeploy.
+ */
+window.addEventListener("unhandledrejection", ev => {
+  const err = ev.reason;
+  if (isRouteError(err)) {
+    console.error("[app] a write was refused because its board is unresolved:",
+      err.detail, routingSnapshot());
+    alert(err.message);
+    ev.preventDefault();
+    return;
+  }
+  console.error("[app] unhandled promise rejection:", err);
+});
+window.octodoWhere = routingSnapshot;
+
 document.addEventListener("DOMContentLoaded", () => {
   reportVersions();
   $("#signin-btn").addEventListener("click", () => signIn().catch(err => alert(err.message)));
@@ -1916,7 +1950,11 @@ function renderPeople() {
       if (owner && !isDeed) {
         const sel = document.createElement("select");
         sel.className = "mini";
-        [["owner", "Co-owner"], ["editor", "Can edit"], ["helper", "Can help"], ["viewer", "Can view"]]
+        // 1.33.0 — ASCENDING POWER, which is Jake's ask. It read
+        // Co-owner → Can view, i.e. most dangerous option first and directly
+        // under the cursor. Least first now, so the destructive end of the
+        // list is the end you have to travel to.
+        [["viewer", "Can view"], ["helper", "Can help"], ["editor", "Can edit"], ["owner", "Co-owner"]]
           .forEach(([v, label]) => {
             const o = document.createElement("option");
             o.value = v; o.textContent = label; o.selected = (m.role === v);
@@ -2694,11 +2732,39 @@ function wantTosShuffle() {
   });
 }
 
+/**
+ * 1.33.0 — THE CHIP NOW PICKS ITS OWN TEXT COLOUR.
+ *
+ * `.chip` in the stylesheet hardcodes `color: #0a0f14`, which is near-black,
+ * and this function set only `background`. Jake's test tier is literally
+ * #000000, so its chip was black text on a black pill — invisible, and no
+ * luminance logic existed anywhere in the app.
+ *
+ * Fixing it is a PREREQUISITE for the per-user tier colour feature rather
+ * than a follow-up to it: that feature exists to let each person choose their
+ * own colour, which is an invitation to choose a dark one.
+ *
+ * Rec. 709 luma against a 0.55 threshold — the same arithmetic every contrast
+ * helper uses, kept inline because it is three lines and the app already has
+ * hexToRgb. Anything that isn't a parseable 6-digit hex falls back to the
+ * light foreground rather than throwing, because a chip is decoration and a
+ * malformed colour must not take a render down.
+ */
+function readableOn(hex) {
+  const h = String(hex || "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return "#f2f7fa";
+  const [r, g, b] = hexToRgb("#" + h);
+  const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luma > 0.55 ? "#0a0f14" : "#f2f7fa";
+}
+
 function tierChip(tier) {
   const span = document.createElement("span");
   span.className = "chip";
   span.textContent = tier ? tier.name : "?";
-  span.style.background = tier ? tier.color : "#666";
+  const bg = (tier && tier.color) || "#666";
+  span.style.background = bg;
+  span.style.color = readableOn(bg);
   return span;
 }
 

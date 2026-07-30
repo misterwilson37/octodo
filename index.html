@@ -1,7 +1,14 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.49.1 (banner and data-html-version move together, always)
+     Version 0.50.0 (banner and data-html-version move together, always)
+     0.50.0 — NO MARKUP CHANGE. app.js ?v= -> 1.33.0 and store.js -> 0.24.0
+     (via app's import): the board routers now REFUSE an unresolved
+     destination instead of writing to the active board, the tier chip picks
+     a readable foreground, and the People role dropdown runs ascending.
+     Bumped because data-html-version is the update signal D130 polls, and a
+     ?v= on one tag does not bust another file (D49).
+     (prev) Version 0.49.1 (banner and data-html-version move together, always)
      0.49.1 — E41 repair pins. 0.49.0 bumped app.js's ?v= but left the
      STYLESHEET pinned at 0.54.0, so every browser that already held
      0.54.0 kept serving it and the entire onboarding stylesheet never
@@ -314,7 +321,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.55.1">
 </head>
-<body data-html-version="0.49.1">
+<body data-html-version="0.50.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1205,6 +1212,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.32.1"></script>
+  <script type="module" src="app.js?v=1.33.0"></script>
 </body>
 </html>

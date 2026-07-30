@@ -79,6 +79,9 @@ A *dependent* workspace is not a special code path — it is an ordinary workspa
 | `tentacalendar.css` | One stylesheet. |
 | `functions/` | The hourly Cloud Run job: pulls Google Calendar into `eventsCache`, mirrors tasks out. Deployed separately; the Admin SDK bypasses the rules below. |
 | `firestore-2.0.rules` | **The security model.** Lives in the Firebase console; kept here so the two cannot drift. |
+| `import.html` + `import-transform.js` | The 1.x migration. The page is a form and a batch writer; **all the logic is in the transform**, as pure functions over plain objects, which is the only reason it can be tested. |
+| `whereis.html` | A read-only diagnostic. Prints every board you hold a key to, every tier and which board it lives in, and flags any task sitting in a different board from its own tier. Writes nothing. Prefer it over the Firebase console for any "where does this live" question — the console's subcollection list is a sample, not an inventory. |
+| `rules-test/` | The emulator suite. 42 assertions over the rules and the import. The project's only automated tests. |
 | `manifest.json`, `icon-*.png` | PWA install. |
 
 **Documentation, and which to read:**
@@ -119,7 +122,7 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 3. Publish `firestore-2.0.rules` in the Firebase console. **Do not skip this** — a project in test mode is a public database.
 4. Serve the files from anywhere static. GitHub Pages needs no configuration beyond enabling it.
 
-**Testing the rules.** `firestore-2.0.rules` is the one file where a mistake is silent and expensive, and the Firebase console no longer carries an inline simulator — its "Develop & Test" button now just points at the Emulator Suite docs. Run the emulator locally (`firebase emulators:start --only firestore`) and assert against it before publishing. The two rules bugs this project has shipped were both of a kind a three-line test would have caught.
+**Testing the rules.** `firestore-2.0.rules` is the one file where a mistake is silent and expensive, and the Firebase console no longer carries an inline simulator — its "Develop & Test" button now just points at the Emulator Suite docs. There is a suite for this: `cd rules-test && npm install && npm test`. It tests a **copy**, so `cp ../firestore-2.0.rules ./firestore.rules` before every run, and check that file's declared version against what is actually published in the console. A rules file that lives in two places will disagree with itself, and the stale copy is the one a newcomer reads and believes. The two rules bugs this project has shipped were both of a kind a three-line test would have caught.
 
 ⚠️ **Every path in this project must be relative** (`./store.js`, never `/store.js`). It is served from a subpath during development and a domain root in production; an absolute path works in one and 404s in the other, which makes it broken only *in between* — the worst possible timing for a bug.
 
@@ -127,9 +130,11 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 
 ## Status
 
-**Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and the four roles, dependent workspaces, calendar sync in both directions, and **shared tiers with per-person priority**.
+**Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and the four roles, dependent workspaces, calendar sync in both directions, **shared tiers with per-person priority**, and a skippable onboarding layer (splash, tours, hints, help panels).
 
-**Not built yet:** the activity feed and kudos, onboarding, and the migration of the 1.x data.
+**Written but never run for real:** the 1.x migration. `import.html` is green against a real 245-document export in the emulator and has never touched live Firestore. Its own biggest risk is not in the code: an export holds calendar **ids** and cannot hold calendar **permissions**, and 2.0 runs under a different service account — so calendars must be re-shared by hand or the tiers import perfectly and stay empty forever.
+
+**Not built yet:** the activity feed and kudos; per-user tier colours and names.
 
 Version 2.0.0 arrives when two people can sign in separately, see separate boards, and visit each other's. Until then the app carries 1.x's continuing version numbers, and the badge in the header reports exactly what is running.
 

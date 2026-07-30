@@ -273,7 +273,7 @@ import {
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 
-export const STORE_VERSION = "0.23.1";
+export const STORE_VERSION = "0.24.0";
 
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -428,16 +428,93 @@ const _where = {
   sessions: new Map(), eventsCache: new Map()
 };
 function noteWhere(coll, id, wsId) { _where[coll]?.set(id, wsId); }
-/** The board a document lives on, or the active board if we've never seen it
- *  (a brand-new document, or one created in this same tick). */
-function wsOf(coll, id) { return _where[coll]?.get(id) || ws(); }
+
+// ============================================================
+// ⚠️ 0.24.0 — THE ROUTERS REFUSE. THEY USED TO GUESS.
+//
+// Both resolvers below used to end `|| ws()`: if the ownership map had no
+// entry, the write went to the ACTIVE board. That fallback is the bug found
+// on 2026-07-29 — a task typed into a shared tier landed on the author's own
+// personal board, addTask resolved, the UI drew the task, the author saw it
+// forever, and the person it was meant for never could. Nothing anywhere
+// reported a problem, because writing to your own board is always permitted.
+//
+// A routing rule that cannot determine the destination must REFUSE. An error
+// the person can see is strictly better than a document in the wrong
+// collection: the first costs a retry, the second is invisible and permanent.
+//
+// ⚠️ THE FALLBACK WAS IN **TWO** PLACES, NOT ONE. The handoff named wsOfTier.
+// `wsOf` had the identical `|| ws()` and it is the more dangerous of the two,
+// because restoreDoc (D116's undo) routes through it and uses setDoc — which
+// CREATES. Undo a delete on a shared tier after a reload, when the map is
+// cold, and the task was silently re-created on your own board while looking
+// correct on your screen and staying gone on theirs. That is TIER-10's
+// failure exactly, and TIER-10 is one of the two tests flagged "can lose
+// data". Both are closed by refusing.
+//
+// The old comment justified the fallback as covering "a brand-new document,
+// or one created in this same tick". That case is now covered properly: every
+// creator below stamps the map with the id it just minted, before returning.
+// A guess was standing in for a stamp.
+// ============================================================
+
+/** Thrown when a write cannot be aimed at a board. Carries a code so app.js
+ *  can tell an unresolved route from a permission refusal, and a sentence a
+ *  person can act on, because the person's only correct move is to retry. */
+function routeError(coll, id) {
+  const err = new Error(
+    "Octodo could not work out which board that belongs to, so it did not " +
+    "write anything — this is almost always a shared tier that has not " +
+    "finished loading. Nothing was lost or moved. Give it a second and try " +
+    "again; if it keeps happening, reload.");
+  err.code = "octodo/unrouted";
+  err.detail = `${coll}/${id}`;
+  return err;
+}
+/** True for the above, so a caller can say "try again" rather than "denied". */
+export const isRouteError = err => err?.code === "octodo/unrouted";
+
+/** The board a document lives on. THROWS if we have never seen it — see the
+ *  block above. Never falls back to the active board. */
+function wsOf(coll, id) {
+  const found = _where[coll]?.get(id);
+  if (!found) throw routeError(coll, id);
+  return found;
+}
 
 const colIn = (wsId, name) => collection(db, "workspaces", wsId, name);
 /** A routed document reference: the id decides the board, not ACTIVE_WS. */
 const docIn = (coll, id) => doc(db, "workspaces", wsOf(coll, id), coll, id);
 /** The board a TIER lives on — the resolver for anything created against a
- *  tier (tasks, projects), which is what makes a shared tier hold its own. */
-const wsOfTier = tierId => _where.tiers.get(tierId) || ws();
+ *  tier (tasks, projects), which is what makes a shared tier hold its own.
+ *  THROWS on a miss for the same reason wsOf does. */
+function wsOfTier(tierId) {
+  const found = _where.tiers.get(tierId);
+  if (!found) throw routeError("tiers", tierId);
+  return found;
+}
+
+/**
+ * The distinguishing experiment the handoff asked for, left in the file
+ * rather than added and removed: call `octodoWhere()` from the console at the
+ * moment of a suspicious write and it prints what the routers can see.
+ *
+ * `merged` is what the fan-outs are bound to; `tiers` is every tier the
+ * ownership map can place. A tier that is visible in the UI and absent from
+ * `tiers` is the boot race; a tier absent from BOTH is mergeSet excluding it.
+ * That is the fork §0a said not to guess between, answerable in one call.
+ */
+export function routingSnapshot() {
+  return {
+    me: ME, active: ACTIVE_WS, home: HOME_WS, atHome: ACTIVE_WS === HOME_WS,
+    merged: [...MERGE],
+    sharedKnown: [..._shared.keys()],
+    activeMembers: [..._activeMembers],
+    tiers: Object.fromEntries(_where.tiers),
+    counts: Object.fromEntries(
+      Object.entries(_where).map(([k, m]) => [k, m.size]))
+  };
+}
 
 // ---------- Fan-out ----------
 // One logical subscription, N Firestore listeners, one merged emit. The
@@ -929,7 +1006,13 @@ function trackShared(wsId, wsDoc) {
   const prev = _shared.get(wsId);
   if (prev) {
     prev.doc = wsDoc;
+    const wasHidden = prev.hidden;
     prev.hidden = wsDoc.hidden === true;
+    // 0.24.0 — hidden is an INPUT TO mergeSet, so changing it has to
+    // recompute. The caller happens to refreshMerge() after its loop, which
+    // made this correct by luck rather than by construction; trackShared is
+    // also reachable from shareTier's own bookkeeping, where it is not.
+    if (wasHidden !== prev.hidden) refreshMerge();
     return;
   }
   const entry = {
@@ -1587,7 +1670,15 @@ export function subscribeConfig(cb) {
 // you shared it with and the whole feature is a lie. wsOfTier is the routing
 // rule for everything born against a tier.
 export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null, recurrence = null }) {
-  return addDoc(colIn(wsOfTier(tierId), "tasks"), {
+  // 0.24.0 — resolve the board ONCE, then stamp the id we mint against it.
+  // The stamp is what lets the routers refuse: app.js creates a task and then
+  // creates its follow-up chain against the id in the very next tick
+  // (app.js's onTaskFormSubmit → createFollowUpChain), and addFollowUp routes
+  // through wsOf on that id. Waiting for the snapshot to stamp it made that
+  // chain a race — the parent on the shared board, the children on whichever
+  // board happened to be active. Stamping here makes it a fact.
+  const home = wsOfTier(tierId);
+  const ref = await addDoc(colIn(home, "tasks"), {
     title, tierId, dueAt, escalation, notes,
     projectId,
     estimateMinutes,          // D100 — null = unestimated, NOT zero
@@ -1604,12 +1695,15 @@ export async function addTask({ title, tierId, dueAt, escalation, notes = "", pr
     createdBy: whoami(),
     createdAt: Date.now()
   });
+  noteWhere("tasks", ref.id, home);
+  return ref;
 }
 
 export async function addFollowUp(parentTaskId, { title, offsetDays, tierId }) {
   // The follow-up joins its PARENT, not the active board — a chain split
   // across two workspaces would break rewindFollowUps' single query.
-  return addDoc(colIn(wsOf("tasks", parentTaskId), "tasks"), {
+  const home = wsOf("tasks", parentTaskId);
+  const ref = await addDoc(colIn(home, "tasks"), {
     title, tierId,
     dueAt: null,               // materializes on parent completion (D4)
     escalation: { every: 1, unit: "hours" },
@@ -1622,6 +1716,8 @@ export async function addFollowUp(parentTaskId, { title, offsetDays, tierId }) {
     createdBy: whoami(),
     createdAt: Date.now()
   });
+  noteWhere("tasks", ref.id, home);      // 0.24.0 — chains are built in a loop
+  return ref;
 }
 
 /**
@@ -1671,7 +1767,7 @@ export async function setTaskDone(taskId, done) {
   if (t?.recurrence?.every && !t.spawnedNextAt) {
     const r = t.recurrence;
     const base = (r.anchor === "due" && t.dueAt != null) ? t.dueAt : now;
-    await addDoc(colIn(home, "tasks"), {
+    const spawn = await addDoc(colIn(home, "tasks"), {
       title: t.title, tierId: t.tierId,
       dueAt: addInterval(base, r.every, r.unit),
       escalation: t.escalation || { every: 1, unit: "hours" },
@@ -1686,6 +1782,7 @@ export async function setTaskDone(taskId, done) {
       createdBy: whoami(),
       createdAt: now
     });
+    noteWhere("tasks", spawn.id, home);   // 0.24.0 — the cactus keeps its board
     await updateDoc(docIn("tasks", taskId), { spawnedNextAt: now });
   }
 }
@@ -1829,13 +1926,18 @@ export async function clockIn(projectId, at = Date.now()) {
   open.forEach(s => { closedIds.push(s.id); batch.update(s.ref, { end: Math.max(at, s.data().start) }); });
   // The ledger follows its project, so a shared project's time is visible to
   // everybody who holds that tier.
-  const ref = doc(colIn(wsOf("projects", projectId), "sessions"));
+  const home = wsOf("projects", projectId);
+  const ref = doc(colIn(home, "sessions"));
   const body = {
     projectId, start: at, end: null,
     createdBy: whoami(), createdAt: Date.now()
   };
   batch.set(ref, body);
   await batch.commit();
+  // 0.24.0 — D116's undo calls setSessionEnd on this id immediately, and that
+  // routes through wsOf. Stamping is what lets the router refuse everywhere
+  // else without breaking the one path that legitimately writes twice fast.
+  noteWhere("sessions", ref.id, home);
   return { newId: ref.id, body, closedIds, at };
 }
 
@@ -1860,13 +1962,15 @@ export async function logSession(projectId, start, end) {
   const batch = writeBatch(db);
   const truncatedIds = [];
   open.forEach(s => { if (s.data().start < start) { truncatedIds.push(s.id); batch.update(s.ref, { end: start }); } });
-  const ref = doc(colIn(wsOf("projects", projectId), "sessions"));
+  const home = wsOf("projects", projectId);
+  const ref = doc(colIn(home, "sessions"));
   const body = {
     projectId, start, end,
     createdBy: whoami(), createdAt: Date.now()
   };
   batch.set(ref, body);
   await batch.commit();
+  noteWhere("sessions", ref.id, home);   // 0.24.0 — as clockIn
   return { newId: ref.id, body, truncatedIds, start };   // D116
 }
 
@@ -1946,12 +2050,15 @@ export async function addProject({ name, color, startDate, endDate, tierId, work
     const [dir, anc] = s.direction && s.anchor ? [s.direction, s.anchor] : (legacy[s.phase] || legacy.during);
     return { name: s.name, direction: dir, anchor: anc, offsetDays: s.offsetDays || 0, completedAt: null, dueAt: null };
   }));
-  return addDoc(colIn(wsOfTier(tierId), "projects"), {
+  const home = wsOfTier(tierId);
+  const ref = await addDoc(colIn(home, "projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null, completedBy: null,   // E9
     createdBy: whoami(),
     createdAt: Date.now()
   });
+  noteWhere("projects", ref.id, home);   // 0.24.0 — clockIn may follow at once
+  return ref;
 }
 
 /**
@@ -1960,14 +2067,17 @@ export async function addProject({ name, color, startDate, endDate, tierId, work
  * pipeline with completedAt/dueAt already reset, so the template is
  * NOT consulted and one-off stage surgery survives the duplication).
  */
-export function addProjectWithStages({ name, color, startDate, endDate, tierId, workload = 2, stages = [] }) {
+export async function addProjectWithStages({ name, color, startDate, endDate, tierId, workload = 2, stages = [] }) {
   stages = stampNewStages(stages);   // at creation, every stage is new
-  return addDoc(colIn(wsOfTier(tierId), "projects"), {
+  const home = wsOfTier(tierId);
+  const ref = await addDoc(colIn(home, "projects"), {
     name, color, startDate, endDate, tierId, workload, stages,
     stretchUntilDone: false, completedAt: null, completedBy: null,   // E9
     createdBy: whoami(),
     createdAt: Date.now()
   });
+  noteWhere("projects", ref.id, home);   // 0.24.0 — clockIn may follow at once
+  return ref;
 }
 
 export function deleteProject(projectId) {
@@ -2048,10 +2158,19 @@ export async function setStageDue(projectId, stageIndex, dueAt) {
  */
 export async function saveTier(tierId, data) {
   const { rank, ...rest } = data || {};
+  // ⚠️ 0.24.0 — A LATENT TRAP, CLOSED BEFORE IT FIRED. The Firestore SDK is
+  // built here without ignoreUndefinedProperties, so `{ rank: undefined }`
+  // throws "Unsupported field value: undefined" — and the catch below used to
+  // swallow that and report it as "no setup rights here". Today's only caller
+  // always supplies a rank, so nobody has met this; the next caller that
+  // saves a colour on its own would have met it as a save that silently did
+  // nothing and blamed permissions. Strip it instead of writing it.
+  const doc_fields = { ...rest };
+  if (rank != null) doc_fields.rank = rank;
   if (!tierId) {
     // Born on the board you are looking at. Sharing it is a separate,
     // deliberate act (shareTier) rather than a property of creation.
-    const ref = await addDoc(colIn(ws(), "tiers"), { ...rest, rank });
+    const ref = await addDoc(colIn(ws(), "tiers"), doc_fields);
     noteWhere("tiers", ref.id, ws());
     await noteTierRank(ws(), ref.id, rank);
     return ref;
@@ -2060,11 +2179,21 @@ export async function saveTier(tierId, data) {
   await noteTierRank(home, tierId, rank);
   await noteSharedRank(home, tierId, rank);
   try {
-    await updateDoc(docIn("tiers", tierId), { ...rest, rank });
+    await updateDoc(docIn("tiers", tierId), doc_fields);
   } catch (err) {
-    // Expected for a helper/viewer on somebody else's tier. Their own order
-    // was already saved above, which is the part that belongs to them.
-    console.warn("[store] tier saved to your own ordering only (no setup rights here):", err);
+    // ⚠️ 0.24.0 — THIS CATCH USED TO SWALLOW EVERYTHING AND NAME ONE CAUSE.
+    // A helper or viewer on somebody else's tier is the expected refusal, and
+    // for them this is genuinely fine: their own ordering was saved above,
+    // which is the part that belongs to them. Anything ELSE reaching here was
+    // a real failure wearing a reassuring sentence — a save that silently did
+    // not happen while the console said the tier was fine. Only the refusal
+    // is swallowed now; the rest is re-thrown so the caller can say so.
+    if (err?.code === "permission-denied") {
+      console.warn("[store] tier saved to your own ordering only (no setup rights here):", err);
+      return;
+    }
+    console.error("[store] the tier document could not be saved:", err);
+    throw err;
   }
 }
 
