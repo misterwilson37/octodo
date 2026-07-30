@@ -1,6 +1,18 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.55.1  (banner and --tc-version move together, ALWAYS —
+   Version 0.56.0  — .t-canon / .t-canon-dot: the "shared as «name»" line
+   under a shared tier's row in Settings, plus the owner's colour swatch.
+   Quiet on purpose; a reference, not a control.
+
+   ⚠️ AND THEN 0.56.0 DID IT A THIRD TIME, IN THE MIRROR: --tc-version was
+   moved to 0.56.0 and this banner was left reading 0.55.1. The two previous
+   entries below warned about exactly this and were not enough, because they
+   only ever warned about ONE direction. It goes wrong BOTH ways, and the
+   banner-stale direction is the expensive one — Jake reads the header to
+   decide whether a delivery is new, so a stale header means a fix he asked
+   for sits undeployed. There is now an automated check; see HANDOFF §7.
+
+   (prev) Version 0.55.1  (banner and --tc-version move together, ALWAYS —
    0.22.0 shipped with this banner still reading 0.21.1. Jake caught it.
    AND THEN 0.55.0 DID IT AGAIN: banner 0.55.0, --tc-version still 0.54.0.
    The warning was two lines above the mistake. If you are bumping this
@@ -255,7 +267,7 @@
 [hidden] { display: none !important; }
 
 :root {
-  --tc-version: "0.55.1";
+  --tc-version: "0.56.0";
   /* D137 — alert level tints. Deliberately NOT the tier palette: a tier
      colour says "which part of life", an alert colour says "how loud",
      and overloading one onto the other would make a red Home task and an
@@ -2160,4 +2172,27 @@ header, .dash-split { transition: opacity 1.2s ease; }
 
 .help-panel-content p:last-child {
   margin-bottom: 0;
+}
+
+
+/* ---------- PER-USER TIER SKIN (0.56.0) ----------
+   Settings ▸ Tiers, on a shared row only: what the OWNER calls it, under the
+   name box that now holds YOUR name for it. Quiet on purpose — it is a
+   reference, not a control — but present on every shared row rather than only
+   when an override exists, so "the ELA 8 one" stays a sentence two people can
+   say to each other even before either has renamed anything. */
+.tier-row .t-canon {
+  grid-column: 3 / -1;
+  font-size: 0.78rem;
+  color: var(--muted, #7c8b99);
+  margin-top: -2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tier-row .t-canon-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.18);
 }
