@@ -1,5 +1,38 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
+// Version 0.25.0 — PER-USER TIER COLOUR AND NAME.
+//   users/{email}.tierColors + .tierLabels, composite-keyed "wsId:tierId"
+//   exactly as tierRanks is. skinFor() overwrites name/color before a tier
+//   leaves subscribeTiers, so every consumer shows your version for free;
+//   canonName/canonColor ride along for Settings' "shared as …" line. Skins
+//   apply ONLY on your own board, same guard as rankFor.
+//   Also: corrected a comment claiming TIER_RANKS is "kept live by
+//   subscribeMyProfile". NO SUCH FUNCTION EXISTS OR EVER HAS. Both maps
+//   hydrate once at sign-in; one device does not follow another.
+//
+// Version 0.24.0 — THE BOARD ROUTERS REFUSE INSTEAD OF GUESSING.
+//   wsOf() and wsOfTier() both ended `|| ws()`, so an unresolved destination
+//   wrote to the ACTIVE board — a task typed into a shared tier landed on the
+//   author's own board, resolved cleanly, and was invisible to the person it
+//   was for. Both now throw octodo/unrouted. THE FALLBACK WAS IN TWO PLACES,
+//   NOT THE ONE THE HANDOFF NAMED: restoreDoc routes through wsOf and uses
+//   setDoc, which CREATES — that was TIER-10's data-loss case.
+//   Every creator now stamps the id it mints (addTask, addFollowUp, the
+//   recurrence spawn, both project creators, clockIn, logSession), which is
+//   what makes refusing safe; a guess had been standing in for a stamp.
+//   Also: saveTier's catch swallowed everything and blamed permissions;
+//   a latent `rank: undefined` write that would have landed in that catch;
+//   trackShared updated `hidden` without recomputing the merge.
+//   routingSnapshot() exported — window.octodoWhere() in the console.
+//
+// ⚠️ VERSION 0.25.0 AND 0.24.0 WERE FIRST DELIVERED WITH THIS BANNER STILL
+//   READING 0.23.1 WHILE STORE_VERSION READ 0.25.0 — the inverse of defect 3
+//   below, and worse for the one job the banner has: Jake opened the file,
+//   saw an unchanged header, concluded nothing had been sent, and did not
+//   deploy a fix he was waiting on. THE HEADER IS THE DIFF. Anyone reading a
+//   file top-down sees this before they see a constant 276 lines down.
+//   Check both, every time, and see the automated check in HANDOFF §7.
+//
 // Version 0.23.1 — E41 REPAIR. 0.23.0 shipped four defects, two of them in
 // code that had nothing to do with onboarding. Fixed here:
 //
