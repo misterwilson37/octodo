@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.50.0 (banner and data-html-version move together, always)
+     Version 0.51.0 (banner and data-html-version move together, always)
+     0.51.0 — NO MARKUP CHANGE. Pins move: app.js 1.34.0, css 0.56.0,
+     store 0.25.0 via app's import. Per-user tier colour and name.
+     (prev) Version 0.50.0 (banner and data-html-version move together, always)
      0.50.0 — NO MARKUP CHANGE. app.js ?v= -> 1.33.0 and store.js -> 0.24.0
      (via app's import): the board routers now REFUSE an unresolved
      destination instead of writing to the active board, the tier chip picks
@@ -319,9 +322,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.55.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.56.0">
 </head>
-<body data-html-version="0.50.0">
+<body data-html-version="0.51.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1212,6 +1215,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.33.0"></script>
+  <script type="module" src="app.js?v=1.34.0"></script>
 </body>
 </html>
