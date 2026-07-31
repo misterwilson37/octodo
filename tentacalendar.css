@@ -1,6 +1,8 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.57.0 — #version.stale, the amber "you are running old code"
+   Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
+   there is room; "Later" group in the projects panel.
+   (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
    state for app 1.36.0's per-file server check.
    (prev) Version 0.56.1
 
@@ -15,7 +17,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.57.0"; }
+:root { --tc-version: "0.58.0"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -1181,8 +1183,19 @@ header, .dash-split { transition: opacity 1.2s ease; }
    Retires .wv-modes/.wv-sizes/.yv-layouts/.yv-modes/.yv-sizes: parallel
    families doing one job is the D98 parity-drift trap in CSS form. */
 .view-nav { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+/* 0.58.0 — THE DATE RANGE WAS BEING EATEN BY THE BUTTONS BESIDE IT.
+   `flex: 1` is `flex: 1 1 0%`, so this h2 had a flex-basis of ZERO and
+   `min-width: 0` on top of it. In a flex row that makes the label the FIRST
+   thing to give up space: `.view-ctls` held its content width, the h2
+   collapsed, and the ellipsis did the rest — "Jul 2026–J…" on a 4K TV with
+   a whole empty line underneath it. `.view-nav` already wraps, so the right
+   answer was always for the CONTROLS to drop to the next row.
+   `min(100%, max-content)` reads as: never truncate while the text fits on
+   one line, never grow wider than the bar. The ellipsis stays as the last
+   resort for a genuinely long label on a phone. */
 .view-nav h2 {
-  margin: 0; flex: 1; text-align: center; min-width: 0;
+  margin: 0; flex: 1 1 auto; text-align: center;
+  min-width: min(100%, max-content);
   font-size: clamp(1.05rem, 1.1vw, 2rem);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
