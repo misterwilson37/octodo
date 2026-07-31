@@ -1,11 +1,18 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.28.0
+// Version 0.29.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
 // RECENT:
+// 0.29.0 — THE HURRAH SPAWNS A TASK. A client follow-up at +14 days had to
+//          be a pipeline STAGE, so a finished project sat at the top of the
+//          to-do list for a fortnight with nothing to do. Ticking a hurrah
+//          that carries `spawnDays` now completes the project AND creates an
+//          ordinary dated task — which can be rescheduled, escalated and
+//          finished on its own terms, none of which a stage can do.
+//          `spawnedTaskId` guards against a re-tick minting a second one.
 // 0.28.0 — §0d CLOSED: A TIER CHANGE ACROSS BOARDS NOW MOVES THE DOCUMENT.
 //          updateProject/updateTask routed with wsOf(id) — the board the
 //          document was ALREADY on — so changing tierId rewrote the field
@@ -61,7 +68,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "0.28.0";
+export const STORE_VERSION = "0.29.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -2299,6 +2306,51 @@ export async function setStageDone(projectId, where, done) {
 
   stages[i].completedAt = done ? Date.now() : null;
   stages[i].completedBy = done ? whoami() : null;              // E9
+
+  /**
+   * ⚠️ 0.29.0 — THE HURRAH SPAWNS A TASK, NOT A STAGE.
+   *
+   * The report, from the person living in this daily: a client follow-up at
+   * +14 days had to be a pipeline stage, so a project that was *finished*
+   * sat at the top of the to-do list for a fortnight with nothing to do.
+   * Jake's call: *"the project is done, but there is a follow-up task. Two
+   * different things in this case."*
+   *
+   * So publication stays the last stage and the project COMPLETES on it —
+   * fireworks, Finished group, off the plate — while the follow-up leaves as
+   * an ordinary dated task that can be rescheduled, escalated and finished
+   * on its own terms. A stage cannot do any of that; a task always could.
+   *
+   * `spawnedTaskId` is the guard. Un-ticking and re-ticking the hurrah must
+   * not mint a second task — somebody may already have worked the first —
+   * and un-ticking deliberately does NOT delete it, for the same reason.
+   * Only the hurrah spawns: any stage doing it would be the pipeline step
+   * this exists to replace.
+   */
+  let spawnedTask = null;
+  if (done && stages[i].hurrah && stages[i].spawnDays != null && !stages[i].spawnedTaskId) {
+    const p = snap.data();
+    const due = new Date(Date.now() + stages[i].spawnDays * 86400000);
+    due.setHours(9, 0, 0, 0);
+    try {
+      const ref = await addTask({
+        title: `${stages[i].name} — ${p.name}`,
+        // ⚠️ `escalation` is written straight into the document, so an
+        // undefined here is a Firestore "Unsupported field value" and the
+        // whole tick fails. Same shape dupSnooze uses.
+        escalation: { every: 1, unit: "days" },
+        notes: `Follow-up from ${p.name} — ${stages[i].spawnDays} days after ${stages[i].name}.`,
+        tierId: p.tierId,
+        dueAt: due.getTime()
+      });
+      stages[i].spawnedTaskId = ref.id;
+      spawnedTask = { id: ref.id, dueAt: due.getTime(), title: `${stages[i].name} — ${p.name}` };
+    } catch (err) {
+      // Never fatal: the stage completion is the thing the user asked for.
+      // A missing follow-up is visible; a refused tick is baffling.
+      console.warn("[store] hurrah completed but the follow-up task could not be created:", err);
+    }
+  }
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
   await updateDoc(ref, {
     stages,
@@ -2310,7 +2362,7 @@ export async function setStageDone(projectId, where, done) {
   // The caller decides the celebration level from these two facts:
   // publishing is the party, follow-up is paperwork.
   return {
-    stages, allDone,
+    stages, allDone, spawnedTask,
     hurrah: !!stages[i].hurrah,
     projectHasHurrah: stages.some(s => s.hurrah)
   };
