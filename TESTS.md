@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.0.0 · current as of 2026-07-31 (Haliphron)**
+**Version 2.1.0 · current as of 2026-07-31 (Haliphron)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -53,30 +53,48 @@ test says *→ `whereis`*, that is the cheap way to run it.
 
 ---
 
-## 🔴 Can lose data — open bugs, not tests
+## 🔴 Run these first — new code, and it moves data
 
-**UNSHARE-PARTIAL. A failed "bring it back" left the tier gone anyway.**
-2026-07-31. A guest pressed *Bring it back to my board*, was told permission
-was refused, and the tier was gone from the owner's board regardless.
-**Partly fixed** — app 1.37.0 hides the button from non-owners and store
-0.27.0 refuses the call before it copies anything, so this exact path is shut.
-**Still open:** `deleteAll` commits in batches and only the batch is atomic,
-so a large tier can still half-delete on a permission failure mid-sequence.
-0.27.0 makes it *report* that honestly instead of promising "nothing was
-lost"; it does not yet roll back.
-→ **Needs one thing from Jake: the order you did it in.** See the note at the
-bottom of this file.
+**§0d shipped.** A tier change across a board boundary now moves the document
+instead of stranding it. None of it has been run in a browser.
 
-**TIER-MEMBER-ROLES. Anyone on a shared tier can remove anyone, including the
-owner.** Jake, 2026-07-31: *"we run into the problem that anyone can remove
-anyone from a tier…even if they're the owner. Perhaps we need the same levels
-on tiers that we have on boards."* Agreed and unbuilt. Boards have four roles;
-tier membership has none.
+**MOVE-1. The specimen repair, which is also the regression test.**
+Change `gmail made I`'s tier to `Personal`, save, then change it back to
+`sumner vs gmail`. Re-scan `whereis` from **both** accounts. The ✗ must be
+gone and the project must appear on the shared board for sumner.
+→ *Before this fix both edits were no-ops on location. This one action proves
+the fix and clears the only live mis-route you have.*
 
-**§0d. A tier change does not move the document** — and this is now confirmed
-to compound. `collectTier` queries the SOURCE board only, so a document that
-is already mis-routed is **invisible to every later share, unshare and
-re-share**. That is almost certainly what happened to `gmail made I`.
+**MOVE-2. A project takes its clocked time with it.**
+Clock a minute onto a project, then move it to a tier on another board. The
+Time Report still totals it, and `whereis` shows the session on the **new**
+board with no ✗.
+→ *Sessions route off the project, not the tier. If they don't follow, the
+record splits and each half looks complete.*
+
+**MOVE-3. A task takes its follow-ups.**
+Make a task with a chained follow-up, move the parent to a tier on another
+board, then **undo the whole thing**. Both come back together.
+→ *`rewindFollowUps` queries one board. A split chain doesn't error — it just
+stops seeing half.*
+
+**MOVE-4. Deleting a project warns about the time, and takes it.**
+Delete a project that has clocked sessions. The confirm names the hours;
+afterwards `whereis` shows **no orphaned session**.
+→ *This is the bug your 07-31 scan found: an 8:02 PM session with no project,
+invisible to both accounts that held keys to that board.*
+
+---
+
+## 🔴 Still open — known, not yet fixed
+
+**DELETEALL-ROLLBACK.** `deleteAll` commits in batches; each is atomic, the
+sequence is not. store 0.27.0 made it *report* a partial delete honestly
+instead of promising "nothing was lost." It still cannot put back what it
+removed.
+
+**TIER-MEMBER-ROLES.** Anyone holding a shared tier can remove anyone,
+including the owner. Boards have four roles; tiers have none.
 
 ---
 
@@ -234,25 +252,22 @@ so they arrive in the repo for the next session, and they gate every drop.
 
 ---
 
-## ⚠️ One question waiting on Jake
+## ✅ The unshare question is answered
 
-**UNSHARE-PARTIAL: what order did you do it in?**
+Both scans came back on 2026-07-31 and they agree. **Nothing was stranded by
+the unshare.** No tier, task or project is split across two boards, so the
+guest guard shipped in app 1.37.0 / store 0.27.0 is the whole fix for that
+path, and `deleteAll`'s missing rollback is a latent risk rather than an
+active mess.
 
-Two sequences fit what you described, and they need different repairs:
+The two ✗ rows were something else entirely:
 
-1. Sumner unshared successfully first, and then gmail's attempt acted on a
-   tier that had already moved — in which case the guest guard shipped tonight
-   is the whole fix.
-2. Gmail's attempt ran against a live shared tier, copied everything to Jake
-   (personal), and got partway through deleting the originals before the rules
-   stopped it — in which case documents are currently **split across two
-   boards** and `deleteAll` needs a rollback, not just an honest error.
+1. **`gmail made I`** — the §0d tier-change hole. Now fixed; MOVE-1 clears it.
+2. **An orphaned session**, 8:02 PM, on a personal board, whose project
+   `zybmi5sjq11uhBG9FFxq` reads *"not visible to you"* from **both** accounts
+   that hold keys to that board. The project was deleted; its ledger was not.
+   `deleteProject` deleted exactly one document and nothing else.
 
-Screenshot 2 shows the tier now living in a board called *sumner vs gmail
-(shared)* with id `Lvl9aAZnpcTwcD2dnnso` — a **different** board from the old
-`Testing Tier (shared)` `Vzrwrof…`. So there was at least one re-share in
-there, which is why I can't reconstruct it from the evidence alone.
-
-**Run `whereis` from both accounts and send the two "Mis-routed documents"
-tables.** With the rescan button that is now about fifteen seconds, and it
-tells us whether anything is actually stranded.
+That second one is a bug nobody was looking for. It was found by a session
+audit written to catch mis-*routing*, which is worth remembering the next time
+a diagnostic seems to be reporting something boring.
