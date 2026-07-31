@@ -1,11 +1,14 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.37.0
+// Version 1.38.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.38.0 — Deleting a project now warns that its clocked time goes too
+//          (store 0.28.0 stopped orphaning it), with the hours in the
+//          confirm. Time somebody spent is the thing worth warning about.
 // 1.37.0 — THE SHARE PANEL KNOWS WHO OWNS THE TIER. A guest was shown
 //          "Bring it back to my board" and the ✕ that takes somebody's key
 //          away. Jake pressed the first one, got a permission error AFTER the
@@ -62,7 +65,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.37.0";
+export const APP_VERSION = "1.38.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -86,7 +89,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.27.0";
+} from "./store.js?v=0.28.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -2697,7 +2700,16 @@ function projectCard(p) {
     iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
     iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
     iconBtn("✕", "Delete project", () => {
-      if (confirm(`Delete project "${p.name}" and its pipeline?`)) deleteProject(p.id);
+      // 1.38.0 — say what else goes. store 0.28.0 deletes the clocked time
+      // with the project (it was being orphaned before), and time somebody
+      // spent is exactly the thing you want warned about before it goes.
+      const logged = S.sessions.filter(x => x.projectId === p.id);
+      const mins = Math.round(logged.reduce((t, x) => t + ((x.end ?? Date.now()) - x.start), 0) / 60000);
+      const extra = logged.length
+        ? `\n\nThis also deletes ${logged.length} time session${logged.length === 1 ? "" : "s"}` +
+          `${mins > 0 ? ` (${fmtHoursTotal(mins * 60000)})` : ""}. That record cannot be recovered.`
+        : "";
+      if (confirm(`Delete project "${p.name}" and its pipeline?${extra}`)) deleteProject(p.id);
     })
   );
   head.append(chev, nameEl, btns);
