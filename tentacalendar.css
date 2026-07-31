@@ -1,6 +1,8 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.56.1
+   Version 0.57.0 — #version.stale, the amber "you are running old code"
+   state for app 1.36.0's per-file server check.
+   (prev) Version 0.56.1
 
    One stylesheet. No preprocessor, no build step.
 
@@ -13,7 +15,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.56.1"; }
+:root { --tc-version: "0.57.0"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -1948,4 +1950,13 @@ header, .dash-split { transition: opacity 1.2s ease; }
   width: 10px; height: 10px;
   border-radius: 3px;
   border: 1px solid rgba(255,255,255,0.18);
+}
+
+/* 0.57.0 — the version badge shouts when the tab is running code older than
+   what the server has (app 1.36.0). Amber rather than red: nothing is broken,
+   but nothing you are looking at can be trusted either. */
+#version.stale {
+  color: #ffb84d;
+  font-weight: 700;
+  cursor: help;
 }
