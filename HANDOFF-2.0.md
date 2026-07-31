@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.36.0 · store 0.26.1 · queue 0.20.1 · css 0.57.0 · html 0.51.5 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.4.0 · version-check 1.2.0 · stage-merge.test 1.0.0 |
-| **Deployed** | ✅ Everything through app 1.36.0 / store 0.26.1 / whereis 1.3.1 is UPLOADED and STAGE-1…7 passed. **whereis 1.4.0 is the only unshipped file.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
+| **Versions** | app 1.37.0 · store 0.27.0 · queue 0.20.1 · css 0.57.0 · html 0.51.6 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.2.0 · stage-merge.test 1.0.0 |
+| **Deployed** | ✅ Through app 1.36.0 / whereis 1.3.1 uploaded and swept. **app 1.37.0 · store 0.27.0 · html 0.51.6 · whereis 1.5.0 are NOT uploaded.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
@@ -321,6 +321,65 @@ with a delay on it.*
 (the skin, keys and provenance blocks were extracted and run over fake boards,
 including the all-clean and unreadable-profile paths). That is weaker than a
 committed test and is called out so nobody mistakes it for one.
+
+---
+
+### 0f. THE 2026-07-31 TEST SWEEP — what it found
+
+Jake ran most of `TESTS.md` in one sitting. **TIER-6/7/8, KEYS-2/4/5/6,
+SKIN-1, TIER-10 and the standing checks all passed** — item 5 works. TIER-10
+mattered most: a task made by one person, deleted by the other, then undone,
+came back **on both boards**. The tombstone map routes correctly and the one
+test that could have silently lost data does not.
+
+Four things came out of it that are not in `TESTS.md` because they are
+findings, not tasks.
+
+**⚠️ 1. A GUEST COULD RUN "BRING IT BACK", AND FAILING DID NOT MEAN NOTHING
+HAPPENED.** `unshareTier` checked only that the tier *was* shared, never who
+owned it, and the panel drew the button for everyone. A guest's press ran
+`moveTier` — which **copies first and deletes second** — so the copy landed on
+the guest's own board and only then did the rules refuse the delete. Jake:
+*"It said it couldn't, but you can see that it definitely did."*
+
+Fixed at both layers (store 0.27.0 refuses by owner, app 1.37.0 hides the
+control and offers **Leave this tier** instead — the decision that IS a
+guest's to make). **His framing is the general rule and belongs in the UI
+everywhere:** *"if a user doesn't have the ability to steal a tier, they
+probably shouldn't think they have an option."*
+
+**⚠️ 2. `deleteAll` IS NOT ATOMIC AND THE ERROR MESSAGE CLAIMED IT WAS.**
+Batches cap at `BATCH_LIMIT`; each commit is atomic, the *sequence* is not.
+moveTier's rescue text promised "Nothing was lost" on any delete failure —
+true for one batch, false for two. It now carries the count that committed and
+distinguishes the two states. **It still does not roll back.** A real fix
+copies, verifies, deletes, and on failure re-copies what it removed.
+
+**3. §0d COMPOUNDS, AND THAT EXPLAINS TIER-4.** `collectTier` queries the
+SOURCE board only. A document already mis-routed by the tier-change hole is
+therefore **invisible to every later share, unshare and re-share** — it is not
+picked up, not moved, and not reported. `gmail made I` sits on a personal
+board with its tier on a shared one, which is exactly that signature. **This
+raises §0d from "an uncommon deliberate action" to "quietly strands documents
+during ordinary sharing," and it should now be built next.**
+
+**4. TIER MEMBERSHIP HAS NO ROLES.** Anybody holding a shared tier can remove
+anybody else, the owner included. Jake: *"Perhaps we need the same levels on
+tiers that we have on boards."* Boards have four roles; tiers have none.
+Unbuilt, and the natural companion to fix 1.
+
+**And one correction, which is the fourth of its kind here.** SKIN-2 told Jake
+that per-user colours and names *"do not follow you between devices"* and to
+confirm that. They do follow — they live in `users/{email}` in Firestore, so
+any fresh sign-in loads them. What does not happen is live sync between two
+already-open tabs. *"If that's a bug, then I like the bug."* The narrow true
+statement had been restated as a broad false one, which is precisely how
+E41's, §0b's and `TIER_RANKS`'s comments went wrong. **Fourth instance. Assume
+the next confident sentence in this codebase is also wrong until measured.**
+
+**Naming, again.** `E41-1…7` are now `TOUR-1…7`. E41 is a *defect* number, and
+naming tests after it repeats the `0c-n` mistake in the same document that
+forbids it. Jake: *"the silly naming system for onboarding (e41? Really?)"*
 
 ---
 
