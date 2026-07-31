@@ -1,11 +1,28 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.25.1
+// Version 0.26.1
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
 // RECENT:
+// 0.26.1 — mergeStages() lifted out of setProjectStages as a pure function.
+//          BEHAVIOUR IS UNCHANGED — the seam moved so the rule that decides
+//          whether somebody's finished work survives can be tested without
+//          Firebase. `node stage-merge.test.mjs` reads it out of this file.
+// 0.26.0 — SHARED PROJECTS STOP EATING EACH OTHER. Three defects, all of
+//          them item 5 meeting code that assumed a board was one person:
+//          (1) setProjectStages wrote the stage editor's stale copy of
+//          completedAt, so reordering un-ticked whatever your colleague had
+//          ticked while the modal was open. It now merges completion from
+//          the SERVER — the editor owns shape, the server owns completion.
+//          (2) Stages had no stable identity, so every write addressed them
+//          by POSITION; `sid` fixes that and rides through reorders free.
+//          (3) openSessions() closed EVERYBODY's running clock, because
+//          "at most one open session" was written when a board was one
+//          person. Now scoped to createdBy == me.
+// 0.25.1 — Jake's marker bump after a predecessor shortened this header.
+//          NO CODE CHANGE.
 // 0.25.0 — Per-user tier colour and name (tierColors/tierLabels on the
 //          profile, composite-keyed). skinFor() applies them; canonName
 //          and canonColor ride along for Settings' "shared as" line.
@@ -22,7 +39,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "0.25.1";
+export const STORE_VERSION = "0.26.1";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -262,6 +279,10 @@ function routeError(coll, id) {
 }
 /** True for the above, so a caller can say "try again" rather than "denied". */
 export const isRouteError = err => err?.code === "octodo/unrouted";
+/** 0.26.0 — the stage a click was aimed at is no longer in the pipeline.
+ *  Not a failure: somebody edited it while this screen was open. app.js's
+ *  global unhandledrejection handler turns it into a sentence. */
+export const isStageGone = err => err?.code === "octodo/stage-gone";
 
 /** The board a document lives on. THROWS if we have never seen it — see the
  *  block above. Never falls back to the active board. */
@@ -1769,10 +1790,15 @@ export function subscribeSessions(cb) {
 // second session, and quietly billed two projects at once. openSessions()
 // sweeps every merged board; writeBatch spans them all in one commit.
 async function openSessions() {
+  const me = whoami();
   const per = await Promise.all(MERGE.filter(Boolean).map(async wsId => {
     const snap = await getDocs(query(colIn(wsId, "sessions"), where("end", "==", null)));
     snap.docs.forEach(d => noteWhere("sessions", d.id, wsId));
-    return snap.docs;
+    // 0.26.0 — MINE ONLY. The createdBy filter is applied HERE rather than in
+    // the query on purpose: a second equality clause would want a composite
+    // index, and this result set is at most a handful of documents. An index
+    // is a deploy step, and a deploy step nobody runs is a bug that ships.
+    return snap.docs.filter(d => (d.data().createdBy || "") === me);
   }));
   return per.flat();
 }
@@ -1894,10 +1920,71 @@ export function saveProjectTypes(types) {
  * a legacy stage is indistinguishable from a new one by inspection, and
  * guessing turns an honest blank into a false claim.
  */
+/**
+ * 0.26.0 — STAGES GET STABLE IDS, AND THIS IS WHY.
+ *
+ * Stages were positional: `setStageDone(projectId, stageIndex, done)` and the
+ * editor's whole-array swap both addressed a stage by WHERE IT SAT. On a
+ * one-person board that is fine, because nothing reorders under you. On a
+ * shared project it is not — Jake and a colleague reordered the same pipeline
+ * on 2026-07-30 and each side ended up with a different array, with different
+ * stages ticked. Positional addressing has no way to notice that happened.
+ *
+ * A `sid` is minted for every new stage and rides through renames and
+ * reorders for free, because the editor in app.js rebuilds each row by
+ * spreading the ORIGINAL stage object (`carried`) rather than a field list —
+ * the drop-list decision made for `completedBy` pays for this one too.
+ * Legacy stages get one backfilled the first time an array is written.
+ *
+ * Not global, not a document id — unique within one project's array is the
+ * whole requirement.
+ */
+/**
+ * Resolve a stage reference to an index in the CURRENT server array.
+ * `where` is `{ sid, index }` (preferred) or a bare index (legacy).
+ *
+ * An index is a bet that nothing reordered between the render that drew the
+ * control and the click that used it, and on a shared project that bet is
+ * off. When a sid is supplied and the array carries sids but not THAT one,
+ * this REFUSES rather than falling through to the index: hitting a
+ * neighbouring stage is worse than hitting none, and silently writing to the
+ * wrong document is the exact class of failure 0.24.0 was about.
+ */
+function resolveStage(stages, where) {
+  if (where && typeof where === "object") {
+    if (where.sid) {
+      const i = stages.findIndex(s => s.sid === where.sid);
+      if (i >= 0) return i;
+      if (stages.some(s => s?.sid)) {
+        const err = new Error(
+          "that stage is no longer in this pipeline — somebody edited it while your screen was open");
+        err.code = "octodo/stage-gone";
+        throw err;
+      }
+    }
+    return Number.isInteger(where.index) ? where.index : -1;
+  }
+  return Number.isInteger(where) ? where : -1;
+}
+
+const newSid = () => Math.random().toString(36).slice(2, 10);
+
+/** Give every stage a sid, preserving any it already has, de-duplicating
+ *  collisions (a duplicated stage row would otherwise carry a twin's id). */
+function ensureSids(stages) {
+  const seen = new Set();
+  return (stages || []).map(s => {
+    let sid = s?.sid;
+    if (!sid || seen.has(sid)) sid = newSid();
+    seen.add(sid);
+    return { ...s, sid };
+  });
+}
+
 export function stampNewStages(stages) {
   const now = Date.now(), me = whoami();
-  return (stages || []).map(s =>
-    s && s.createdBy ? s : { ...s, createdBy: me, createdAt: s?.createdAt ?? now });
+  return ensureSids((stages || []).map(s =>
+    s && s.createdBy ? s : { ...s, createdBy: me, createdAt: s?.createdAt ?? now }));
 }
 
 export async function addProject({ name, color, startDate, endDate, tierId, workload = 2 }) {
@@ -1952,15 +2039,26 @@ export function updateProject(projectId, fields) {
 /**
  * Set/unset completion on one stage. Returns the updated stages array so the
  * caller can detect project completion (all stages done) for celebration level 3.
+ *
+ * ⚠️ 0.26.0 — `where` is `{ sid }` OR a bare index. Prefer the sid: an index
+ * is a bet that nothing reordered between the render that drew the checkbox
+ * and the click that ticked it, and on a shared project that bet is off. If
+ * the sid is not found the call REFUSES rather than falling back to the
+ * index — ticking the wrong stage is worse than ticking none, and silently
+ * hitting a neighbour is exactly the class of failure 0.24.0 was about.
+ * A bare number is still accepted for legacy stages that have no sid yet.
  */
-export async function setStageDone(projectId, stageIndex, done) {
+export async function setStageDone(projectId, where, done) {
   const ref = docIn("projects", projectId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
   const stages = (snap.data().stages || []).map(s => ({ ...s }));
-  if (!stages[stageIndex]) return null;
-  stages[stageIndex].completedAt = done ? Date.now() : null;
-  stages[stageIndex].completedBy = done ? whoami() : null;      // E9
+
+  const i = resolveStage(stages, where);
+  if (i < 0 || !stages[i]) return null;
+
+  stages[i].completedAt = done ? Date.now() : null;
+  stages[i].completedBy = done ? whoami() : null;              // E9
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
   await updateDoc(ref, {
     stages,
@@ -1973,30 +2071,95 @@ export async function setStageDone(projectId, stageIndex, done) {
   // publishing is the party, follow-up is paperwork.
   return {
     stages, allDone,
-    hurrah: !!stages[stageIndex].hurrah,
+    hurrah: !!stages[i].hurrah,
     projectHasHurrah: stages.some(s => s.hurrah)
   };
 }
 
-/** Replace a project's entire stage array (rename/reorder/add/remove,
- *  D42). Caller is responsible for preserving completedAt/dueAt on
- *  surviving stages. Auto-recomputes project completion. */
-export async function setProjectStages(projectId, stages) {
+/**
+ * Replace a project's entire stage array (rename/reorder/add/remove, D42).
+ *
+ * ⚠️ 0.26.0 — THE EDITOR OWNS SHAPE. THE SERVER OWNS COMPLETION.
+ *
+ * This used to write the caller's array verbatim, and on a shared project
+ * that destroyed the other person's work. The stage editor builds each row
+ * from a snapshot taken when the MODAL OPENED, so every tick your colleague
+ * made while you had it open was written back as un-ticked. Reordering three
+ * stages silently un-finished two of theirs. Observed live on 2026-07-30
+ * between two accounts: both sides read 4/8 and the four were DIFFERENT.
+ *
+ * The split is unambiguous because the editor has no completion control on
+ * it — `.st-name`, `.st-dir`, `.st-anchor`, `.st-off`, `.st-hurrah` and
+ * nothing else. It therefore never has a legitimate opinion about
+ * completedAt/completedBy, and any it carries is stale by construction.
+ *
+ * So: re-read at write time, and for every incoming stage whose `sid` still
+ * exists on the server, take completion from the SERVER copy. A stage the
+ * server does not have is genuinely new (or is being restored by undo after
+ * a delete), and there the caller's value is the only one there is.
+ *
+ * This is deliberately last-write-wins for shape and never-lose for
+ * completion. Two people reordering at once still means one ordering wins —
+ * that is a preference, and Jake has parked it. Neither of them loses a tick.
+ */
+/**
+ * The merge rule, as a pure function — no Firestore, no auth, no clock.
+ *
+ * Split out from setProjectStages ON PURPOSE. This is the most consequential
+ * logic added in 0.26.0 (it decides whether somebody's finished work
+ * survives) and it was, for about an hour, the least testable: three awaits
+ * deep inside a network call. `node stage-merge.test.mjs` exercises THIS
+ * function against the real source. A rule nobody can test is a rule nobody
+ * can trust, which is the same lesson `version-check.mjs` taught on the same
+ * day, one floor down.
+ *
+ * `incoming` is what the editor wants the pipeline to LOOK like.
+ * `live` is what the server currently says is DONE.
+ * Server wins on completion for any stage it still has; caller wins for a
+ * stage the server does not have (genuinely new, or restored by undo after
+ * a delete — in both cases the caller holds the only copy).
+ */
+export function mergeStages(incoming, live) {
+  const bySid = new Map((live || []).filter(s => s?.sid).map(s => [s.sid, s]));
+  let reconciled = 0;
+  const stages = ensureSids(incoming).map(s => {
+    const server = bySid.get(s.sid);
+    if (!server) return s;                       // new, or restored by undo
+    const keep = {
+      completedAt: server.completedAt ?? null,
+      completedBy: server.completedBy ?? null
+    };
+    if ((s.completedAt ?? null) !== keep.completedAt) reconciled++;
+    return { ...s, ...keep };
+  });
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
-  return updateDoc(docIn("projects", projectId), {
-    stages,
+  return { stages, allDone, reconciled };
+}
+
+export async function setProjectStages(projectId, stages) {
+  const ref = docIn("projects", projectId);
+  const snap = await getDoc(ref);
+  const live = snap.exists() ? (snap.data().stages || []) : [];
+  const { stages: merged, allDone, reconciled } = mergeStages(stages, live);
+
+  await updateDoc(ref, {
+    stages: merged,
     completedAt: allDone ? Date.now() : null,
     completedBy: allDone ? whoami() : null                       // E9
   });
+  // Returned so the caller can say "two stages had been ticked by somebody
+  // else while this was open" rather than leaving it to be noticed later.
+  return { stages: merged, allDone, reconciled };
 }
 
-export async function setStageDue(projectId, stageIndex, dueAt) {
+export async function setStageDue(projectId, where, dueAt) {
   const ref = docIn("projects", projectId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
   const stages = (snap.data().stages || []).map(s => ({ ...s }));
-  if (!stages[stageIndex]) return;
-  stages[stageIndex].dueAt = dueAt; // null clears
+  const i = resolveStage(stages, where);        // 0.26.0 — sid before index
+  if (i < 0 || !stages[i]) return;
+  stages[i].dueAt = dueAt; // null clears
   await updateDoc(ref, { stages });
 }
 
