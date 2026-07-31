@@ -1,11 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.35.1
+// Version 1.36.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.36.0 — THE BADGE TELLS YOU WHEN YOU ARE RUNNING OLD CODE. D130 watched
+//          ONE stamp (index.html's) and so could not see a stale ?v= pin —
+//          the file uploads, index loads fresh, and it then asks for a URL
+//          the browser already has. checkDeployedVersions() reads every
+//          module's banner FROM THE SERVER, cache bypassed, first chunk only,
+//          and compares it to the constant this tab is running. Stale rows go
+//          in the tooltip and turn the badge amber. Jake: "Isn't the whole
+//          point of the hover the version check? Why would I want to open a
+//          new page?" — so it is in the hover, not a new page.
 // 1.35.1 — A REFUSED TICK NOW REPAINTS. The checkbox flips itself — that is
 //          the browser's default, not ours — so when store.js refuses a
 //          stage write, nothing is written, no snapshot arrives, render() is
@@ -46,7 +55,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.35.1";
+export const APP_VERSION = "1.36.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -693,6 +702,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // first), then hourly. Cache-busted fetch of index.html; see checkForUpdate.
   setTimeout(checkForUpdate, 60 * 1000);
   setInterval(checkForUpdate, 60 * 60 * 1000);
+  // 1.36.0 — the per-file staleness check. Early, because the whole point is
+  // to be true BEFORE somebody spends an hour on a bug that never loaded.
+  setTimeout(checkDeployedVersions, 4 * 1000);
+  setInterval(checkDeployedVersions, 60 * 60 * 1000);
   wireAlerts();                              // D137
   setTimeout(() => alertTick(true), 4000);   // D137 — silent seeding once data has landed
   // D122 — the NOW bar's second hand. Touches exactly ONE text node when
@@ -744,16 +757,34 @@ function reportVersions() {
   const report =
     `app.js ${APP_VERSION} · store.js ${STORE_VERSION} · queue.js ${QUEUE_VERSION} · ` +
     `celebrate.js ${CELEBRATE_VERSION} · config.js ${CONFIG_VERSION} · css ${cssVersion} · html ${htmlVersion}`;
-  $("#version").textContent = "v" + APP_VERSION;
   // ITEM 5 — the badge has to name every board feeding the view, not just
   // the one you are standing on. When a shared tier misbehaves, "which
   // workspaces am I actually merging?" is the first question, and ?ws= takes
   // an id from this list.
   const merged = mergedWorkspaceIds().filter(w => w && w !== activeWorkspaceId());
+
+  // 1.36.0 — what the SERVER has, next to what this tab is running. A stale
+  // row is the difference between "the fix isn't working" and "the fix never
+  // loaded", and that distinction is worth a whole evening.
+  let deployLines = "\n\nserver check: not run yet";
+  const stale = (deployReport || []).filter(r => r.stale);
+  if (deployReport) {
+    const unchecked = deployReport.filter(r => r.unchecked).length;
+    deployLines = stale.length
+      ? "\n\n⚠️ RUNNING STALE CODE — the server has newer files than this tab:\n" +
+        stale.map(r => `   ${r.file}: running ${r.loaded}, server has ${r.server}`).join("\n") +
+        "\n   Hard-refresh (Cmd-Shift-R). If it survives that, a ?v= pin is\n" +
+        "   pointing at the wrong version and the file needs a repin."
+      : "\n\nserver check: up to date" + (unchecked ? ` (${unchecked} file(s) unreachable)` : "");
+  }
+
+  $("#version").textContent = "v" + APP_VERSION + (stale.length ? " ⚠️" : "");
+  $("#version").classList.toggle("stale", stale.length > 0);
   $("#version").title = report +
     "\n\nworkspace " + (activeWorkspaceId() || "—") +   // E1 — which board am I on?
     (merged.length ? "\n+ shared " + merged.join(", ") : "") +
-    "\n" + censusLine();   // D136
+    "\n" + censusLine() +   // D136
+    deployLines;
   const line = $("#versions-line");
   if (line) line.textContent = report + " — " + censusLine();   // D136
 }
@@ -774,6 +805,68 @@ function reportVersions() {
 const BOOT_HTML_VERSION = document.body.dataset.htmlVersion || "";
 let updateCountdownTimer = null;
 let dismissedUpdateVersion = "";
+
+/**
+ * D130 checks ONE stamp — index.html's. That catches an ordinary deploy and
+ * misses the thing that actually ate 2026-07-30: a `?v=` pin left pointing at
+ * the version before the one on the server. The file uploads, index.html is
+ * never cached so it loads fresh, and it then asks the browser for a URL the
+ * browser already has — so the fix is live on the server and the tab keeps
+ * running the old code. Nothing on screen says so. It cost an evening of
+ * chasing bugs that had already been fixed.
+ *
+ * ⚠️ 1.36.0 — SO CHECK EVERY FILE, AGAINST THE SERVER, FROM THE BROWSER.
+ * Each module states its version twice: in a banner near the top and in a
+ * constant. The constant is what this tab is RUNNING. The banner is what the
+ * server is SERVING. Fetch the first slice of each file with the cache
+ * bypassed, read the banner, compare.
+ *
+ * Jake, 2026-07-30, on being offered this as a separate page: *"Isn't the
+ * whole point of the hover the version check? Why would I want to open a new
+ * page?"* Correct. It belongs where he already looks, so the result goes into
+ * the badge's tooltip and, when something is stale, onto the badge itself —
+ * a check you have to remember to run is a check that does not get run.
+ *
+ * Only the FIRST CHUNK of each file is read (the reader is cancelled after
+ * it), so this does not pull 300KB of app.js an hour to look at line 3.
+ */
+const DEPLOY_FILES = [
+  { file: "app.js",           rx: /^\/\/\s*Version\s+(\d+\.\d+\.\d+)/m,  loaded: () => APP_VERSION },
+  { file: "store.js",         rx: /^\/\/\s*Version\s+(\d+\.\d+\.\d+)/m,  loaded: () => STORE_VERSION },
+  { file: "queue.js",         rx: /^\/\/\s*Version\s+(\d+\.\d+\.\d+)/m,  loaded: () => QUEUE_VERSION },
+  { file: "celebrate.js",     rx: /^\/\/\s*Version\s+(\d+\.\d+\.\d+)/m,  loaded: () => CELEBRATE_VERSION },
+  { file: "config.js",        rx: /^\/\/\s*Version\s+(\d+\.\d+\.\d+)/m,  loaded: () => CONFIG_VERSION },
+  { file: "tentacalendar.css", rx: /--tc-version:\s*"(\d+\.\d+\.\d+)"/,  loaded: () => getComputedStyle(document.documentElement).getPropertyValue("--tc-version").trim().replace(/"/g, "") },
+  { file: "index.html",       rx: /data-html-version="(\d+\.\d+\.\d+)"/,  loaded: () => BOOT_HTML_VERSION }
+];
+
+let deployReport = null;   // null = not checked yet
+
+/** Read only the leading bytes of a URL, cache bypassed. */
+async function headOfFile(url) {
+  const res = await fetch(`${url}?_v=${Date.now()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(res.status);
+  if (!res.body || !res.body.getReader) return (await res.text()).slice(0, 4000);
+  const reader = res.body.getReader();
+  const { value } = await reader.read();
+  reader.cancel().catch(() => {});          // we only ever wanted the header
+  return new TextDecoder().decode(value || new Uint8Array());
+}
+
+async function checkDeployedVersions() {
+  const rows = await Promise.all(DEPLOY_FILES.map(async d => {
+    const loaded = (d.loaded() || "").trim();
+    try {
+      const server = (await headOfFile(d.file)).match(d.rx)?.[1] || null;
+      return { file: d.file, loaded, server, stale: !!(server && loaded && server !== loaded) };
+    } catch {
+      return { file: d.file, loaded, server: null, stale: false, unchecked: true };
+    }
+  }));
+  deployReport = rows;
+  reportVersions();
+  return rows;
+}
 
 async function checkForUpdate() {
   if (updateCountdownTimer) return; // already counting down; don't stack
