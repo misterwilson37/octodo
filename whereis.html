@@ -1,6 +1,640 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — whereis.html
+     Version 1.5.0 — SCAN AGAIN, AND A TIMELINE. Two things Jake asked for
+     mid-test on 2026-07-31. (1) "Sign in and scan can't rescan. We need a
+     button that allows a second scan to streamline testing." Every test on
+     this page is do-a-thing-then-look, and the look was costing a reload plus
+     a Google popup — half the value of a diagnostic is how cheap it is to run
+     TWICE, because before-and-after is the only shape of evidence that proves
+     an action did what it claimed. The scan is stamped with a clock time so
+     two runs can be told apart. (2) "Records who did what, but not when. It'd
+     be nice if we had a timeline." The timestamps were always in the data;
+     nothing had ever displayed them.
+
+     (prev) Version 1.4.0 — RETIRES FIVE CONSOLE-DIVING TESTS. TIER-6, TIER-7,
+     SKIN-1, SKIN-2 and BASE-7 were all written as "open the Firestore
+     console, click into a document, eyeball a field" — from two accounts,
+     for some of them. Every fact they ask for is readable from here, from
+     one account, in one page load. A test that costs a console session is a
+     test that waits for a free evening.
+
+     Three new sections: your tier order and colours beside the canonical
+     values and everybody else's published ranks; every key on every board
+     you can see, with roles; and a provenance audit that COUNTS the four E9
+     stamps across every task, project and stage instead of asking you to
+     eyeball one document and generalise.
+
+     ⚠️ The boards table header is now derived FROM `SUBS`. It used to be a
+     hand-written list sitting beside a `SUBS.map()` loop, so adding
+     "members" to the scan shifted every count one column left, silently. A
+     second list that must be kept in step with the first is the same shape
+     of bug as the keep-list that ate `completedBy` and the `?v=` pins.
+
+     (prev) Version 1.3.1 — THE VERSION IS ON THE PAGE. Jake, 2026-07-30: "You
+     didn't put the version anywhere on that page, so I can't see what version
+     it is on load." A diagnostic that cannot tell you whether IT is the
+     current one is a diagnostic you have to diagnose. It is beside the title,
+     and it is a literal — this file has no build step to inject one, so the
+     banner and the badge are two copies and version-check.mjs now watches
+     both (it reads the h1 as this file's constant).
+
+     (prev) Version 1.3.0 — PER-STAGE DETAIL AND PER-PERSON TIME. "4/8" is the
+     wrong shape of evidence for the bug store 0.26.0 fixed: on 2026-07-30
+     both accounts read 4/8 on one shared project and the four were DIFFERENT
+     stages. A count is identical on both screens while the data disagrees.
+     Each project now expands to name / tick / who ticked it / sid, so two
+     accounts can be diffed line by line — and a new table breaks project time
+     down by person, which is how you check "Σ 1h / 31h" without taking the
+     badge's word for it. Stages with no `sid` are flagged as pre-0.26.0;
+     they should gain one the first time that pipeline is saved.
+
+     (prev) Version 1.2.0 — PROJECTS AND SESSIONS ARE AUDITED TOO. 1.1.0 counted
+     projects in the boards table and then never mentioned them again, so a
+     project created on a shared tier and invisible to the other person could
+     not be diagnosed with this page at all — which is exactly the report it
+     was built to answer, one collection over. Jake hit it on 2026-07-30 and
+     said so: "whereis does not reveal projects, so I can't test anything."
+
+     THE CHECK IS NOW THREE CHECKS, and they are not the same rule:
+       · a TASK belongs in the same board as its TIER      (wsOfTier)
+       · a PROJECT belongs in the same board as its TIER   (wsOfTier)
+       · a SESSION belongs in the same board as its PROJECT (wsOf "projects")
+     The third is a different edge because store.js clockIn/logSession route
+     off the PROJECT, not the tier — so a mis-routed project drags its whole
+     time ledger with it and the sessions look locally consistent.
+
+     ⚠️ A KNOWN HOLE THIS PAGE CANNOT SEE, and it is worth reading before you
+     trust a ✓. updateProject() and updateTask() route with wsOf(id) — the
+     board the document is ALREADY on — so changing a tier from a personal one
+     to a shared one rewrites tierId and leaves the document where it was.
+     That produces a mismatch this page WILL flag. What it cannot flag is the
+     reverse: a document whose tier this account cannot see reads as "?" and
+     not as "wrong". Run it as both accounts.
+
+     (prev) Version 1.1.0 — adds the "checked off by" column. The field (E9's
+     completedBy) has been written by setTaskDone since store 0.22.0 and this
+     page simply never rendered it, so on a shared tier there was no way to
+     tell which of two people had ticked something. A BLANK IS HONEST, NOT A
+     GAP: anything completed before E9 shipped has completedBy:null, and
+     import-transform writes null for ALL of Katie's 1.x history on purpose —
+     1.x recorded when something was done and never by whom, and on a
+     two-person board a guess is a coin flip.
+
+     (prev) Version 1.0.0 — a read-only diagnostic. Answers "where does this
+     document actually live", which the Firebase console cannot reliably do
+     because its subcollection list is a sample, not an inventory.
+
+     WRITES NOTHING. Every call in this file is a read.
+
+     WHY IT EXISTS: tier sharing produced tasks visible to one person and not
+     the other, and finding out which workspace they landed in meant
+     hand-encoding Firestore console URLs. That is not a thing to ask a person
+     to do. This page signs in and prints the answer.
+
+     THE MAIN EVENT is the mismatch check at the bottom. A task belongs in the
+     same workspace as its tier — that is item 5's whole routing rule
+     (wsOfTier in store.js). Any task whose tier lives somewhere else is
+     mis-routed, and this page finds them without anybody having to eyeball
+     two tables side by side.
+
+     ⚠️ RULES LIMIT READS TO BOARDS YOU HOLD A KEY TO. Run it once per account
+     to see the whole picture.
+     ============================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tentacalendar — where is it?</title>
+<style>
+  :root { --bg:#0a0f14; --panel:#101822; --panel2:#16212e; --ink:#dce7f0;
+          --dim:#8fa3b5; --line:#1f2d3d; --accent:#4dd0c4; --bad:#ff6b6b; --ok:#69db7c; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:1.2rem; background:var(--bg); color:var(--ink);
+         font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  h1 { font-size:1.25rem; margin:0 0 .2rem; }
+  h2 { font-size:1rem; color:var(--accent); margin:1.8rem 0 .5rem; }
+  p.sub { color:var(--dim); margin:0 0 1.2rem; }
+  button { background:var(--accent); color:#06231f; border:0; border-radius:6px;
+           padding:.55rem 1rem; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:var(--panel2); color:var(--ink); border:1px solid var(--line); font-weight:400; }
+  input { background:var(--panel); color:var(--ink); border:1px solid var(--line);
+          border-radius:6px; padding:.45rem .6rem; font:inherit; min-width:18rem; }
+  table { border-collapse:collapse; width:100%; margin:.4rem 0 1rem; font-size:13px; }
+  th { text-align:left; color:var(--dim); font-weight:600; padding:.35rem .5rem;
+       border-bottom:1px solid var(--line); white-space:nowrap; }
+  td { padding:.35rem .5rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr.bad td { background:rgba(255,107,107,.10); }
+  code { background:var(--panel); padding:.08rem .3rem; border-radius:4px; font-size:12px; }
+  .dim { color:var(--dim); }
+  .bad { color:var(--bad); font-weight:600; }
+  .ok  { color:var(--ok); }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+         padding:.9rem 1rem; margin:0 0 1rem; }
+  .verdict { font-size:1.05rem; }
+  details summary { cursor: pointer; }
+  .stage-detail { padding: 4px 0 4px 14px; line-height: 1.7; }
+  .stage-detail code { font-size: 11px; opacity: .55; }
+  #wv { font-size: 13px; font-weight: 400; opacity: .55; vertical-align: middle; }
+  .hit { color: #4dd0c4; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>🔍 Where is it? <span id="wv">v1.5.0</span></h1>
+<p class="sub">Read-only. Lists every board you hold a key to, everything in it, and flags any <b>task</b> or <b>project</b> sitting in a different board from its own tier — or any <b>session</b> sitting in a different board from its project.</p>
+
+<div class="box">
+  <button id="go">Sign in and scan</button>
+  <button id="again" hidden>↻ Scan again</button>
+  <span id="who" class="dim"></span>
+  <span id="stamp" class="dim"></span>
+  <p class="dim" style="margin:.7rem 0 0">Rules only let you read boards you hold a key to, so run this once as
+  <b>each</b> account to see everything. Sign out of Google between runs, or use two browser profiles.</p>
+</div>
+
+<div id="out"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, collection, collectionGroup, query, where }
+  from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[<>&]/g, c => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c]));
+
+/**
+ * 1.3.0 — PER-STAGE DETAIL, because "4/8" cannot tell you WHICH four.
+ *
+ * On 2026-07-30 two accounts both read 4/8 on the same shared project and the
+ * four were different stages — a reorder had written one side's stale
+ * completion over the other's. A count is exactly the wrong shape of evidence
+ * for that bug: it is identical on both screens while the data disagrees.
+ * This shows the name, the tick, and WHO ticked it, so the two accounts can
+ * be compared line by line.
+ *
+ * `sid` is shown too (store 0.26.0). A stage with none is pre-0.26.0 and
+ * still addressed by position; it should gain one the first time that
+ * project's pipeline is saved, and watching that happen is the cheapest
+ * possible check that the backfill works on real data.
+ */
+function stageDetail(r) {
+  const list = r.stageList || [];
+  if (!list.length) return "—";
+  const noSid = list.filter(s => s && !s.sid).length;
+  const rows = list.map((s, i) => {
+    const tick = s?.completedAt ? "\u2713" : "\u2610";
+    const who = s?.completedAt ? (s.completedBy || '<span class="bad">not recorded</span>') : "";
+    return `<div class="${s?.completedAt ? "" : "dim"}">${tick} ${i + 1}. ${esc(s?.name || "(unnamed)")}
+            ${who ? `<span class="dim">— ${who}</span>` : ""}
+            ${s?.sid ? `<code>${esc(s.sid)}</code>` : `<span class="bad">no sid</span>`}</div>`;
+  }).join("");
+  return `<details><summary>${esc(r.stages)}${noSid ? ` · <span class="bad">${noSid} pre-0.26.0</span>` : ""}</summary>
+          <div class="stage-detail">${rows}</div></details>`;
+}
+const app = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const SUBS = ["tiers", "tasks", "projects", "sessions", "settings", "eventsCache", "members"];
+
+/**
+ * 1.5.0 — SCAN AGAIN WITHOUT SIGNING IN AGAIN. Jake, 2026-07-31, mid-test:
+ * "whereis.html sign in and scan button can't rescan. We need a button that
+ * allows a second scan to streamline testing."
+ *
+ * Every test on this page is do-a-thing-then-look, and the look was costing a
+ * full page reload plus a Google popup. Half the value of a diagnostic is how
+ * cheap it is to run twice — a before-and-after is the only shape of evidence
+ * that proves an action did what it claimed.
+ */
+let SIGNED_IN_AS = null;
+
+$("#go").onclick = async () => {
+  $("#go").disabled = true;
+  try {
+    const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+    SIGNED_IN_AS = (cred.user.email || "").toLowerCase();
+  } catch (e) { $("#out").innerHTML = `<p class="bad">Sign-in failed: ${esc(e.message)}</p>`; $("#go").disabled = false; return; }
+  $("#go").hidden = true;
+  $("#again").hidden = false;
+  await scan();
+};
+
+$("#again").onclick = async () => { await scan(); };
+
+async function scan() {
+  const me = SIGNED_IN_AS;
+  $("#again").disabled = true;
+  $("#who").textContent = ` — signed in as ${me}`;
+  $("#out").innerHTML = `<p class="dim">Scanning…</p>`;
+
+  // Which boards do I hold a key to? Same query the app uses.
+  let keys = [];
+  try {
+    const snap = await getDocs(query(collectionGroup(db, "members"), where("email", "==", me)));
+    keys = snap.docs.map(d => ({ wsId: d.ref.parent.parent.id, role: d.data().role || "viewer" }));
+  } catch (e) {
+    $("#out").innerHTML = `<p class="bad">Could not list your keys: ${esc(e.message)}</p>`;
+    $("#again").disabled = false; return;
+  }
+  if (!keys.length) { $("#out").innerHTML = `<p class="bad">You hold no keys to any board with this account.</p>`; $("#again").disabled = false; return; }
+
+  // Read each board and everything under it.
+  const boards = [];
+  for (const k of keys) {
+    const b = { ...k, meta: null, docs: {}, denied: [] };
+    try { const w = await getDoc(doc(db, "workspaces", k.wsId)); b.meta = w.exists() ? w.data() : null; } catch { }
+    for (const sub of SUBS) {
+      try {
+        const s = await getDocs(collection(db, "workspaces", k.wsId, sub));
+        b.docs[sub] = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch { b.denied.push(sub); b.docs[sub] = []; }
+    }
+    boards.push(b);
+  }
+
+  // 1.4.0 — YOUR profile. tierRanks / tierColors / tierLabels live here,
+  // keyed "wsId:tierId", and they are the entire per-user layer: your order,
+  // your colours, your names. Rules allow users/{email} only where it is your
+  // own, so this is exactly as private as it looks.
+  let profile = {};
+  try {
+    const u = await getDoc(doc(db, "users", me));
+    profile = u.exists() ? u.data() : {};
+  } catch { profile = null; }   // null = could not read, which is itself a finding
+
+  // tierId -> the board its tier document actually lives in
+  const tierHome = new Map();
+  const tierName = new Map();
+  for (const b of boards) for (const t of b.docs.tiers) {
+    tierHome.set(t.id, b.wsId);
+    tierName.set(t.id, t.name);
+  }
+  const label = wsId => {
+    const b = boards.find(x => x.wsId === wsId);
+    return b?.meta ? `${b.meta.name} (${b.meta.kind})` : wsId;
+  };
+
+  // projectId -> the board its project document actually lives in. Sessions
+  // route off this and NOT off the tier (store.js clockIn: wsOf("projects")).
+  const projHome = new Map();
+  const projName = new Map();
+  for (const b of boards) for (const p of b.docs.projects) {
+    projHome.set(p.id, b.wsId);
+    projName.set(p.id, p.name);
+  }
+
+  // THE CHECK, three times over. Each row records where the document IS,
+  // where its parent IS, and whether those agree. `bad` is true (wrong),
+  // false (right) or "unknown" (the parent is not readable by this account,
+  // which is NOT the same as wrong — see the banner).
+  const audit = (docWs, parentWs) => parentWs ? parentWs !== docWs : "unknown";
+
+  const rows = [];
+  for (const b of boards) for (const t of b.docs.tasks) {
+    const home = tierHome.get(t.tierId) || null;
+    rows.push({
+      kind: "task", title: t.title, docWs: b.wsId,
+      parentId: t.tierId, parentWs: home,
+      parent: tierName.get(t.tierId) || null, parentKind: "tier",
+      by: t.createdBy, done: t.completedAt ? "done" : "",
+      doneBy: t.completedAt ? (t.completedBy || null) : null,
+      bad: audit(b.wsId, home)
+    });
+  }
+
+  const projRows = [];
+  for (const b of boards) for (const p of b.docs.projects) {
+    const home = tierHome.get(p.tierId) || null;
+    const stages = p.stages || [];
+    projRows.push({
+      kind: "project", title: p.name, docWs: b.wsId, id: p.id,
+      parentId: p.tierId, parentWs: home,
+      parent: tierName.get(p.tierId) || null, parentKind: "tier",
+      by: p.createdBy, done: p.completedAt ? "done" : "",
+      doneBy: p.completedAt ? (p.completedBy || null) : null,
+      stages: `${stages.filter(s => s && s.completedAt).length}/${stages.length}`,
+      stageList: stages,
+      color: p.color,
+      bad: audit(b.wsId, home)
+    });
+  }
+
+  const sessRows = [];
+  for (const b of boards) for (const s of b.docs.sessions) {
+    const home = projHome.get(s.projectId) || null;
+    sessRows.push({
+      kind: "session",
+      title: `${new Date(s.start).toLocaleString()} → ${s.end ? new Date(s.end).toLocaleString() : "still running"}`,
+      docWs: b.wsId, parentId: s.projectId, parentWs: home,
+      parent: projName.get(s.projectId) || null, parentKind: "project",
+      by: s.createdBy, done: "", doneBy: null,
+      bad: audit(b.wsId, home)
+    });
+  }
+
+  const all = [...rows, ...projRows, ...sessRows];
+  const mismatched = all.filter(r => r.bad === true);
+  const unknown = all.filter(r => r.bad === "unknown");
+  const tally = k => ({
+    bad: all.filter(r => r.kind === k && r.bad === true).length,
+    unk: all.filter(r => r.kind === k && r.bad === "unknown").length
+  });
+
+  let h = "";
+
+  // ---- verdict first. This is the answer; everything else is evidence. ----
+  h += `<div class="box verdict">`;
+  const line = (k, noun) => {
+    const t = tally(k);
+    if (t.bad) return `<p class="bad">✗ ${t.bad} ${noun}${t.bad === 1 ? "" : "s"} in a different board from ${t.bad === 1 ? "its" : "their"} ${k === "session" ? "project" : "tier"}.</p>`;
+    if (t.unk) return `<p class="bad">? ${t.unk} ${noun}${t.unk === 1 ? "" : "s"} point at a ${k === "session" ? "project" : "tier"} this account cannot see.</p>`;
+    return `<p class="ok">✓ Every ${noun} is in the same board as its ${k === "session" ? "project" : "tier"}.</p>`;
+  };
+  h += line("task", "task") + line("project", "project") + line("session", "session");
+  if (mismatched.length) {
+    h += `<p class="dim">That is the bug. Anything created against a shared tier must land in the tier's board, or the
+          other person can never see it. Details in the first table below. <b>Sessions route off their PROJECT, not
+          their tier</b> — a mis-routed project takes its whole time ledger with it and the sessions still read as
+          locally consistent, so read the project rows first.</p>`;
+  } else if (unknown.length) {
+    h += `<p class="dim">A "?" is not a finding. Either the parent was deleted, or it lives in a board you hold no key
+          to. Run this as the other account before concluding anything.</p>`;
+  } else {
+    h += `<p class="dim">Routing is correct for everything this account can read. If something is still invisible to
+          somebody, the problem is in reading — merging or rules — not in where it was written.</p>`;
+  }
+  h += `</div>`;
+
+  const tbl = (head, body) => `<table><tr>${head.map(x=>`<th>${x}</th>`).join("")}</tr>${body}</table>`;
+
+  if (mismatched.length || unknown.length) {
+    h += `<h2>Mis-routed documents</h2>` + tbl(
+      ["what", "name", "sits in board", "its parent", "parent lives in", ""],
+      [...mismatched, ...unknown].map(r => `<tr class="bad">
+        <td>${esc(r.kind)}</td>
+        <td>${esc(r.title)}</td>
+        <td>${esc(label(r.docWs))}<br><code>${esc(r.docWs)}</code></td>
+        <td>${esc(r.parentKind)} ${esc(r.parent || "—")}<br><code>${esc(r.parentId)}</code></td>
+        <td>${r.parentWs ? esc(label(r.parentWs)) + `<br><code>${esc(r.parentWs)}</code>` : `<span class="bad">not visible to you</span>`}</td>
+        <td class="dim">made by ${esc(r.by || "?")}${r.done ? ` · checked off by ${esc(r.doneBy || "not recorded")}` : ""}</td></tr>`).join("")
+    );
+  }
+
+  h += `<h2>Boards you hold a key to (${boards.length})</h2>` + tbl(
+    // 1.4.0 — this header is generated FROM `SUBS`, because it used to be a
+    // hand-written list beside a `SUBS.map()` loop, and adding "members" to
+    // the scan silently shifted every count one column left. A second list
+    // that has to be kept in step with the first is the same shape of bug as
+    // the keep-list that ate `completedBy` (5b-i) and the `?v=` pins.
+    ["name", "kind", "owner", "your key", ...SUBS.map(s => s === "eventsCache" ? "events" : s), "id"],
+    boards.map(b => `<tr>
+      <td>${esc(b.meta?.name ?? "?")}</td><td>${esc(b.meta?.kind ?? "?")}</td>
+      <td class="dim">${esc(b.meta?.ownerEmail ?? "?")}</td><td>${esc(b.role)}</td>
+      ${SUBS.map(s => `<td>${b.denied.includes(s) ? '<span class="bad">denied</span>' : b.docs[s].length}</td>`).join("")}
+      <td><code>${esc(b.wsId)}</code></td></tr>`).join("")
+  );
+
+  h += `<h2>Every tier, and which board it lives in</h2>` + tbl(
+    ["tier", "board", "kind", "rank", "colour", "id"],
+    boards.flatMap(b => b.docs.tiers.map(t => `<tr>
+      <td>${esc(t.name)}</td><td>${esc(label(b.wsId))}</td><td>${esc(t.kind)}</td><td>${esc(t.rank)}</td>
+      <td><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${esc(t.color)};vertical-align:middle"></span>
+          <code>${esc(t.color)}</code></td>
+      <td><code>${esc(t.id)}</code></td></tr>`)).join("")
+  );
+
+  // ======================================================================
+  // 1.4.0 — THE SECTIONS BELOW EXIST TO RETIRE CONSOLE-DIVING TESTS.
+  // TIER-6, TIER-7, SKIN-1, SKIN-2 and BASE-7 were all written as "open the
+  // Firestore console, click into a document, eyeball a field" — from two
+  // accounts, for some of them. Every fact they ask for is readable here,
+  // from one account, in one page load. A test that costs a console session
+  // is a test that waits for a free evening; this is the same trade the
+  // version badge made against a separate checkup page.
+  // ======================================================================
+
+  // ---- Who your order and colours actually belong to -------------------
+  // canonical: the tier document, which is what somebody with no overrides sees.
+  // yours:     users/{you}, keyed "wsId:tierId".
+  // theirs:    workspaces/{ws}/members/{them}.tierRanks, keyed by BARE tierId —
+  //            a different key shape, shared boards only. Getting that wrong
+  //            is how a rank silently reads as unset.
+  if (profile === null) {
+    h += `<h2>Your order and colours</h2><p class="bad">Could not read your own
+          <code>users/</code> profile. That is unusual — the rules allow it only for yourself,
+          so it usually means you are signed in as a different account than you think.</p>`;
+  } else {
+    const skinRows = [];
+    for (const b of boards) for (const t of b.docs.tiers) {
+      const key = `${b.wsId}:${t.id}`;
+      const myRank  = (profile.tierRanks  || {})[key];
+      const myColor = (profile.tierColors || {})[key];
+      const myLabel = (profile.tierLabels || {})[key];
+      const others = (b.docs.members || [])
+        .filter(m => m.id !== me && (m.tierRanks || {})[t.id] != null)
+        .map(m => `${m.id}: ${(m.tierRanks || {})[t.id]}`);
+      const overridden = myLabel != null || myColor != null;
+      const rankDiffers = myRank != null && String(myRank) !== String(t.rank);
+      if (myRank == null && !overridden && !others.length) continue;   // nothing personal here
+      skinRows.push(`<tr>
+        <td>${esc(t.name)}<br><span class="dim">${esc(label(b.wsId))}</span></td>
+        <td>${esc(t.rank)}</td>
+        <td class="${rankDiffers ? "hit" : "dim"}">${myRank == null ? "\u2014" : esc(myRank)}</td>
+        <td class="dim">${others.length ? others.map(esc).join("<br>") : "\u2014"}</td>
+        <td class="${myLabel != null ? "hit" : "dim"}">${myLabel == null ? "\u2014" : esc(myLabel)}</td>
+        <td class="${myColor != null ? "hit" : "dim"}">${myColor == null ? "\u2014" :
+          `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${esc(myColor)};vertical-align:middle"></span> <code>${esc(myColor)}</code>`}</td></tr>`);
+    }
+    h += `<h2>Your order and colours, next to everybody else's</h2>
+          <p class="dim">Canonical is the tier document \u2014 what somebody with no overrides sees.
+          <b>TIER-6/7</b>: your number and theirs must both persist, and visiting their board must show
+          <i>theirs</i>. <b>SKIN-1</b>: your name and colour must never appear in their column.
+          <b>SKIN-2</b>: these hydrate once at sign-in, so a second device shows "\u2014" here until you
+          set them again \u2014 that is expected, not a regression.</p>` +
+      (skinRows.length
+        ? tbl(["tier", "canonical rank", "your rank", "their published rank", "your name", "your colour"], skinRows.join(""))
+        : `<p class="dim">No personal order, name or colour is set on any tier you can see.</p>`);
+  }
+
+  // ---- Keys and roles, per board ---------------------------------------
+  {
+    const memberRows = boards.flatMap(b => (b.docs.members || []).map(m => `<tr>
+      <td>${esc(label(b.wsId))}</td>
+      <td class="${m.id === me ? "hit" : ""}">${esc(m.id)}${m.id === me ? ` <span class="dim">(you)</span>` : ""}</td>
+      <td>${esc(m.role || "viewer")}</td></tr>`));
+    h += `<h2>Every key, on every board you can see</h2>
+          <p class="dim"><b>KEYS-2/6</b>: a key granted shows up here on reload; a key taken back
+          disappears. <b>TIER-8</b>: this is who can reach each shared tier \u2014 a tier you share with a
+          third person lists them here, and must NOT appear on a board you visit that they hold no
+          key to.</p>` +
+      (memberRows.length ? tbl(["board", "person", "role"], memberRows.join(""))
+        : `<p class="dim">No member documents readable.</p>`);
+  }
+
+  // ---- Provenance audit (E9) -------------------------------------------
+  // BASE-7 asked for four fields to be eyeballed on ONE task in the console.
+  // One hand-picked document proves nothing about the rest, so count them all.
+  {
+    const gaps = [];
+    const want = (obj, fields, what, name) => {
+      const missing = fields.filter(f => obj[f] == null);
+      if (missing.length) gaps.push({ what, name, missing });
+    };
+    const when = ms => ms == null ? "\u2014" : new Date(ms).toLocaleString();
+    const FOUR = ["createdBy", "createdAt", "completedBy", "completedAt"];
+    const TWO  = ["createdBy", "createdAt"];
+    for (const b of boards) {
+      for (const t of b.docs.tasks) want(t, t.completedAt ? FOUR : TWO, "task", t.title);
+      for (const p of b.docs.projects) {
+        want(p, TWO, "project", p.name);
+        (p.stages || []).forEach((st, i) => want(st, st?.completedAt ? FOUR : TWO,
+          "stage", `${p.name} \u2192 ${i + 1}. ${st?.name || "(unnamed)"}`));
+      }
+    }
+    h += `<h2>Provenance (E9) \u2014 who made it, who finished it</h2>`;
+    // 1.5.0 — Jake, 2026-07-31: "records who did what, but not when. It'd be
+    // nice if we had a timeline of when these events took place." The
+    // timestamps were always in the data; nothing had ever displayed them.
+    const events = [];
+    for (const b of boards) {
+      for (const t of b.docs.tasks) {
+        if (t.createdAt) events.push({ at: t.createdAt, who: t.createdBy, what: `made task \u201c${t.title}\u201d` });
+        if (t.completedAt) events.push({ at: t.completedAt, who: t.completedBy, what: `finished task \u201c${t.title}\u201d` });
+      }
+      for (const p of b.docs.projects) {
+        if (p.createdAt) events.push({ at: p.createdAt, who: p.createdBy, what: `started project \u201c${p.name}\u201d` });
+        (p.stages || []).forEach(st => {
+          if (st?.completedAt) events.push({ at: st.completedAt, who: st.completedBy, what: `finished \u201c${st.name}\u201d in ${p.name}` });
+        });
+      }
+      for (const sn of b.docs.sessions) {
+        if (sn.start) events.push({ at: sn.start, who: sn.createdBy, what: `clocked in on ${projName.get(sn.projectId) || "a project"}` });
+      }
+    }
+    events.sort((a, b2) => b2.at - a.at);
+
+    if (!gaps.length) {
+      h += `<p class="ok">\u2713 Every task, project and stage carries all four stamps.
+            <b>BASE-7 passes.</b></p>`;
+    } else {
+      h += `<p class="bad">${gaps.length} document(s) are missing at least one stamp.</p>
+            <p class="dim">\u26a0\ufe0f <b>Old gaps are expected and are NOT a failure.</b> Completions that
+            predate E9, and everything imported from 1.x, never recorded who \u2014 those stamps are gone
+            and are not recoverable. <b>BASE-7 fails only if something you made just now appears
+            here.</b> Add a task, finish it, re-scan: it must not be in this table.</p>` + tbl(
+        ["what", "which", "missing"],
+        gaps.map(g => `<tr><td>${esc(g.what)}</td><td>${esc(g.name)}</td>
+          <td class="bad">${esc(g.missing.join(", "))}</td></tr>`).join("")
+      );
+    }
+
+    h += `<h2>Timeline \u2014 what happened, when, and who did it</h2>
+          <p class="dim">Newest first, across every board you hold a key to. The timestamps were
+          always stored; nothing had ever shown them. On a shared tier this is the record of who
+          actually did the work.</p>` + (events.length ? tbl(
+      ["when", "who", "what"],
+      events.slice(0, 200).map(e => `<tr><td class="dim">${esc(when(e.at))}</td>
+        <td>${esc(e.who || "not recorded")}</td><td>${esc(e.what)}</td></tr>`).join("")
+    ) + (events.length > 200 ? `<p class="dim">\u2026 and ${events.length - 200} older events.</p>` : "")
+      : `<p class="dim">Nothing stamped yet.</p>`);
+  }
+
+  h += `<h2>Every project (${projRows.length})</h2>` + (projRows.length ? tbl(
+    ["", "project", "board", "tier", "tier lives in", "stages", "created by", "id"],
+    projRows.map(r => `<tr class="${r.bad === true ? "bad" : ""}">
+      <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${esc(r.color)};vertical-align:middle"></span>
+          ${esc(r.title)} <span class="dim">${esc(r.done)}</span></td>
+      <td>${esc(label(r.docWs))}</td>
+      <td>${esc(r.parent || r.parentId)}</td>
+      <td>${r.parentWs ? esc(label(r.parentWs)) : '<span class="bad">not visible to you</span>'}</td>
+      <td class="dim">${stageDetail(r)}</td>
+      <td class="dim">${esc(r.by || "")}</td>
+      <td><code>${esc(r.id)}</code></td></tr>`).join("")
+  ) : `<p class="dim">No projects in any board you hold a key to.</p>`);
+
+  // 1.3.0 — WHO SPENT THE TIME. store 0.26.0 made a project's hours
+  // per-person; this is how you check the badge is telling the truth without
+  // taking the badge's word for it. Only rendered when somebody has logged
+  // something, so a fresh install stays quiet.
+  const byPerson = new Map();      // `${projectId}\u0000${email}` -> ms
+  for (const b of boards) for (const s of b.docs.sessions) {
+    const k = `${s.projectId}\u0000${s.createdBy || "(nobody recorded)"}`;
+    byPerson.set(k, (byPerson.get(k) || 0) + ((s.end ?? Date.now()) - s.start));
+  }
+  if (byPerson.size) {
+    const fmt = ms => ms >= 3600000 ? (ms / 3600000).toFixed(1) + "h" : Math.round(ms / 60000) + "m";
+    const totals = new Map();
+    for (const [k, ms] of byPerson) {
+      const pid = k.split("\u0000")[0];
+      totals.set(pid, (totals.get(pid) || 0) + ms);
+    }
+    h += `<h2>Time on each project, by person</h2>
+          <p class="dim">A project's total and one person's time are different questions. If a card reads
+          <code>&Sigma; 1h / 31h</code>, the left number should match that person's row here and the right
+          number should match the project total.</p>` + tbl(
+      ["project", "person", "their time", "project total"],
+      [...byPerson.entries()].sort().map(([k, ms]) => {
+        const [pid, who] = k.split("\u0000");
+        return `<tr><td>${esc(projName.get(pid) || pid)}</td><td class="dim">${esc(who)}</td>
+                <td>${esc(fmt(ms))}</td><td class="dim">${esc(fmt(totals.get(pid) || 0))}</td></tr>`;
+      }).join("")
+    );
+  }
+
+  h += `<h2>Every session (${sessRows.length})</h2>` + (sessRows.length ? tbl(
+    ["", "when", "board", "project", "project lives in", "created by"],
+    sessRows.map(r => `<tr class="${r.bad === true ? "bad" : ""}">
+      <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
+      <td>${esc(r.title)}</td>
+      <td>${esc(label(r.docWs))}</td>
+      <td>${esc(r.parent || r.parentId)}</td>
+      <td>${r.parentWs ? esc(label(r.parentWs)) : '<span class="bad">not visible to you</span>'}</td>
+      <td class="dim">${esc(r.by || "")}</td></tr>`).join("")
+  ) : `<p class="dim">No time sessions in any board you hold a key to.</p>`);
+
+  h += `<h2>Every task (${rows.length})</h2>
+        <p><input id="filter" placeholder="filter by title…"> <button class="ghost" id="clear">clear</button></p>`
+    + `<div id="tasktbl">` + tbl(
+    ["", "task", "board", "tier", "created by", "checked off by"],
+    rows.map(r => `<tr class="${r.bad === true ? "bad" : ""}" data-t="${esc((r.title||"").toLowerCase())}">
+      <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
+      <td>${esc(r.title)} <span class="dim">${esc(r.done)}</span></td>
+      <td>${esc(label(r.docWs))}</td>
+      <td>${esc(r.parent || r.parentId)}</td>
+      <td class="dim">${esc(r.by || "")}</td>
+      <td class="dim">${r.done
+          ? (r.doneBy ? esc(r.doneBy)
+                      : '<span title="Completed before E9 shipped, or imported from 1.x, which never recorded who.">not recorded</span>')
+          : ""}</td></tr>`).join("")
+  ) + `</div>`;
+
+  $("#out").innerHTML = h;
+
+  const filter = $("#filter");
+  const apply = () => {
+    const q = filter.value.trim().toLowerCase();
+    for (const tr of $("#tasktbl").querySelectorAll("tr[data-t]"))
+      tr.style.display = !q || tr.dataset.t.includes(q) ? "" : "none";
+  };
+  filter.oninput = apply;
+  $("#clear").onclick = () => { filter.value = ""; apply(); };
+
+  // Stamp the scan. Two runs of this page look identical at a glance, and
+  // "did I re-scan or am I reading the old one?" is exactly the confusion a
+  // rescan button invites.
+  $("#stamp").textContent = ` · scanned ${new Date().toLocaleTimeString()}`;
+  $("#again").disabled = false;
+}
+</script>
+</body>
+</html><!DOCTYPE html>
+<!-- ============================================================
+     Tentacalendar — whereis.html
      Version 1.4.0 — RETIRES FIVE CONSOLE-DIVING TESTS. TIER-6, TIER-7,
      SKIN-1, SKIN-2 and BASE-7 were all written as "open the Firestore
      console, click into a document, eyeball a field" — from two accounts,
