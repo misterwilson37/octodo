@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.38.0 · store 0.28.0 · queue 0.20.1 · css 0.57.0 · html 0.51.7 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
+| **Versions** | app 1.39.0 · store 0.28.0 · queue 0.20.1 · css 0.58.0 · html 0.51.8 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
 | **Deployed** | ✅ Through app 1.36.0 / whereis 1.3.1 uploaded and swept. **app 1.37.0 · store 0.27.0 · html 0.51.6 · whereis 1.5.0 are NOT uploaded.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
@@ -380,6 +380,60 @@ the next confident sentence in this codebase is also wrong until measured.**
 **Naming, again.** `E41-1…7` are now `TOUR-1…7`. E41 is a *defect* number, and
 naming tests after it repeats the `0c-n` mistake in the same document that
 forbids it. Jake: *"the silly naming system for onboarding (e41? Really?)"*
+
+---
+
+### 0g. BUGS FROM THE PRIMARY USER, 2026-07-31 — two fixed, two waiting
+
+Four reports came in from the person actually living in this thing daily.
+**Two were fixed; two are held on a question**, because both change what a
+production user sees every morning and a wrong guess costs her a week, not me
+a rebuild.
+
+**FIXED — the year label was eaten by the buttons beside it.** `.view-nav h2`
+carried `flex: 1` (which is `flex: 1 1 0%`) plus `min-width: 0`, so in a flex
+row it was the FIRST thing to surrender space: `.view-ctls` held its content
+width, the label collapsed, and the ellipsis finished the job — *"Jul 2026–J…"
+on a TV with a whole empty line underneath it.* `.view-nav` has always
+wrapped, so the right answer was for the CONTROLS to drop a row.
+`min-width: min(100%, max-content)` says exactly that: never truncate while it
+fits on one line, never grow wider than the bar. (css 0.58.0)
+
+**FIXED — finishing a project did not clear the plate.** *"I just completed a
+couple of projects (huzzah!) and Tentacalendar helpfully duplicated them for
+next year (double huzzah!). But now, they're already visible in my project
+pane."* Duplicate-for-next-year works exactly as designed and handed the
+reward straight back. Projects starting past a configurable horizon (default
+90 days) now fold into a collapsed **Later** group. **Deliberately the same
+idiom as Finished** — a second way to say "present but out of the way" would
+be one to learn for nothing. Undated projects are never folded; undated means
+someday, which is the Want-tos tab. (app 1.39.0 · html 0.51.8)
+
+**⚠️ HELD — the year grid does not fill a tall pane.** Diagnosed, not fixed.
+`fitAvail(grid)` correctly measures the dashboard pane, but the wall layout
+then clamps lane height with `GL = Math.max(3, Math.min(14, GL))`. On a 4K
+pane with few concurrent projects the divisor is small, the computed height is
+large, and **the 14px ceiling throws the surplus away** — which is the black
+band below the grid. The timeline branch has the same shape with a 34px cap.
+
+The fix is a measure-and-refit pass in the `settleWeekBars` idiom (*"the model
+proposes, the layout disposes"*) rather than a new constant, because a
+constant tuned blind to somebody else's 4K TV is a guess. **It needs a
+screenshot of the actual dashboard, and which of the three layouts she uses.**
+
+**⚠️ HELD — the follow-up stage keeps finished projects at the top.** She
+proposed the answer herself and it is the right one: publication stays the
+last stage, and ticking it **spawns a task** dated +N days instead of holding
+the project open. The machinery mostly exists — `addFollowUp` /
+`createFollowUpChain` chain tasks, `hurrah` (D109) already marks the climax
+stage — so this is wiring, not invention. What it needs is a decision about
+which stage spawns and whether the project completes immediately.
+
+**A note on 4a, which is the one to be careful with.** *"Projects that are not
+currently active should not appear in the daily agenda view at all."* Clear as
+stated and dangerous as implemented: a stage can fall due before its project's
+start date, and hiding the project would hide real work with no trace. **Do
+not build this from the sentence alone.**
 
 ---
 
