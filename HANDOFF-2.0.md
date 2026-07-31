@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.39.0 · store 0.28.0 · queue 0.20.1 · css 0.58.0 · html 0.51.8 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
+| **Versions** | app 1.40.0 · store 0.29.0 · queue 0.20.1 · css 0.59.0 · html 0.51.9 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
 | **Deployed** | ✅ Through app 1.36.0 / whereis 1.3.1 uploaded and swept. **app 1.37.0 · store 0.27.0 · html 0.51.6 · whereis 1.5.0 are NOT uploaded.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
@@ -421,19 +421,32 @@ proposes, the layout disposes"*) rather than a new constant, because a
 constant tuned blind to somebody else's 4K TV is a guess. **It needs a
 screenshot of the actual dashboard, and which of the three layouts she uses.**
 
-**⚠️ HELD — the follow-up stage keeps finished projects at the top.** She
-proposed the answer herself and it is the right one: publication stays the
-last stage, and ticking it **spawns a task** dated +N days instead of holding
-the project open. The machinery mostly exists — `addFollowUp` /
-`createFollowUpChain` chain tasks, `hurrah` (D109) already marks the climax
-stage — so this is wiring, not invention. What it needs is a decision about
-which stage spawns and whether the project completes immediately.
+**FIXED — the follow-up stage kept finished projects at the top.** Publication
+stays the last stage; ticking a 🎆 hurrah that carries `spawnDays` completes
+the project AND creates an ordinary dated task. Jake's two rulings, both of
+which shaped the build: *"The last hurrah should spawn the request. Otherwise,
+it's just another step in the pipeline"* — so the field appears on the hurrah
+row and nowhere else — and *"the project is done, but there is a follow-up
+task. Two different things in this case."*
 
-**A note on 4a, which is the one to be careful with.** *"Projects that are not
-currently active should not appear in the daily agenda view at all."* Clear as
-stated and dangerous as implemented: a stage can fall due before its project's
-start date, and hiding the project would hide real work with no trace. **Do
-not build this from the sentence alone.**
+⚠️ **`spawnedTaskId` is the re-tick guard.** Un-ticking and re-ticking must not
+mint a second task, and un-ticking deliberately does NOT delete the first:
+somebody may have already worked it. ⚠️ `addTask` writes `escalation`
+straight into the document, so omitting it is a Firestore *"Unsupported field
+value: undefined"* that fails the whole tick — the spawn passes one
+explicitly. The whole spawn is wrapped: a stage completion is what the user
+asked for, and a missing follow-up is visible where a refused tick is
+baffling. (app 1.40.0 · store 0.29.0)
+
+**4a, and the safety property that survived it.** *"Projects that are not
+currently active should not appear in the daily agenda view at all."* Jake
+narrowed it: *"If there's a due date, then it should pop up a week before the
+project window"* — and called it explicitly temporary. Later's horizon is
+therefore 7 days by default and is measured against the **pipeline window**,
+not `startDate`. That matters: a stage anchored BEFORE the start pulls its
+project out of Later on its own, so nothing with real work in view can be
+folded away. Undated projects are never folded. **The full 4a — removing
+inactive projects from the agenda outright — is still not built, on purpose.**
 
 ---
 
