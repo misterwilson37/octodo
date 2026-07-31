@@ -1,7 +1,30 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — whereis.html
-     Version 1.1.0 — adds the "checked off by" column. The field (E9's
+     Version 1.2.0 — PROJECTS AND SESSIONS ARE AUDITED TOO. 1.1.0 counted
+     projects in the boards table and then never mentioned them again, so a
+     project created on a shared tier and invisible to the other person could
+     not be diagnosed with this page at all — which is exactly the report it
+     was built to answer, one collection over. Jake hit it on 2026-07-30 and
+     said so: "whereis does not reveal projects, so I can't test anything."
+
+     THE CHECK IS NOW THREE CHECKS, and they are not the same rule:
+       · a TASK belongs in the same board as its TIER      (wsOfTier)
+       · a PROJECT belongs in the same board as its TIER   (wsOfTier)
+       · a SESSION belongs in the same board as its PROJECT (wsOf "projects")
+     The third is a different edge because store.js clockIn/logSession route
+     off the PROJECT, not the tier — so a mis-routed project drags its whole
+     time ledger with it and the sessions look locally consistent.
+
+     ⚠️ A KNOWN HOLE THIS PAGE CANNOT SEE, and it is worth reading before you
+     trust a ✓. updateProject() and updateTask() route with wsOf(id) — the
+     board the document is ALREADY on — so changing a tier from a personal one
+     to a shared one rewrites tierId and leaves the document where it was.
+     That produces a mismatch this page WILL flag. What it cannot flag is the
+     reverse: a document whose tier this account cannot see reads as "?" and
+     not as "wrong". Run it as both accounts.
+
+     (prev) Version 1.1.0 — adds the "checked off by" column. The field (E9's
      completedBy) has been written by setTaskDone since store 0.22.0 and this
      page simply never rendered it, so on a shared tier there was no way to
      tell which of two people had ticked something. A BLANK IS HONEST, NOT A
@@ -66,7 +89,7 @@
 <body>
 
 <h1>🔍 Where is it?</h1>
-<p class="sub">Read-only. Lists every board you hold a key to, everything in it, and flags any task sitting in a different board from its own tier.</p>
+<p class="sub">Read-only. Lists every board you hold a key to, everything in it, and flags any <b>task</b> or <b>project</b> sitting in a different board from its own tier — or any <b>session</b> sitting in a different board from its project.</p>
 
 <div class="box">
   <button id="go">Sign in and scan</button>
@@ -139,36 +162,92 @@ $("#go").onclick = async () => {
     return b?.meta ? `${b.meta.name} (${b.meta.kind})` : wsId;
   };
 
-  // THE CHECK. A task belongs in the same board as its tier — wsOfTier.
+  // projectId -> the board its project document actually lives in. Sessions
+  // route off this and NOT off the tier (store.js clockIn: wsOf("projects")).
+  const projHome = new Map();
+  const projName = new Map();
+  for (const b of boards) for (const p of b.docs.projects) {
+    projHome.set(p.id, b.wsId);
+    projName.set(p.id, p.name);
+  }
+
+  // THE CHECK, three times over. Each row records where the document IS,
+  // where its parent IS, and whether those agree. `bad` is true (wrong),
+  // false (right) or "unknown" (the parent is not readable by this account,
+  // which is NOT the same as wrong — see the banner).
+  const audit = (docWs, parentWs) => parentWs ? parentWs !== docWs : "unknown";
+
   const rows = [];
   for (const b of boards) for (const t of b.docs.tasks) {
     const home = tierHome.get(t.tierId) || null;
     rows.push({
-      title: t.title, taskWs: b.wsId, tierId: t.tierId,
-      tierWs: home, tier: tierName.get(t.tierId) || null,
+      kind: "task", title: t.title, docWs: b.wsId,
+      parentId: t.tierId, parentWs: home,
+      parent: tierName.get(t.tierId) || null, parentKind: "tier",
       by: t.createdBy, done: t.completedAt ? "done" : "",
       doneBy: t.completedAt ? (t.completedBy || null) : null,
-      bad: home ? home !== b.wsId : "unknown"
+      bad: audit(b.wsId, home)
     });
   }
-  const mismatched = rows.filter(r => r.bad === true);
-  const unknown = rows.filter(r => r.bad === "unknown");
+
+  const projRows = [];
+  for (const b of boards) for (const p of b.docs.projects) {
+    const home = tierHome.get(p.tierId) || null;
+    const stages = p.stages || [];
+    projRows.push({
+      kind: "project", title: p.name, docWs: b.wsId, id: p.id,
+      parentId: p.tierId, parentWs: home,
+      parent: tierName.get(p.tierId) || null, parentKind: "tier",
+      by: p.createdBy, done: p.completedAt ? "done" : "",
+      doneBy: p.completedAt ? (p.completedBy || null) : null,
+      stages: `${stages.filter(s => s && s.completedAt).length}/${stages.length}`,
+      color: p.color,
+      bad: audit(b.wsId, home)
+    });
+  }
+
+  const sessRows = [];
+  for (const b of boards) for (const s of b.docs.sessions) {
+    const home = projHome.get(s.projectId) || null;
+    sessRows.push({
+      kind: "session",
+      title: `${new Date(s.start).toLocaleString()} → ${s.end ? new Date(s.end).toLocaleString() : "still running"}`,
+      docWs: b.wsId, parentId: s.projectId, parentWs: home,
+      parent: projName.get(s.projectId) || null, parentKind: "project",
+      by: s.createdBy, done: "", doneBy: null,
+      bad: audit(b.wsId, home)
+    });
+  }
+
+  const all = [...rows, ...projRows, ...sessRows];
+  const mismatched = all.filter(r => r.bad === true);
+  const unknown = all.filter(r => r.bad === "unknown");
+  const tally = k => ({
+    bad: all.filter(r => r.kind === k && r.bad === true).length,
+    unk: all.filter(r => r.kind === k && r.bad === "unknown").length
+  });
 
   let h = "";
 
   // ---- verdict first. This is the answer; everything else is evidence. ----
   h += `<div class="box verdict">`;
+  const line = (k, noun) => {
+    const t = tally(k);
+    if (t.bad) return `<p class="bad">✗ ${t.bad} ${noun}${t.bad === 1 ? "" : "s"} in a different board from ${t.bad === 1 ? "its" : "their"} ${k === "session" ? "project" : "tier"}.</p>`;
+    if (t.unk) return `<p class="bad">? ${t.unk} ${noun}${t.unk === 1 ? "" : "s"} point at a ${k === "session" ? "project" : "tier"} this account cannot see.</p>`;
+    return `<p class="ok">✓ Every ${noun} is in the same board as its ${k === "session" ? "project" : "tier"}.</p>`;
+  };
+  h += line("task", "task") + line("project", "project") + line("session", "session");
   if (mismatched.length) {
-    h += `<p class="bad">✗ ${mismatched.length} task(s) are in a different board from their own tier.</p>
-          <p class="dim">That is the bug. A task typed into a shared tier must land in the tier's board or the other
-          person can never see it. Details in the first table below.</p>`;
+    h += `<p class="dim">That is the bug. Anything created against a shared tier must land in the tier's board, or the
+          other person can never see it. Details in the first table below. <b>Sessions route off their PROJECT, not
+          their tier</b> — a mis-routed project takes its whole time ledger with it and the sessions still read as
+          locally consistent, so read the project rows first.</p>`;
   } else if (unknown.length) {
-    h += `<p class="bad">? ${unknown.length} task(s) point at a tier this account cannot see.</p>
-          <p class="dim">Either the tier was deleted, or it lives in a board you hold no key to. Run this as the other
-          account before concluding anything.</p>`;
+    h += `<p class="dim">A "?" is not a finding. Either the parent was deleted, or it lives in a board you hold no key
+          to. Run this as the other account before concluding anything.</p>`;
   } else {
-    h += `<p class="ok">✓ Every task is in the same board as its tier.</p>
-          <p class="dim">Routing is correct for everything this account can read. If a task is still invisible to
+    h += `<p class="dim">Routing is correct for everything this account can read. If something is still invisible to
           somebody, the problem is in reading — merging or rules — not in where it was written.</p>`;
   }
   h += `</div>`;
@@ -176,13 +255,14 @@ $("#go").onclick = async () => {
   const tbl = (head, body) => `<table><tr>${head.map(x=>`<th>${x}</th>`).join("")}</tr>${body}</table>`;
 
   if (mismatched.length || unknown.length) {
-    h += `<h2>Mis-routed tasks</h2>` + tbl(
-      ["task", "sits in board", "its tier", "tier lives in", ""],
+    h += `<h2>Mis-routed documents</h2>` + tbl(
+      ["what", "name", "sits in board", "its parent", "parent lives in", ""],
       [...mismatched, ...unknown].map(r => `<tr class="bad">
+        <td>${esc(r.kind)}</td>
         <td>${esc(r.title)}</td>
-        <td>${esc(label(r.taskWs))}<br><code>${esc(r.taskWs)}</code></td>
-        <td>${esc(r.tier || "—")}<br><code>${esc(r.tierId)}</code></td>
-        <td>${r.tierWs ? esc(label(r.tierWs)) + `<br><code>${esc(r.tierWs)}</code>` : `<span class="bad">not visible to you</span>`}</td>
+        <td>${esc(label(r.docWs))}<br><code>${esc(r.docWs)}</code></td>
+        <td>${esc(r.parentKind)} ${esc(r.parent || "—")}<br><code>${esc(r.parentId)}</code></td>
+        <td>${r.parentWs ? esc(label(r.parentWs)) + `<br><code>${esc(r.parentWs)}</code>` : `<span class="bad">not visible to you</span>`}</td>
         <td class="dim">made by ${esc(r.by || "?")}${r.done ? ` · checked off by ${esc(r.doneBy || "not recorded")}` : ""}</td></tr>`).join("")
     );
   }
@@ -205,6 +285,31 @@ $("#go").onclick = async () => {
       <td><code>${esc(t.id)}</code></td></tr>`)).join("")
   );
 
+  h += `<h2>Every project (${projRows.length})</h2>` + (projRows.length ? tbl(
+    ["", "project", "board", "tier", "tier lives in", "stages", "created by", "id"],
+    projRows.map(r => `<tr class="${r.bad === true ? "bad" : ""}">
+      <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${esc(r.color)};vertical-align:middle"></span>
+          ${esc(r.title)} <span class="dim">${esc(r.done)}</span></td>
+      <td>${esc(label(r.docWs))}</td>
+      <td>${esc(r.parent || r.parentId)}</td>
+      <td>${r.parentWs ? esc(label(r.parentWs)) : '<span class="bad">not visible to you</span>'}</td>
+      <td class="dim">${esc(r.stages)}</td>
+      <td class="dim">${esc(r.by || "")}</td>
+      <td><code>${esc(r.id)}</code></td></tr>`).join("")
+  ) : `<p class="dim">No projects in any board you hold a key to.</p>`);
+
+  h += `<h2>Every session (${sessRows.length})</h2>` + (sessRows.length ? tbl(
+    ["", "when", "board", "project", "project lives in", "created by"],
+    sessRows.map(r => `<tr class="${r.bad === true ? "bad" : ""}">
+      <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
+      <td>${esc(r.title)}</td>
+      <td>${esc(label(r.docWs))}</td>
+      <td>${esc(r.parent || r.parentId)}</td>
+      <td>${r.parentWs ? esc(label(r.parentWs)) : '<span class="bad">not visible to you</span>'}</td>
+      <td class="dim">${esc(r.by || "")}</td></tr>`).join("")
+  ) : `<p class="dim">No time sessions in any board you hold a key to.</p>`);
+
   h += `<h2>Every task (${rows.length})</h2>
         <p><input id="filter" placeholder="filter by title…"> <button class="ghost" id="clear">clear</button></p>`
     + `<div id="tasktbl">` + tbl(
@@ -212,8 +317,8 @@ $("#go").onclick = async () => {
     rows.map(r => `<tr class="${r.bad === true ? "bad" : ""}" data-t="${esc((r.title||"").toLowerCase())}">
       <td>${r.bad === true ? '<span class="bad">✗</span>' : r.bad === "unknown" ? "?" : ""}</td>
       <td>${esc(r.title)} <span class="dim">${esc(r.done)}</span></td>
-      <td>${esc(label(r.taskWs))}</td>
-      <td>${esc(r.tier || r.tierId)}</td>
+      <td>${esc(label(r.docWs))}</td>
+      <td>${esc(r.parent || r.parentId)}</td>
       <td class="dim">${esc(r.by || "")}</td>
       <td class="dim">${r.done
           ? (r.doneBy ? esc(r.doneBy)
