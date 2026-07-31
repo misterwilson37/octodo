@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.7
+     Version 0.51.8
 
      The whole UI. One page, no templating.
 
      RECENT:
+     0.51.8 — #cfg-later-days in Settings ▸ Timing (app 1.39.0's Later group).
      0.51.7 — no markup change; pin moves to app.js 1.38.0.
      0.51.6 — no markup change; pin moves to app.js 1.37.0.
      0.51.5 — no markup change; pins move to app.js 1.36.0 and css 0.57.0.
@@ -46,9 +47,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.57.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.58.0">
 </head>
-<body data-html-version="0.51.7">
+<body data-html-version="0.51.8">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -608,6 +609,8 @@
         <h3>Timing</h3>
         <div class="form-row">
           <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
+          <label>Fold projects into <b>Later</b> when they start more than <input id="cfg-later-days" type="number" min="0" max="3650"> days away <span class="hint-inline">(0 = never fold)</span></label>
+          <p class="hint">Duplicating a finished project for next year is supposed to clear your plate, not refill it. Anything starting past this horizon collapses into a <b>Later</b> group in the projects panel — still there, still editable, just not in the way. Undated projects are never folded; undated means someday, which is what the Want-tos tab is for.</p>
         </div>
         <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
         <div class="form-row">
@@ -939,6 +942,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.38.0"></script>
+  <script type="module" src="app.js?v=1.39.0"></script>
 </body>
 </html>
