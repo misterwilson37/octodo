@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.1.0 · current as of 2026-07-31 (Haliphron)**
+**Version 2.2.0 · current as of 2026-07-31 (Haliphron)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -86,6 +86,41 @@ invisible to both accounts that held keys to that board.*
 
 ---
 
+## 🟠 New from the primary user's reports — unrun
+
+**HURRAH-1. The follow-up leaves as a task.**
+Put a 🎆 on the last stage, set `↳ +14d`, tick it. The project should
+**finish** — fireworks, folds into Finished — and a task should appear dated
+two weeks out, with a notice saying so.
+→ *This is the whole point: the project is done, the follow-up is not, and
+they are two different things.*
+
+**HURRAH-2. Re-ticking does not mint a second task.**
+Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
+the first one is not deleted by the un-tick.
+→ *`spawnedTaskId` guards this. Somebody may already have worked the task.*
+
+**HURRAH-3. The field only shows on the hurrah.**
+Move the 🎆 to a different stage. The `↳ +Nd` field follows it, and the old
+row's value is dropped rather than riding along on a stage that is no longer
+the climax.
+
+**LATER-1. The plate actually clears.**
+Finish a project, duplicate it for next year. The copy lands in a collapsed
+**Later** group, not the main list.
+
+**LATER-2. Nothing with work in view gets folded.**
+Give a project a stage anchored *before* its start date, far enough out that
+the project would otherwise be Later. It must stay in the main list.
+→ *The horizon measures the pipeline window, not the start date, exactly so
+this can't hide real work.*
+
+**LABEL-1. The date range is whole on the TV.**
+The year view's header should read the full range, with the Layout/Year/Bars
+controls wrapping to a second row rather than eating it.
+
+---
+
 ## 🔴 Still open — known, not yet fixed
 
 **DELETEALL-ROLLBACK.** `deleteAll` commits in batches; each is atomic, the
@@ -95,6 +130,17 @@ removed.
 
 **TIER-MEMBER-ROLES.** Anyone holding a shared tier can remove anyone,
 including the owner. Boards have four roles; tiers have none.
+
+**DASH-FILL.** The year grid does not fill a tall dashboard pane — the wall
+layout clamps lane height at 14px, so on a 4K pane with few projects the
+surplus is thrown away and a black band sits under the grid. **Diagnosed, not
+fixed: needs a screenshot of the TV and which of the three layouts is in use**,
+because the fix is a measure-and-refit pass and a constant tuned blind to
+somebody else's screen is a guess.
+
+**AGENDA-ACTIVE.** *"Projects that are not currently active should not appear
+in the daily agenda at all."* Partly served by Later; the full version is
+deliberately unbuilt. Jake called the current rule temporary.
 
 ---
 
