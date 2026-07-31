@@ -27,6 +27,49 @@ references in the code, so treat this as a dictionary rather than a history.
 ## `store.js`
 
 ```
+// Version 0.26.1 — mergeStages() lifted out of setProjectStages as a pure
+//   function. BEHAVIOUR IS BYTE-IDENTICAL; the seam moved so the rule that
+//   decides whether somebody's finished work survives could be tested at all.
+//   It was born un-runnable — three awaits deep inside a network call — and
+//   `node stage-merge.test.mjs` now reads it straight out of this file by a
+//   brace-matching scan, so the test cannot drift from what ships.
+//   Verified by sabotage: re-introducing the 0.25.x behaviour turns the suite
+//   from 34/0 to 28/6. A suite never seen to fail is decoration.
+//
+// Version 0.26.0 — SHARED PROJECTS STOP EATING EACH OTHER.
+//   Three defects, one shape: item 5 made a board hold more than one person,
+//   and code written when a board WAS one person kept running.
+//
+//   1. setProjectStages WROTE THE EDITOR'S STALE COMPLETION STATE. app.js
+//      builds each stage row from a snapshot taken when the modal OPENED, so
+//      every stage a colleague ticked while it was open came back un-ticked.
+//      Observed live between two accounts: both read 4/8, different four.
+//      The split is now: THE EDITOR OWNS SHAPE, THE SERVER OWNS COMPLETION —
+//      unambiguous, because the editor has no completion control on it and
+//      therefore never has a legitimate opinion about completedAt. Re-reads
+//      at write time; server wins for stages it still has, caller wins for
+//      stages it does not (new, or restored by undo after a delete).
+//      Returns `reconciled` so the save can explain itself.
+//   2. STAGES HAD NO IDENTITY. Every write addressed a stage by POSITION —
+//      a bet that nothing reordered between the render and the click. `sid`
+//      is minted by stampNewStages, backfilled by ensureSids, and rides
+//      through renames and reorders free because the editor spreads the
+//      ORIGINAL stage object. resolveStage REFUSES on a missing sid rather
+//      than falling back to the index: hitting the neighbouring stage is
+//      worse than hitting none. isStageGone exported alongside isRouteError.
+//   3. openSessions() CLOSED EVERYBODY'S CLOCK. No createdBy filter, so
+//      clocking in stopped a colleague's running timer across the boundary.
+//      D112's "at most one open session" was always one per PERSON; it only
+//      looked like one per board because a board used to be one person.
+//      ⚠️ The filter is CLIENT-SIDE deliberately: a second equality clause
+//      wants a composite index, an index is a deploy step, and a deploy step
+//      nobody runs is a bug that ships. The set is a handful of documents.
+//
+// Version 0.25.1 — Jake's marker bump after a predecessor shortened every
+//   header to the short form. Raised on each file touched so that if
+//   removing half the comment lines broke something, the version would say
+//   where to look. NO CODE CHANGE.
+//
 // Version 0.25.0 — PER-USER TIER COLOUR AND NAME.
 //   users/{email}.tierColors + .tierLabels, composite-keyed "wsId:tierId"
 //   exactly as tierRanks is. skinFor() overwrites name/color before a tier
@@ -329,6 +372,39 @@ references in the code, so treat this as a dictionary rather than a history.
 ## `app.js`
 
 ```
+// Version 1.35.1 — A REFUSED TICK NOW REPAINTS. The checkbox flips itself
+//   (browser default), so when store.js refuses a stage write nothing is
+//   written, no snapshot arrives, render() is never called, and the tick sits
+//   there looking saved. The one screen whose job is to say what is done
+//   could show a state that never reached the server. Fixed in onStageToggle
+//   and in the global unhandledrejection backstop. Found by REVIEWING 1.35.0
+//   while it sat unuploaded, not by running it.
+//
+// Version 1.35.0 — YOUR CLOCK IS YOURS, AND YOUR TICKS SURVIVE.
+//   openSessionNow() returned the first open session in the MERGED view, so
+//   a colleague's running timer drew as yours — with a ⏹ that would have
+//   stopped their clock from your screen. Scoped to currentEmail().
+//   projectClockedMs returns {mine, team}; the badge reads "Σ 1h / 31h" only
+//   when somebody else has logged time, so a solo project is unchanged.
+//   Jake set the rule: "if I spend 30 hours on a project and my colleague
+//   spends 1, that's a very different thing than both of us spending 31."
+//   The time report still rolls up EVERYONE — that is the billable surface,
+//   and sessionsToCSV already emitted createdBy.
+//   stageRef() turns a positional index into {sid, index} at CLICK time
+//   (fresher than the render that drew the control) for every setStageDone
+//   and setStageDue call. A stages save that had to keep somebody else's
+//   ticks now says so rather than doing it quietly. isStageGone joins
+//   isRouteError in the global unhandledrejection handler.
+//
+// Version 1.34.2 — Repoint only: ./store.js?v= and ./queue.js?v= were still
+//   asking for 0.25.0 / 0.20.0 while those files were 0.25.1 / 0.20.1, so the
+//   browser kept serving what it already had and an upload looked like a
+//   deploy without being one. Found by version-check.mjs, which until this
+//   day did not exist despite six files instructing the reader to run it.
+//
+// Version 1.34.1 — Jake's marker bump after the headers were shortened.
+//   NO CODE CHANGE.
+//
 // Version 1.34.0 — PER-USER TIER COLOUR AND NAME (UI half).
 //   Settings ▸ Tiers: on a SHARED row the name and colour you type are YOURS.
 //   ⚠️ THE WHOLE FEATURE IS ONE BRANCH IN THE SETTINGS SAVE LOOP — name and
@@ -1673,6 +1749,12 @@ references in the code, so treat this as a dictionary rather than a history.
 ## `index.html`
 
 ```
+     Version 0.51.3 — no markup change; pin moves to app.js 1.35.0.
+     Version 0.51.2 — no markup change; pins repointed to app.js 1.34.2 and
+     css 0.56.1. The css pin had been left at 0.56.0 against a 0.56.1 file,
+     which is the fault the E41 repair already paid for once (defect 8).
+     Version 0.51.1 — Jake's marker bump after the headers were shortened.
+     NO CHANGE.
 <!-- ============================================================
      Tentacalendar — index.html
      Version 0.51.0 (banner and data-html-version move together, always)
