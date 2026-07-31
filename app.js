@@ -1,11 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.36.0
+// Version 1.37.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.37.0 — THE SHARE PANEL KNOWS WHO OWNS THE TIER. A guest was shown
+//          "Bring it back to my board" and the ✕ that takes somebody's key
+//          away. Jake pressed the first one, got a permission error AFTER the
+//          copy had run, and said the obvious thing: "if a user doesn't have
+//          the ability to steal a tier, they probably shouldn't think they
+//          have an option." Both controls are now owner-only, and a guest
+//          gets the one decision that IS theirs — Leave this tier.
 // 1.36.0 — THE BADGE TELLS YOU WHEN YOU ARE RUNNING OLD CODE. D130 watched
 //          ONE stamp (index.html's) and so could not see a stale ?v= pin —
 //          the file uploads, index loads fresh, and it then asks for a URL
@@ -55,7 +62,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.36.0";
+export const APP_VERSION = "1.37.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -79,7 +86,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.26.1";
+} from "./store.js?v=0.27.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -6112,6 +6119,15 @@ function toggleSharePanel(row, t) {
 
   const board = t.shared ? sharedWorkspaces().find(w => w.id === t.wsId) : null;
   const others = board ? board.members.filter(e => e !== currentEmail()) : [];
+  // 1.37.0 — WHO OWNS THIS TIER. Jake, 2026-07-31, after a non-owner was shown
+  // "Bring it back to my board", pressed it, and got a bare permission error
+  // AFTER the copy had already run: "if a user doesn't have the ability to
+  // steal a tier, they probably shouldn't think they have an option."
+  // The two destructive controls — bring-it-back, and taking somebody's key
+  // away — belong to the owner. A guest gets the one that is theirs to make:
+  // leaving. This is an AFFORDANCE fix, not a security one; the rules and the
+  // store-side guard are what actually stop it.
+  const isOwner = !!board && (board.ownerEmail || "").toLowerCase() === currentEmail();
 
   panel.innerHTML = `
     <div class="share-note">${t.shared
@@ -6122,8 +6138,13 @@ function toggleSharePanel(row, t) {
       <button class="share-go">${t.shared ? "Give them a key" : "Share this tier"}</button>
     </div>
     ${others.length ? `<ul class="share-people">${others.map(e =>
-      `<li><span>${esc(e)}</span><button class="share-drop" data-email="${esc(e)}" title="Take the key back">✕</button></li>`).join("")}</ul>` : ""}
-    ${t.shared ? `<button class="share-back">Bring it back to my board</button>` : ""}
+      `<li><span>${esc(e)}</span>${isOwner
+        ? `<button class="share-drop" data-email="${esc(e)}" title="Take the key back">✕</button>`
+        : ``}</li>`).join("")}</ul>` : ""}
+    ${t.shared && isOwner ? `<button class="share-back">Bring it back to my board</button>` : ""}
+    ${t.shared && !isOwner ? `<div class="share-note dim">${esc(board?.ownerEmail || "Somebody else")} owns this
+       tier, so bringing it back and taking keys away are theirs to do. You can let go of your own copy:</div>
+       <button class="share-leave">Leave this tier</button>` : ""}
     <div class="share-status" hidden></div>`;
   row.after(panel);
 
@@ -6167,6 +6188,18 @@ function toggleSharePanel(row, t) {
       catch (err) { say(err.message || "Couldn't take that key back.", true); }
       busy(false);
     }));
+
+  const leave = panel.querySelector(".share-leave");
+  if (leave) leave.addEventListener("click", async () => {
+    if (!confirm(`Leave "${t.name}"? It disappears from your app on reload. ` +
+                 `Everybody else keeps it, and nothing is deleted.`)) return;
+    busy(true);
+    try {
+      await removeMember(t.wsId, currentEmail());
+      say("You've left this tier. It'll be gone from your app on reload.");
+    } catch (err) { say(err.message || "Couldn't leave that tier.", true); }
+    busy(false);
+  });
 
   const back = panel.querySelector(".share-back");
   if (back) back.addEventListener("click", async () => {
