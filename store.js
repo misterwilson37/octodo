@@ -1,11 +1,20 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.26.1
+// Version 0.27.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
 // RECENT:
+// 0.27.0 — UNSHARE IS OWNER-ONLY, AND deleteAll STOPS LYING.
+//          (1) unshareTier refused nothing, so a guest's "bring it back"
+//          COPIED the entire tier onto their own board and only THEN hit the
+//          rules on the delete — reporting failure after a successful
+//          duplication. Now refused up front with the name of the owner.
+//          (2) deleteAll commits in BATCHES; each is atomic, the sequence is
+//          not. moveTier promised "Nothing was lost" on any delete failure,
+//          which is true for one batch and false for two. It now carries the
+//          count that DID commit and says which of the two states it is in.
 // 0.26.1 — mergeStages() lifted out of setProjectStages as a pure function.
 //          BEHAVIOUR IS UNCHANGED — the seam moved so the rule that decides
 //          whether somebody's finished work survives can be tested without
@@ -39,7 +48,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "0.26.1";
+export const STORE_VERSION = "0.27.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -1046,12 +1055,39 @@ async function writeAll(items) {
 }
 
 /** Delete an array of refs, in bounded batches. */
+/**
+ * ⚠️ 0.27.0 — THIS IS NOT ATOMIC AND THE CALLER MUST KNOW HOW FAR IT GOT.
+ *
+ * Firestore batches cap at BATCH_LIMIT, so anything larger commits in
+ * several. Each commit is atomic on its own; the SEQUENCE is not. A
+ * permission failure on the third batch leaves the first two deleted.
+ *
+ * moveTier's rescue message used to promise "Nothing was lost" on any delete
+ * failure, which is true for a single batch and a lie for two. On 2026-07-31
+ * Jake was told a bring-it-back had failed and found the tier gone from the
+ * owner's board anyway — *"It said it couldn't, but you can see that it
+ * definitely did."* Whether that was this or the copy-then-refuse path, the
+ * message could not have told him, because it did not know.
+ *
+ * So: on failure, throw an error carrying `deleted` — the count that DID
+ * commit — and let the caller say something true.
+ */
 async function deleteAll(refs) {
+  let deleted = 0;
   for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+    const chunk = refs.slice(i, i + BATCH_LIMIT);
     const batch = writeBatch(db);
-    for (const ref of refs.slice(i, i + BATCH_LIMIT)) batch.delete(ref);
-    await batch.commit();
+    for (const ref of chunk) batch.delete(ref);
+    try {
+      await batch.commit();
+      deleted += chunk.length;
+    } catch (err) {
+      err.deleted = deleted;
+      err.remaining = refs.length - deleted;
+      throw err;
+    }
   }
+  return deleted;
 }
 
 /** Everything that travels with a tier, read from one board. */
@@ -1113,10 +1149,20 @@ async function moveTier(fromWs, toWs, tierId, tierPatch = {}) {
     // and name the way out, rather than surfacing a bare permission error
     // after a successful copy, which reads like the whole thing failed.
     console.error("[store] copied, but could not clear the originals:", err);
+    // 0.27.0 — say which of the two states this actually is. "Nothing was
+    // lost" was only ever true when the delete fit in ONE batch.
+    if (err.deleted > 0) {
+      throw new Error(
+        `The tier was copied, and then only ${err.deleted} of ${err.deleted + err.remaining} ` +
+        `originals could be removed before permission was refused. ⚠️ THE SOURCE BOARD IS NOW ` +
+        `HALF-EMPTY — do not repeat this. Run whereis.html from both accounts before touching ` +
+        `anything else; every document still exists, but they are split across two boards.`);
+    }
     throw new Error(
       "The tier was copied but the originals could not be removed — you may " +
-      "not have permission to delete on that board. Nothing was lost. Undo " +
-      "the share to put it back exactly as it was.");
+      "not have permission to delete on that board. Nothing was lost, and the " +
+      "merged view keys by id so it will not even look doubled. Undo the share " +
+      "to put it back exactly as it was.");
   }
 
   // The ownership map is a fact about where documents live, and they have
@@ -1203,6 +1249,20 @@ export async function shareTier(tierId, emails = []) {
 export async function unshareTier(tierId, toWs = null) {
   const from = wsOf("tiers", tierId);
   if (!_shared.has(from)) throw new Error("that tier is not shared");
+  // ⚠️ 0.27.0 — ONLY THE OWNER MAY BRING A TIER BACK, and this guard is the
+  // one that counts; hiding the button in app.js 1.37.0 is a courtesy.
+  // Without it, a guest's unshare COPIES the whole tier onto their own board
+  // before the rules refuse the delete — so a failed "bring it back" left a
+  // full duplicate behind and reported an error, which is the worst of both.
+  // Jake hit exactly that on 2026-07-31 and read it, reasonably, as theft.
+  const owner = (_shared.get(from)?.doc?.ownerEmail || "").toLowerCase();
+  if (owner && owner !== ME) {
+    const err = new Error(
+      `${owner} owns this shared tier, so only they can bring it back. ` +
+      `You can leave it instead — that removes your key and changes nothing for anybody else.`);
+    err.code = "octodo/not-tier-owner";
+    throw err;
+  }
   const dest = toWs || HOME_WS || ACTIVE_WS;
   if (!dest) throw new Error("no board to bring it back to");
   if (dest === from) throw new Error("a shared tier cannot be brought back to itself");
