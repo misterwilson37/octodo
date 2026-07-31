@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 1.0.0 · current as of 2026-07-30 (Haliphron)**
+**Version 1.1.0 · current as of 2026-07-31 (Haliphron)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -39,6 +39,12 @@ were numbered after a *section of the handoff document*, which means nothing
 outside that document — Jake, reasonably: *"How in the sam hell did you name
 these things?"* A test id should say what it tests. **Do not name a test after
 where it is written down.**
+
+⚠️ **`whereis.html` 1.4.0 answers a lot of this list now.** Five tests —
+TIER-6, TIER-7, SKIN-1, SKIN-2, BASE-7 — were written as *"open the Firestore
+console, click into a document, eyeball a field,"* some of them from two
+accounts. Every fact they need is now on one page from one sign-in. Where a
+test says *→ `whereis`*, that is the cheap way to run it.
 
 ---
 
@@ -85,7 +91,7 @@ somebody re-shares each calendar. Put this on the flip-day checklist.
 
 ### Shared tiers (item 5)
 
-**TIER-4. The tier went across whole.**
+**TIER-4. The tier went across whole.** *(needs whereis 1.2.0+)*
 After sharing, the projects on that tier came too — **and so did their clocked
 sessions**. Open `whereis.html`: every project and session must show the
 shared board, with no ✗. Then check the Time Report still totals the hours.
@@ -93,25 +99,33 @@ shared board, with no ✗. Then check the Time Report still totals the hours.
 client-side.*
 
 **TIER-6. Everyone keeps their own order.**
-Reorder with ▲▼ (there is no number to type any more). Your order holds and
-so does theirs.
+Reorder with ▲▼ (there is no number to type any more), then open
+`whereis.html` → **"Your order and colours, next to everybody else's."**
+Your rank and their published rank must both be listed, and differ.
+→ *No console needed as of whereis 1.4.0.*
 
 **TIER-7. Visiting shows THEIR order, not yours.**
 Rank the shared tier differently from them and **save yours last**, then visit
 their board — it must show at their position.
 → *Saving last is the test. Run it the other way and the broken and fixed
 versions both pass.*
+→ `whereis` gives you the two numbers to compare before you look at the app,
+so you can tell a wrong render from wrong data.
 
 **TIER-8. The merge rule.**
 On someone's board: a tier you share **with them** is still there. A tier you
 share with a **third** person must **not** appear.
 → *Nothing else tests the rule Jake corrected mid-build.*
+→ `whereis` → **"Every key, on every board you can see"** tells you who holds
+what before you go looking, which is the half of this test that used to need
+the console.
 
 ### Sharing a whole board (item 4)
 
 **KEYS-2. Somebody invites you to a board.**
 They go ⚙️ ▸ People, enter your address, "Can edit", *Give them a key*.
 Nothing for you to accept — reload and the chip appears.
+→ `whereis` → **"Every key"** lists you on their board with role `editor`.
 
 **KEYS-4. Your settings stay yours.**
 In their house you keep your view, your hidden tiers, your week layout.
@@ -124,12 +138,16 @@ test.
 **KEYS-6. They can take the key back.**
 Removed in ⚙️ ▸ People → that board leaves your switcher on reload, and
 opening it directly fails.
+→ `whereis` stops listing that board entirely. If it still appears, the key
+was not actually revoked and the switcher is just hiding it.
 
 ### Per-user tier colour and name (app 1.34.0)
 
 **SKIN-1. Your colour, their colour.**
 Recolour and rename a shared tier on your board. The other person still sees
 the original. Settings shows a "shared as …" line with the canonical name.
+→ `whereis` → **"Your order and colours"** shows your override beside the
+canonical value. Your name and colour must never appear in their column.
 → *Known limitation, not a bug: nobody can rename a shared tier for everyone,
 owner included. Owner rename-for-everyone is queued.*
 
@@ -137,12 +155,16 @@ owner included. Owner rename-for-everyone is queued.*
 Both maps hydrate once at sign-in. Sign in on a second device and the override
 will NOT be there. **This is currently expected** — confirm it, so nobody
 later reports it as a regression.
+→ On the second device `whereis` shows "—" in your columns. That is the pass.
 
 ### Provenance (E9)
 
 **BASE-7. All four stamps are landing.**
-Firestore console ▸ `workspaces` ▸ your board ▸ `tasks` ▸ a completed task.
-Want `createdBy`, `createdAt`, `completedBy`, `completedAt`.
+`whereis.html` → **"Provenance (E9)"**. It counts all four stamps across every
+task, project and stage — no console, and no generalising from one document.
+**Add a task, finish it, re-scan: it must not appear in that table.**
+→ *Old gaps are expected and are NOT a failure. Anything predating E9, and
+everything imported from 1.x, never recorded who; those stamps are gone.*
 → *The stage half of this test is now covered by STAGE-1, which passed.*
 
 ### Onboarding (E41)
