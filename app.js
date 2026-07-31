@@ -1,11 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.39.0
+// Version 1.40.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.40.0 — The 🎆 hurrah carries an optional "↳ +N d" in the stage editor:
+//          ticking it finishes the project AND spawns a dated task. Shown
+//          only on the hurrah row, because on any other row it is the
+//          pipeline step it exists to replace. Later now measures against
+//          the PIPELINE WINDOW rather than the start date, so a stage
+//          anchored before the start keeps its project visible.
 // 1.39.0 — A "LATER" GROUP, so finishing a project actually clears the
 //          plate. Duplicate-for-next-year works exactly as designed and
 //          handed the reward straight back: the copy appears immediately in
@@ -74,7 +80,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.39.0";
+export const APP_VERSION = "1.40.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -98,9 +104,9 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.28.0";
+} from "./store.js?v=0.29.0";
 import {
-  buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
+  buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline, projectPipelineWindow,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
@@ -1922,7 +1928,7 @@ function timelessTier() {
 /** 1.39.0 — the Later horizon, in ms. 0 disables folding entirely, which is
  *  the honest way to say "I want to see everything" without a second flag. */
 function laterHorizonMs() {
-  const days = S.config?.laterHorizonDays ?? 90;
+  const days = S.config?.laterHorizonDays ?? 7;
   return days > 0 ? days * 86400000 : Infinity;
 }
 
@@ -2640,8 +2646,19 @@ function renderProjects(now) {
   // Threshold is a horizon in DAYS from today, not a date, so it stays true
   // as time passes. A project with no start date is never "later" — undated
   // means someday, which is the want-tos tab's whole job.
+  // 1.40.0 — Jake refined the rule: "If there's a due date, then it should
+  // pop up a week before the project window." So the horizon is measured
+  // against the PIPELINE WINDOW, not the start date — a stage anchored
+  // BEFORE the start (offsetDays with direction "before") pulls the whole
+  // project out of Later on its own, which is the safety property that
+  // matters: nothing with real work in view can be folded away.
   const horizon = laterHorizonMs();
-  const isLater = p => p.startDate != null && startOfDayTs(p.startDate) > Date.now() + horizon;
+  const isLater = p => {
+    if (p.startDate == null) return false;      // undated is someday, not later
+    const tier = S.tiers.find(t => t.id === p.tierId);
+    const [first] = projectPipelineWindow(p, tier?.allowedDays);
+    return startOfDayTs(first ?? p.startDate) > Date.now() + horizon;
+  };
   const open = openAll.filter(p => !isLater(p));
   const later = openAll.filter(isLater);
 
@@ -2922,6 +2939,16 @@ async function onStageToggle(projectId, stageIndex, done, ev) {
     }
     throw err;
   }
+
+  // 1.40.0 — a task appearing out of nowhere two weeks from now is a
+  // surprise unless the moment that created it says so.
+  if (result && result.spawnedTask) {
+    const d = new Date(result.spawnedTask.dueAt);
+    setTimeout(() => alert(
+      `Project finished. 🎆\n\nA follow-up task has been added for ` +
+      `${d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}:\n` +
+      `"${result.spawnedTask.title}"\n\nThe project itself is done and folds away now.`), 50);
+  }
   if (done && result) {
     // D109 — the big hurrah belongs to the stage Katie says it does.
     // Publishing is the party; follow-up is paperwork. A 🎆-marked stage
@@ -3197,6 +3224,7 @@ function projStageRow(st, origIndex, isNew) {
     ${timingSelects(st)}
     <span class="st-flags">${st.completedAt ? "✓" : ""}${st.dueAt ? " ⏰" : ""}</span>
     <button type="button" class="st-hurrah${st.hurrah ? " active" : ""}" title="The big hurrah 🎆 — the full fireworks land when THIS stage completes, even if follow-ups remain. One per project; if none is marked, finishing the last stage keeps the honor.">🎆</button>
+    <label class="st-spawn-wrap${st.hurrah ? "" : " hidden"}" title="Ticking the hurrah creates a TASK this many days later, instead of holding the project open with one more stage. Blank = no follow-up. The project finishes when the hurrah lands; the task lives its own life.">↳ +<input class="st-spawn" type="number" min="0" max="365" placeholder="—" value="${st.spawnDays ?? ""}">d</label>
     <button type="button" class="st-del" title="Remove stage from this project">✕</button>`;
   wireTmplRow(row, box);
   box.append(row);
@@ -3218,6 +3246,9 @@ function stagesSave() {
         direction: row.querySelector(".st-dir").value,
         anchor: row.querySelector(".st-anchor").value,
         offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+        ...(row.querySelector(".st-hurrah")?.classList.contains("active") &&
+            row.querySelector(".st-spawn")?.value !== ""
+              ? { spawnDays: clampInt(row.querySelector(".st-spawn").value, 0, 365, 14) } : {}),
         completedAt: null,
         dueAt: null,
         ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})  // D109: checkmarks reset, the honor doesn't
@@ -3258,7 +3289,14 @@ function stagesSave() {
       offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
       completedAt: carried.completedAt ?? null,
       dueAt: carried.dueAt ?? null,
-      ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {})
+      ...(row.querySelector(".st-hurrah").classList.contains("active") ? { hurrah: true } : {}),
+      // 1.40.0 — only meaningful on the hurrah, and dropped when the hurrah
+      // moves, so a stale +14 cannot ride along on a stage that is no longer
+      // the climax. `spawnedTaskId` is carried, not rebuilt: it is the record
+      // that this follow-up already happened.
+      ...(row.querySelector(".st-hurrah").classList.contains("active") &&
+          row.querySelector(".st-spawn").value !== ""
+            ? { spawnDays: clampInt(row.querySelector(".st-spawn").value, 0, 365, 14) } : {})
     };
   });
   {
@@ -5979,7 +6017,7 @@ function openSettings() {
   $("#cfg-alert-vol").value = String(Math.round(alertVol() * 100));
   refreshAlertStatus();
   $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
-  $("#cfg-later-days").value = c.laterHorizonDays ?? 90;  // 1.39.0
+  $("#cfg-later-days").value = c.laterHorizonDays ?? 7;  // 1.39.0
   $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
   $("#cfg-cleardeck").value = Math.round((c.clearDeckThreshold ?? 0.6) * 100); // D85
   updatePollCostHint();
@@ -6299,6 +6337,14 @@ function wireTmplRow(row, box) {
     const was = hb.classList.contains("active");
     box.querySelectorAll(".st-hurrah").forEach(b => b.classList.remove("active"));
     if (!was) hb.classList.add("active");
+    // 1.40.0 — the follow-up belongs to the hurrah and only the hurrah.
+    // Jake: "The last hurrah should spawn the request. Otherwise, it's just
+    // another step in the pipeline." Showing the field on every row would
+    // invite exactly the thing this replaces.
+    box.querySelectorAll(".stage-tmpl-row").forEach(r => {
+      const w = r.querySelector(".st-spawn-wrap");
+      if (w) w.classList.toggle("hidden", !r.querySelector(".st-hurrah")?.classList.contains("active"));
+    });
   });
 }
 
@@ -6424,7 +6470,7 @@ function onSaveSettings() {
     sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
     sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
     deadlineHour: clampInt($("#cfg-deadline-hour").value, 0, 23, 16),      // D51
-    laterHorizonDays: clampInt($("#cfg-later-days").value, 0, 3650, 90),   // 1.39.0
+    laterHorizonDays: clampInt($("#cfg-later-days").value, 0, 3650, 7),   // 1.39.0
     decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2), // D52
     clearDeckThreshold: clampInt($("#cfg-cleardeck").value, 0, 100, 60) / 100 // D85
   });
