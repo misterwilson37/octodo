@@ -1767,6 +1767,27 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ---
 
+## `whereis.html`
+
+```
+     Version 1.4.0 — RETIRES FIVE CONSOLE-DIVING TESTS. TIER-6, TIER-7,
+     SKIN-1, SKIN-2 and BASE-7 all asked for a Firestore console session,
+     some from two accounts. Three new sections read the same facts from one
+     sign-in: per-user tier order and colours beside the canonical values and
+     everybody else's published ranks; every key on every visible board with
+     roles; and a provenance audit that COUNTS the four E9 stamps across every
+     task, project and stage rather than sampling one document.
+     ⚠️ Boards-table header now derived from SUBS. It was a hand-written list
+     beside a SUBS.map() loop, so adding "members" shifted every count one
+     column left, silently. Third instance of this shape in the project after
+     the completedBy keep-list and the ?v= pins.
+     Version 1.3.1 — the version is on the page (Jake: "you didn't put the
+     version anywhere on that page"). version-check.mjs reads the on-page
+     badge as this file's constant so banner and badge cannot drift.
+     Version 1.3.0 — per-stage detail and per-person time.
+     Version 1.2.0 — projects and sessions audited alongside tasks.
+```
+
 ## `index.html`
 
 ```
