@@ -1,11 +1,26 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.34.2
+// Version 1.35.1
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.35.1 — A REFUSED TICK NOW REPAINTS. The checkbox flips itself — that is
+//          the browser's default, not ours — so when store.js refuses a
+//          stage write, nothing is written, no snapshot arrives, render() is
+//          never called, and the tick sits there looking saved. The one
+//          screen whose job is to say what is done cannot show a state that
+//          never reached the server. Found by reviewing 1.35.0, not by
+//          running it.
+// 1.35.0 — YOUR CLOCK IS YOURS. openSessionNow() returned the first open
+//          session in the MERGED view, so a colleague's running timer drew
+//          as yours with a ⏹ that would have stopped it from your screen.
+//          projectClockedMs now returns {mine, team} and the badge reads
+//          "Σ 1h / 31h" when somebody else has logged time — Jake: those
+//          are different questions. Stage writes address by sid (store
+//          0.26.0) instead of by position, and a save that had to keep
+//          somebody else's ticks says so instead of doing it quietly.
 // 1.34.2 — Repoint only: ./store.js?v= and ./queue.js?v= were still asking
 //          for 0.25.0 / 0.20.0 while those files were 0.25.1 / 0.20.1, so
 //          the browser kept serving what it already had and the upload
@@ -31,7 +46,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.34.2";
+export const APP_VERSION = "1.35.1";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -53,9 +68,9 @@ import {
   shareTier, unshareTier, sharedWorkspaces, currentEmail,          // E6/E8 item 5
   mergedWorkspaceIds,                                              // item 5
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
-  isRouteError, routingSnapshot,                                   // 0.24.0
+  isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.25.1";
+} from "./store.js?v=0.26.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -399,6 +414,16 @@ window.addEventListener("unhandledrejection", ev => {
     console.error("[app] a write was refused because its board is unresolved:",
       err.detail, routingSnapshot());
     alert(err.message);
+    ev.preventDefault();
+    return;
+  }
+  // 1.35.0 — a tick aimed at a stage somebody else has since removed or
+  // reordered away. store.js refuses rather than hitting the neighbour, so
+  // this is the app working correctly; say so, and say what to do.
+  if (isStageGone(err)) {
+    console.warn("[app] stage write refused:", err.message);
+    alert(err.message + ".\n\nYour screen will catch up in a moment — try again after it does.");
+    render();   // 1.35.1 — same reason as onStageToggle: no write, no snapshot, no repaint
     ev.preventDefault();
     return;
   }
@@ -2219,7 +2244,20 @@ document.addEventListener("keydown", ev => {
 // Fixed-price projects, billed on assumed hours; the ledger answers next
 // year's "do I ask for more?" — so the card shows a running timer and a
 // lifetime Σ, and everything is correctable after the fact.
-function openSessionNow() { return S.sessions.find(s => s.end == null) || null; }
+/**
+ * ⚠️ 1.35.0 — MINE, NOT ANYBODY'S. This used to return the first open
+ * session in the merged view, which on a shared project meant your colleague's
+ * running timer rendered as YOURS, with a ⏹ button that would have stopped
+ * their clock from your screen. Jake, 2026-07-30: "if I spend 30 hours on a
+ * project and my colleague spends 1, that's a very different thing than both
+ * of us spending 31 hours on it." D112's "at most one open session" was
+ * always meant to be one per PERSON; it only looked like one per board
+ * because a board used to be one person.
+ */
+function openSessionNow() {
+  const me = currentEmail();
+  return S.sessions.find(s => s.end == null && (s.createdBy || "") === me) || null;
+}
 function projName(id) { return S.projects.find(x => x.id === id)?.name || "another project"; }
 
 /** D126 — a project's date range as text, or "Someday" for a timeless
@@ -2230,10 +2268,22 @@ function projWhen(p) {
     ? `${fmtDay(p.startDate)} – ${fmtDay(p.endDate)}`
     : "Someday";
 }
+/**
+ * 1.35.0 — returns BOTH numbers, because on a shared project they answer
+ * different questions. `mine` is "how long did this cost me"; `team` is the
+ * billable total. Pooling them was the old behaviour and it made a project
+ * two people touched look like one person had lived on it.
+ */
 function projectClockedMs(pid, now) {
-  let t = 0;
-  for (const s of S.sessions) if (s.projectId === pid) t += (s.end ?? now) - s.start;
-  return Math.max(0, t);
+  const me = currentEmail();
+  let mine = 0, team = 0;
+  for (const s of S.sessions) {
+    if (s.projectId !== pid) continue;
+    const ms = (s.end ?? now) - s.start;
+    team += ms;
+    if ((s.createdBy || "") === me) mine += ms;
+  }
+  return { mine: Math.max(0, mine), team: Math.max(0, team) };
 }
 function fmtHoursTotal(ms) {
   const h = ms / 3600000;
@@ -2587,10 +2637,21 @@ function projectCard(p) {
     });
     const tot = document.createElement("span");
     tot.className = "clock-total";
-    const ms = projectClockedMs(p.id, Date.now());
-    if (ms > 0) {
-      tot.textContent = `Σ ${fmtHoursTotal(ms)}`;
-      tot.title = `${S.sessions.filter(s => s.projectId === p.id).length} session(s) logged — next year's ask, off the paper. Click for the time report.`;
+    // 1.35.0 — yours is the headline; the team total only appears when
+    // somebody else has actually logged time, so a solo project reads
+    // exactly as it always did.
+    const { mine, team } = projectClockedMs(p.id, Date.now());
+    if (team > 0) {
+      const shared = team - mine > 0;
+      tot.textContent = shared
+        ? `Σ ${fmtHoursTotal(mine)} / ${fmtHoursTotal(team)}`
+        : `Σ ${fmtHoursTotal(mine)}`;
+      const all = S.sessions.filter(s => s.projectId === p.id);
+      const byMe = all.filter(s => (s.createdBy || "") === currentEmail()).length;
+      tot.title = shared
+        ? `You: ${fmtHoursTotal(mine)} over ${byMe} session(s). Everyone: ${fmtHoursTotal(team)} over ${all.length}. ` +
+          `Your hours and the project's are different questions — click for the time report.`
+        : `${all.length} session(s) logged — next year's ask, off the paper. Click for the time report.`;
       tot.classList.add("clickable");
       tot.addEventListener("click", e => { e.stopPropagation(); openTimeReport(p.id); });   // D120
     }
@@ -2666,8 +2727,36 @@ function projectCard(p) {
   return card;
 }
 
+/**
+ * 1.35.0 — turn "the stage at position i" into a stable reference, read from
+ * the LOCAL snapshot at click time (fresher than the render that drew the
+ * control) so store.js can resolve it against the server by sid. The index
+ * rides along only as a fallback for legacy stages that have no sid yet.
+ */
+function stageRef(projectId, index) {
+  const st = S.projects.find(p => p.id === projectId)?.stages?.[index];
+  return { sid: st?.sid, index };
+}
+
 async function onStageToggle(projectId, stageIndex, done, ev) {
-  const result = await setStageDone(projectId, stageIndex, done);
+  let result;
+  try {
+    result = await setStageDone(projectId, stageRef(projectId, stageIndex), done);
+  } catch (err) {
+    // 1.35.1 — A REFUSAL MUST REPAINT. The checkbox has already flipped
+    // itself: that is the browser's default, not ours. When store.js refuses
+    // the write, nothing is written, so no snapshot arrives, so render() is
+    // never called — and the tick sits there looking saved. Forcing a render
+    // puts it back where the DATA says it is. The one screen in the app whose
+    // job is to say what is done cannot be allowed to show a state that never
+    // reached the server.
+    if (isStageGone(err)) {
+      render();
+      alert(err.message + ".\n\nYour screen has been put back — try again now that it's caught up.");
+      return;
+    }
+    throw err;
+  }
   if (done && result) {
     // D109 — the big hurrah belongs to the stage Katie says it does.
     // Publishing is the party; follow-up is paperwork. A 🎆-marked stage
@@ -2868,7 +2957,7 @@ function dueSave() {
   const ts = new Date(`${date}T${time}`).getTime();
   pushDueUndo(ts);   // D116
   if (S.dueTarget.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: ts });
-  else setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, ts);
+  else setStageDue(S.dueTarget.projectId, stageRef(S.dueTarget.projectId, S.dueTarget.stageIndex), ts);
   $("#due-modal").hidden = true;
 }
 
@@ -2884,15 +2973,15 @@ function pushDueUndo(after) {
     const before = S.projects.find(p => p.id === tgt.projectId)?.stages?.[tgt.stageIndex]?.dueAt ?? null;
     if (before === after) return;
     pushUndo("stage due change",
-      () => setStageDue(tgt.projectId, tgt.stageIndex, before),
-      () => setStageDue(tgt.projectId, tgt.stageIndex, after));
+      () => setStageDue(tgt.projectId, stageRef(tgt.projectId, tgt.stageIndex), before),
+      () => setStageDue(tgt.projectId, stageRef(tgt.projectId, tgt.stageIndex), after));
   }
 }
 
 function dueClear() {
   pushDueUndo(null);   // D116
   if (S.dueTarget?.kind === "task") updateTask(S.dueTarget.taskId, { dueAt: null }); // → Waiting
-  else if (S.dueTarget) setStageDue(S.dueTarget.projectId, S.dueTarget.stageIndex, null);
+  else if (S.dueTarget) setStageDue(S.dueTarget.projectId, stageRef(S.dueTarget.projectId, S.dueTarget.stageIndex), null);
   $("#due-modal").hidden = true;
 }
 
@@ -3014,7 +3103,17 @@ function stagesSave() {
     const after = structuredClone(stages);
     pushUndo("stages edit", () => setProjectStages(pid, before), () => setProjectStages(pid, after));
   }
-  setProjectStages(S.stagesTarget, stages);
+  // 1.35.0 — store.js now merges completion from the server rather than
+  // writing this modal's stale copy of it (that is what silently un-ticked a
+  // colleague's stages). It reports how many it had to put back; say so,
+  // because a save that quietly did something different is worse than a
+  // save that explains itself.
+  setProjectStages(S.stagesTarget, stages).then(res => {
+    if (res && res.reconciled > 0) {
+      alert(`Saved. ${res.reconciled} stage${res.reconciled === 1 ? " was" : "s were"} ticked or un-ticked by ` +
+            `somebody else while you had this open — those were kept as they are now, not as this screen showed them.`);
+    }
+  });
   delete dirtySnapshots["stages"];   // D129 — saved, so no longer dirty
   $("#stages-modal").hidden = true;
 }
@@ -3104,7 +3203,7 @@ function renderDecision() {
         else { setTaskDone(it.id, true); celebrate(1, clickPoint(ev)); }
       }),
       iconBtn("🕐", `Reschedule to ${fmtDay(target)} 9:00 AM`, () => {
-        if (it.kind === "stage") setStageDue(it.projectId, it.deadlineStageIndex, target);
+        if (it.kind === "stage") setStageDue(it.projectId, stageRef(it.projectId, it.deadlineStageIndex), target);
         else updateTask(it.id, { dueAt: target });
       }),
       iconBtn("📅", "Pick a date — kick it way down the road", () => {  // D84
