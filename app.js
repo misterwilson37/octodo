@@ -1,11 +1,19 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.34.1
+// Version 1.34.2
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.34.2 — Repoint only: ./store.js?v= and ./queue.js?v= were still asking
+//          for 0.25.0 / 0.20.0 while those files were 0.25.1 / 0.20.1, so
+//          the browser kept serving what it already had and the upload
+//          looked like a deploy without being one.
+// 1.34.1 — Jake's marker bump. A predecessor stripped this header down to
+//          the short form; the patch was raised on every file it touched so
+//          that if removing half the comment lines broke something, the
+//          version would say which files to suspect. NO CODE CHANGE.
 // 1.34.0 — Per-user tier colour and name, UI half. ⚠️ THE WHOLE FEATURE
 //          IS ONE BRANCH IN THE SETTINGS SAVE LOOP: on a shared row,
 //          name and color are deleted from the payload before saveTier
@@ -23,7 +31,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.34.1";
+export const APP_VERSION = "1.34.2";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -47,7 +55,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, routingSnapshot,                                   // 0.24.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.25.0";
+} from "./store.js?v=0.25.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -55,7 +63,7 @@ import {
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
   rollupSessions, rollupToCSV, sessionsToCSV
-} from "./queue.js?v=0.20.0";
+} from "./queue.js?v=0.20.1";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
 const $ = sel => document.querySelector(sel);
