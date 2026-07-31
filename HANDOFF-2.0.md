@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.36.0 · store 0.26.1 · queue 0.20.1 · css 0.57.0 · html 0.51.5 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.3.1 · version-check 1.2.0 · stage-merge.test 1.0.0 |
-| **Deployed** | **NOTHING from 2026-07-30 evening is uploaded yet.** whereis 1.1.0 and app ~1.34.1 are what is running. **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
+| **Versions** | app 1.36.0 · store 0.26.1 · queue 0.20.1 · css 0.57.0 · html 0.51.5 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.4.0 · version-check 1.2.0 · stage-merge.test 1.0.0 |
+| **Deployed** | ✅ Everything through app 1.36.0 / store 0.26.1 / whereis 1.3.1 is UPLOADED and STAGE-1…7 passed. **whereis 1.4.0 is the only unshipped file.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
@@ -270,6 +270,57 @@ anywhere on that page, so I can't see what version it is on load."* A
 diagnostic that cannot tell you whether IT is current is a diagnostic you have
 to diagnose. Fixed in 1.3.1; version-check.mjs now reads the on-page badge as
 that file's constant, so the banner and the badge can never drift apart.
+
+---
+
+### 0e. whereis 1.4.0 — TESTS THAT COST A CONSOLE SESSION DO NOT GET RUN
+
+Jake went to bed with ~20 tests to burn down and said to work on whatever was
+safe. **The temptation was §0d**, which was unblocked for the first time
+(STAGE-1…7 passed, so nothing was stacked on an unverified base). It was still
+the wrong call: shipping a subsystem the night before a test-burn-down day
+*grows* the list he had just asked to have shrunk.
+
+**So the night went on making the existing tests cheaper instead.** Five of
+them — TIER-6, TIER-7, SKIN-1, SKIN-2, BASE-7 — were written as *"open the
+Firestore console, click into a document, eyeball a field,"* two of them from
+two accounts. Every fact they ask for is readable from `whereis`, which is
+read-only and therefore cannot cost anything to be wrong about.
+
+| new section | retires |
+|---|---|
+| Your order and colours, next to everybody else's | TIER-6, TIER-7, SKIN-1, SKIN-2 |
+| Every key, on every board you can see | KEYS-2, KEYS-6, half of TIER-8 |
+| Provenance (E9) | BASE-7, mechanically |
+
+⚠️ **Provenance counts rather than samples.** BASE-7 asked for four fields to
+be eyeballed on ONE completed task. One hand-picked document proves nothing
+about the rest — the audit walks every task, project and stage. **Old gaps are
+expected and are NOT failures**: completions predating E9 and everything
+imported from 1.x never recorded who, and those stamps are unrecoverable
+(5b-i). The test is now *"make a task, finish it, re-scan, it must not
+appear."*
+
+⚠️ **THE KEY SHAPES ARE DIFFERENT AND THAT IS A TRAP.** Your own ranks live in
+`users/{you}.tierRanks` keyed **`"wsId:tierId"`**; the copy other people can
+read lives in `workspaces/{ws}/members/{them}.tierRanks` keyed by **bare
+`tierId`**, shared boards only. Using one shape against the other reads as
+"unset" rather than erroring.
+
+**A bug found while building it, worth more than the feature.** The boards
+table's column header was a hand-written list sitting beside a
+`SUBS.map()` loop. Adding `"members"` to the scan shifted every count one
+column left — silently, with no error, and the numbers would simply have been
+attributed to the wrong collections. The header is now derived from `SUBS`.
+**That is the third instance of this exact shape in this project**: the
+keep-list that ate `completedBy` (5b-i), the `?v=` pins against file versions,
+and now this. *A second list that must be kept in step with the first is a bug
+with a delay on it.*
+
+**Render logic here is browser-only and was verified against fixtures offline**
+(the skin, keys and provenance blocks were extracted and run over fake boards,
+including the all-clean and unreadable-profile paths). That is weaker than a
+committed test and is called out so nobody mistakes it for one.
 
 ---
 
