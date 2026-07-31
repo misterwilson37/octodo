@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.1
+     Version 0.51.2
 
      The whole UI. One page, no templating.
 
      RECENT:
+     0.51.2 — no markup change; pins repointed to app.js 1.34.2 / css 0.56.1.
+        The css pin had been left at 0.56.0 against a 0.56.1 file, which is
+        the fault the E41 repair already paid for once (defect 8).
+     0.51.1 — Jake's marker bump after the headers were shortened. NO CHANGE.
      0.51.0 — no markup change; pins move to app.js 1.34.0 / css 0.56.0.
      0.50.0 — no markup change; pins move to app.js 1.33.0 / store 0.24.0.
 
@@ -36,9 +40,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.56.0">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.56.1">
 </head>
-<body data-html-version="0.51.1">
+<body data-html-version="0.51.2">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -929,6 +933,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.34.0"></script>
+  <script type="module" src="app.js?v=1.34.2"></script>
 </body>
 </html>
