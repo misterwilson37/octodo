@@ -372,6 +372,20 @@ references in the code, so treat this as a dictionary rather than a history.
 ## `app.js`
 
 ```
+// Version 1.36.0 — THE BADGE TELLS YOU WHEN YOU ARE RUNNING OLD CODE.
+//   D130 watched ONE stamp (index.html's data-html-version), which catches an
+//   ordinary deploy and is blind to a stale ?v= pin — index.html is never
+//   cached, so it loads fresh and then asks for a URL the browser already
+//   holds. The fix is live and the tab runs the old code, silently. That cost
+//   an evening on 2026-07-30.
+//   checkDeployedVersions() fetches EVERY module's banner from the server
+//   with the cache bypassed, reads only the first chunk (not 300KB of app.js
+//   hourly to look at line 3), and compares against the constant this tab is
+//   running. Stale rows land in the tooltip; the badge turns amber.
+//   ⚠️ Nearly built as a separate checkup.html. Jake: "Isn't the whole point
+//   of the hover the version check? Why would I want to open a new page?"
+//   A check you have to remember to open is a check that does not get run.
+//
 // Version 1.35.1 — A REFUSED TICK NOW REPAINTS. The checkbox flips itself
 //   (browser default), so when store.js refuses a stage write nothing is
 //   written, no snapshot arrives, render() is never called, and the tick sits
@@ -1489,6 +1503,13 @@ references in the code, so treat this as a dictionary rather than a history.
 ---
 
 ## `tentacalendar.css`
+
+```
+/* Version 0.57.0 — #version.stale: the amber "this tab is running code older
+   than the server has" state for app 1.36.0. Amber not red — nothing is
+   broken, but nothing you are looking at can be trusted either. */
+```
+
 
 ```
 /* ============================================================
