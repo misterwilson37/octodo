@@ -4,15 +4,19 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.34.0 · store 0.25.0 · queue 0.20.0 · css 0.56.0 · html 0.51.0 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.1.0 |
-| **Deployed** | app 1.33.0 / store 0.24.0 / whereis 1.1.0 are live. **1.34.0 / 0.25.0 / css 0.56.0 are NOT** — per-user tier colour, untested. |
+| **Versions** | app 1.35.1 · store 0.26.1 · queue 0.20.1 · css 0.56.1 · html 0.51.4 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.3.0 · version-check 1.1.0 · stage-merge.test 1.0.0 |
+| **Deployed** | **NOTHING from 2026-07-30 evening is uploaded yet.** whereis 1.1.0 and app ~1.34.1 are what is running. **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
-| **Next** | Owner rename-for-everyone (Jake asked 2026-07-30). Then per-user hide, delete-refuses-when-shared, orphan sweep. |
+| **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
 ### ⚠️ Three things to do before you write a line
 
-**1. `node version-check.mjs`.** Before handing Jake anything. Every file
+**1. `node version-check.mjs`.** It EXISTS NOW (Haliphron, 2026-07-30). Six
+files had instructed the reader to run it since 2026-07-29 and it had never
+been written — every one of those warnings was prose wearing a command's
+clothes, which is the exact failure they were written to stop. Before handing
+Jake anything. Every file
 carries its version twice — a banner and a constant — and they have drifted
 **four times**. The last drift cost a deploy: Jake opened `store.js`, saw the
 version he already had, and reasonably concluded nothing had been sent, so a
@@ -100,6 +104,176 @@ role dropdown descending.
 
 ⚠️ **The stranded task is still stranded.** 0.24.0 stops new ones; it does not
 move the old one. Delete and retype it.
+
+---
+
+### 0c. SHARED PROJECTS — THREE DEFECTS FOUND BY USING IT (app 1.35.0 · store 0.26.0)
+
+**All three are the same shape: item 5 made a board hold more than one
+person, and code written when a board WAS one person kept running.** None was
+findable by reading; all three came out of Jake driving two accounts against
+one shared project on 2026-07-30, which is the third time that method has
+beaten a code review on this project.
+
+**⚠️ Defect 1 — THE STAGE EDITOR ATE THE OTHER PERSON'S TICKS. Data loss, in
+ordinary use, on the flagship feature.** `setProjectStages` wrote the caller's
+array verbatim, and app.js builds each row from a snapshot taken when the
+MODAL OPENED. So every stage your colleague ticked while you had the pipeline
+editor open was written back un-ticked. **Observed: both accounts read 4/8 and
+the four were different stages.** The later reorder won and silently discarded
+the other person's completions.
+
+Fixed by splitting authority, which is unambiguous because *the editor has no
+completion control on it* — `.st-name`, `.st-dir`, `.st-anchor`, `.st-off`,
+`.st-hurrah`, nothing else. It therefore never has a legitimate opinion about
+`completedAt`, and any it carries is stale by construction:
+
+> **The editor owns SHAPE. The server owns COMPLETION.**
+
+`setProjectStages` re-reads at write time and takes completion from the server
+for every stage still present there. A stage the server does not have is
+genuinely new — or is being restored by undo after a delete — and there the
+caller's value is the only one in existence. It returns `reconciled`, and
+app.js tells the user when it had to keep somebody else's ticks. **Last-write-
+wins for order is deliberate and Jake parked it; nobody loses a tick either
+way.**
+
+**Defect 2 — STAGES HAD NO IDENTITY.** Every stage write addressed a stage by
+POSITION, which is a bet that nothing reordered between the render that drew
+the checkbox and the click that ticked it. On a shared project that bet is
+off. Stages now carry `sid`, minted by `stampNewStages` and backfilled by
+`ensureSids` on any array write. **It rides through renames and reorders for
+free** because the editor rebuilds each row by spreading the ORIGINAL stage
+object — the drop-list decision made for `completedBy` paid for this too.
+`resolveStage()` **refuses** when a sid is supplied and missing rather than
+falling back to the index: hitting a neighbouring stage is worse than hitting
+none. Surfaced by `isStageGone` through the same global handler as
+`isRouteError`.
+
+**Defect 3 — ONE CLOCK PER BOARD, NOT ONE PER PERSON.** `openSessions()`
+queried the whole merge set for `end == null` with **no `createdBy` filter**,
+so clocking in closed your colleague's running timer, and `openSessionNow()`
+in app.js drew *their* timer as YOURS with a ⏹ that would have stopped it from
+your screen. D112's "at most one open session" was always meant to be one per
+PERSON; it only looked like one per board because a board used to be one
+person.
+
+⚠️ **The `createdBy` filter is applied CLIENT-SIDE on purpose.** A second
+equality clause in the query would want a composite index, an index is a
+deploy step, and a deploy step nobody runs is a bug that ships (see rules
+1.2.0/1.2.1, published without the tests). The open-session set is a handful
+of documents.
+
+**Jake's rule, and it is the design now:** *"if I spend 30 hours on a project
+and my colleague spends 1, that's a very different thing than both of us
+spending 31 hours on it."* `projectClockedMs` returns `{mine, team}`; the
+badge reads `Σ 1h / 31h` only when somebody else has logged time, so a solo
+project reads exactly as it always did. **The time report still rolls up
+everyone** — that is the billable-hours surface — and `sessionsToCSV` already
+emitted `createdBy`, so "who" was always recoverable from the export.
+
+**Untested in a browser.** TEST-0c below is unrun.
+
+| id | test |
+|---|---|
+| 0c-1 | Two accounts, one shared project. A ticks stage 3. B — **with the pipeline editor already open** — reorders and saves. **A's tick survives, and B is told it was kept.** This is the data-loss case. |
+| 0c-2 | B reorders while A's project card is on screen; A then ticks a stage. The tick lands on the stage A clicked, or refuses by name — never on its neighbour. |
+| 0c-3 | A clocks in. B's screen shows **no running timer** and B's ⏱ button is available. |
+| 0c-4 | B clocks in while A is still running. **A's clock keeps running.** Both appear in `whereis` sessions with different `created by`. |
+| 0c-5 | Both log time on one project. Each card reads `Σ <yours> / <total>`; the totals differ per account and the team half matches. |
+| 0c-6 | Delete a stage on B while A has it on screen; A ticks it. A gets "no longer in this pipeline", not a silently mis-aimed write. |
+| 0c-7 | Legacy check: a project whose stages predate `sid` (any project made before 0.26.0) still ticks and reorders normally, and gains sids on the first save. |
+
+---
+
+### 0c-bis. WHAT HALIPHRON DID WHILE NOTHING WAS UPLOADED
+
+Jake stepped away with §0c written but **not yet in a browser**. The safe work
+in that window is not "more features" — a second untested subsystem stacked on
+the first is how a session ends with two suspects instead of one. It is
+**raising confidence in the drop that already exists**, and making the tests
+in it cheaper to run.
+
+**1. A bug found by reviewing, not running (app 1.35.1).** A refused stage
+tick left the checkbox visually ticked. The checkbox flips itself — browser
+default — and when store.js refuses the write, nothing is written, so no
+snapshot arrives, so `render()` is never called. **The one screen whose job is
+to say what is done was able to show a state that never reached the server.**
+Both the local catch in `onStageToggle` and the global backstop now repaint.
+
+**2. `node stage-merge.test.mjs` — 34 assertions, no dependencies.** The merge
+rule decides whether somebody's finished work survives, and it was born
+un-runnable: three awaits deep inside a network call. `mergeStages` is now a
+pure function (store 0.26.1, behaviour byte-identical) and the harness
+**extracts it, `ensureSids` and `resolveStage` from the real store.js source
+by a brace-matching scan** — it cannot drift from what ships, and if the
+extraction fails the run fails loudly.
+
+⚠️ **It was verified by sabotage.** Re-introducing the original defect — write
+the caller's completion verbatim — turns 34/0 into 28/6, and the first failure
+reads *"A's tick SURVIVES B's stale save."* A suite that has never been seen
+to fail is decoration. Do that again to any rule added here.
+
+**3. whereis 1.3.0 — evidence instead of eyeballing.** `4/8` is the wrong
+shape of evidence for this bug: it was **identical on both screens while the
+data disagreed**. Projects now expand to per-stage name / tick / who ticked it
+/ sid, so two accounts can be diffed line by line, and a new table breaks
+project time down by person so `Σ 1h / 31h` can be checked against something
+other than itself. Stages with no `sid` are flagged `pre-0.26.0` — watching
+one gain a sid on first save is the cheapest possible check that the backfill
+works on real data.
+
+**Upload order matters, and only for one reason.** `whereis.html` is loaded by
+URL and pinned by nothing, so it can go up alone and be run against the
+CURRENT live data before anything else changes. **Do that first**: it captures
+the before-picture of the four stale-order stages while the defect is still
+live. Everything else is an ordinary drop.
+
+---
+
+### 0d. THE TIER-CHANGE HOLE — FOUND, NOT FIXED (next session's opening task)
+
+**`updateProject` and `updateTask` route with `wsOf(id)` — the board the
+document is ALREADY on — so changing a tier from a personal one to a shared
+one rewrites `tierId` and leaves the document behind.** That is how
+`sumnerk12 made project` came to sit in a personal board with its tier in a
+shared one. **Jake confirmed the repro: he created it, then changed its tier.**
+It is not the creation path; `addProject` and `addProjectWithStages` both use
+`wsOfTier` correctly and were verified doing so.
+
+**Only two call sites can change a tierId**: `app.js` task-edit save and
+project-edit save. Everything else passes dates, estimates, recurrence.
+
+**Deliberately deferred, and the reasoning is the point:** it loses nothing
+(the document is intact and `whereis` 1.2.0 now finds it), it needs an
+uncommon deliberate action, and it is a different subsystem from §0c. Shipping
+both at once, on a day that had already been spent chasing version ghosts, is
+how the next session starts by chasing these.
+
+**Build it on `moveTier`** (store.js) — `collectTier` / `writeAll` /
+`deleteAll` / verify-before-delete / the "copied but could not clear the
+originals" branch all exist and are proven. Three things make it bigger than
+it looks:
+
+1. **A project takes its sessions.** `clockIn` routes off the project, so
+   moving one without its ledger splits the time records across two boards.
+2. **A task takes its chain, transitively.** `createFollowUpChain` sets
+   `parentTaskId = prevId`, so chains are a linked list, and
+   `rewindFollowUps` queries ONE board. A partial move breaks the query
+   rather than erroring.
+3. **A moved task's `mirroredGcalEventId` points into the SOURCE board's
+   mirror calendar** (E40 scoped mirror tags per workspace). Null it and let
+   the poll re-mirror.
+
+Undo comes free: `pushUndo("project edit", before, after)` captures `tierId`,
+so an undo routes back through the same path.
+
+**The regression test also repairs the specimen.** Change
+`sumnerk12 made project` to `Personal`, then back to `sumner vs gmail`.
+Pre-fix both are no-ops on location; post-fix the second moves it onto the
+shared board and gmail sees it appear. **Do not delete the specimen until
+then** — it is the only mis-routed document in the system and `whereis` flags
+it identically from both accounts, which is a working test fixture.
 
 ---
 
@@ -716,6 +890,20 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST DEPLOY, FIRST FAILURE.** Nico's sign-in died on permission-denied. Cause was mine: rules 1.1.0's collection-group clause matched the document ID, which cannot secure a query. **The clause carried a paragraph of confident reasoning for why it was safe, and that reasoning was about the wrong operation** — the surest sign a comment needs checking is that it argues rather than states. Fixed in 1.1.1 (match the field, filter on the field). Two things fixed alongside that were not the bug but made it expensive: the E17 screen blamed the network for a refusal that retrying can never fix, and the console said "bootstrap failed" without naming which of four steps. **Also made the failing query non-fatal — it was an optional lookup that could strand every new user, which is not optional.** Filled in SETUP-2.0's Part 0 and Part 9 blanks, which Jake caught: the real values were in the completion block at the top, so the document disagreed with itself and read as unfinished work. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 4 — houses and keys.** Jake stopped the deploy, said the permission description was more technical than he could follow, and re-described the target audiences himself. **He was right to stop, and the re-description contained a correction I had got wrong:** E25 had Jake owning Katie's board, which made her a guest in her own practice. Reversed — she owns hers, he owns Nico's, same mechanism opposite directions. He then improved on it, inventing the dependent workspace and the minor flag unprompted. **Two bugs came out of walking HIS description through MY rules rather than re-reading them:** Nico could have left his own board through a door marked "leave" (E33), and Nico's first sign-in would have built him a second board his parents never held (the adoption path). Neither was findable by reading the file; both were obvious the moment a real person's Tuesday was traced through it. **Lesson worth keeping: when the human re-describes the problem in their own words, walk the code through THEIR version, not yours.** Also declined to hotfix a latent 1.x tab-selector bug — no symptom, so E27 doesn't fire; a dual-fix window that covers every shared imperfection stops being paid. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th) | **Named for *Amphioctopus marginatus*, the coconut octopus — the only one that carries its shelter with it, disassembled, and rebuilds it somewhere else, never exposed in between.** That is §11 and §15 exactly. The other half: *marginatus* means "bordered," and E1 is the whole design — the boundary is a path, not a field. **Built items 1→3.** Jake's answers from the day became E23–E31; the two biggest are E24 (2.0.0 = the board switcher, his own definition, D67's shape) and E30 (store.js absorbs the workspace so 7,100 lines of app.js + queue.js cross unchanged). **Found the doubled 1.x stylesheet** while reading it to port it, measured the blast radius instead of assuming it, and explicitly ruled it OUT as an explanation for Katie's phone — the finding that would have been most tempting to over-claim. Caught the manifest's absolute `id` by running E4a's sweep rather than trusting that a byte-identical carry is a safe carry. **Process note for successors: the 1.x repo did not arrive in the first upload and I said so instead of inferring the missing files** — three of the four documents I needed were in hand, and the fourth was one sentence away. |
+
+---
+
+**Haliphron (17th)** — *Haliphron atlanticus*, the "seven-arm octopus," which
+has eight. The eighth is coiled in a sac beneath the right eye, so every early
+count came up one short and the miscount became the permanent name. A limb
+that exists but is not where anyone looks is this session end to end: a
+`version-check.mjs` six files instructed you to run and nobody had written; a
+patch sitting in a file while the pin asked for the version before it; a
+project whose tier had moved and whose document had not; a colleague's
+finished stage still on the server while the screen wrote over it. Nothing
+here was hidden. It was all just counted from the outside.
+
+*Haliphron, 2026-07-30.* 🐙
 
 ---
 
