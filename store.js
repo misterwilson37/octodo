@@ -1,11 +1,24 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.27.0
+// Version 0.28.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
 // RECENT:
+// 0.28.0 — §0d CLOSED: A TIER CHANGE ACROSS BOARDS NOW MOVES THE DOCUMENT.
+//          updateProject/updateTask routed with wsOf(id) — the board the
+//          document was ALREADY on — so changing tierId rewrote the field
+//          and left the document behind, where collectTier (source board
+//          only) could never see it again. moveProject takes the project AND
+//          its sessions; moveTask takes the whole follow-up chain and drops
+//          mirroredGcalEventId so the poll re-mirrors on the new board.
+//          Same copy → verify → delete order as moveTier.
+//          Also: deleteProject now takes its sessions with it. It deleted one
+//          document, and every surface reaches a session THROUGH its project,
+//          so the ledger of a deleted project became unreachable rows nothing
+//          could render and nothing would clean up. Found by whereis's
+//          session audit on 2026-07-31, in Jake's live data.
 // 0.27.0 — UNSHARE IS OWNER-ONLY, AND deleteAll STOPS LYING.
 //          (1) unshareTier refused nothing, so a guest's "bring it back"
 //          COPIED the entire tier onto their own board and only THEN hit the
@@ -48,7 +61,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "0.27.0";
+export const STORE_VERSION = "0.28.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -1107,6 +1120,139 @@ async function collectTier(wsId, tierId) {
   return { tier: tierSnap, tasks: taskSnap.docs, projects: projSnap.docs, sessions, events: evSnap.docs };
 }
 
+/**
+ * ⚠️ 0.28.0 — WHAT TRAVELS WITH A SINGLE PROJECT, AND WHY IT IS NOT JUST THE
+ * PROJECT. `clockIn` routes a session off `wsOf("projects", projectId)`, not
+ * off the tier. So a project that changes boards without its ledger leaves
+ * every past session stranded on the old board while every future one lands
+ * on the new — a split time record, and the halves each look complete.
+ */
+async function collectProject(wsId, projectId) {
+  const [projSnap, sessSnap] = await Promise.all([
+    getDoc(doc(db, "workspaces", wsId, "projects", projectId)),
+    getDocs(query(colIn(wsId, "sessions"), where("projectId", "==", projectId)))
+  ]);
+  return { project: projSnap, sessions: sessSnap.docs };
+}
+
+/**
+ * ⚠️ 0.28.0 — A FOLLOW-UP CHAIN IS A LINKED LIST AND MUST MOVE WHOLE.
+ * `createFollowUpChain` sets `parentTaskId = prevId`, so B follows A and C
+ * follows B — arbitrarily deep. `rewindFollowUps` queries ONE board. A chain
+ * split across two boards does not error; the query simply stops returning
+ * the far half, and an undo silently leaves descendants behind.
+ *
+ * Walks breadth-first with a seen-set, because a corrupt parent pointer that
+ * formed a cycle would otherwise hang the app rather than misbehave visibly.
+ */
+/**
+ * The chain walk, as a pure function — no Firestore. Breadth-first from
+ * `rootId`, asking `childrenOf(id)` for the next level, returning every id
+ * reached in discovery order.
+ *
+ * ⚠️ THE SEEN-SET IS NOT AN OPTIMISATION. A `parentTaskId` that pointed back
+ * up its own chain — from a bad import, a restored tombstone, or a bug not
+ * yet written — would make this loop forever, and an app that hangs is worse
+ * than one that misbehaves visibly. Split out so `node move.test.mjs` can
+ * prove the cycle case without needing a corrupt database to prove it on.
+ */
+export async function walkChain(rootId, childrenOf) {
+  const order = [rootId];
+  const seen = new Set([rootId]);
+  let frontier = [rootId];
+  while (frontier.length) {
+    const lists = await Promise.all(frontier.map(childrenOf));
+    frontier = [];
+    for (const kids of lists) for (const id of kids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      order.push(id);
+      frontier.push(id);
+    }
+  }
+  return order;
+}
+
+async function collectTaskChain(wsId, taskId) {
+  const rootSnap = await getDoc(doc(db, "workspaces", wsId, "tasks", taskId));
+  if (!rootSnap.exists()) return { tasks: [] };
+  const byId = new Map([[taskId, rootSnap]]);
+  const order = await walkChain(taskId, async id => {
+    const snap = await getDocs(query(colIn(wsId, "tasks"), where("parentTaskId", "==", id)));
+    for (const d of snap.docs) if (!byId.has(d.id)) byId.set(d.id, d);
+    return snap.docs.map(d => d.id);
+  });
+  return { tasks: order.map(id => byId.get(id)).filter(Boolean) };
+}
+
+/**
+ * Move ONE project, with its sessions, from one board to another. Same
+ * copy → verify → delete order as moveTier, for the same reason: a refused
+ * write must leave the originals where they were.
+ */
+async function moveProject(fromWs, toWs, projectId, patch = {}) {
+  const got = await collectProject(fromWs, projectId);
+  if (!got.project.exists()) throw new Error("that project no longer exists");
+
+  await writeAll([
+    { ref: doc(db, "workspaces", toWs, "projects", projectId), data: { ...got.project.data(), ...patch } },
+    ...got.sessions.map(d => ({ ref: doc(db, "workspaces", toWs, "sessions", d.id), data: d.data() }))
+  ]);
+
+  const landed = await collectProject(toWs, projectId);
+  const expected = 1 + got.sessions.length;
+  const actual = (landed.project.exists() ? 1 : 0) + landed.sessions.length;
+  if (actual < expected) {
+    throw new Error(
+      `Only ${actual} of ${expected} documents arrived on the new board, so NOTHING has been ` +
+      `deleted and the project is still where it was. Its tier was not changed.`);
+  }
+
+  await deleteAll([...got.sessions.map(d => d.ref), got.project.ref]);
+  noteWhere("projects", projectId, toWs);
+  for (const d of got.sessions) noteWhere("sessions", d.id, toWs);
+  return { moved: expected };
+}
+
+/** Move ONE task and every follow-up hanging off it. */
+async function moveTask(fromWs, toWs, taskId, patch = {}) {
+  const got = await collectTaskChain(fromWs, taskId);
+  if (!got.tasks.length) throw new Error("that task no longer exists");
+
+  await writeAll(got.tasks.map(d => {
+    const data = { ...d.data() };
+    // ⚠️ E40 scopes mirror tags PER WORKSPACE, so this id points at an event
+    // on the OLD board's mirror calendar. Carrying it across would leave a
+    // task pointing at an event nothing on the new board owns, and the poll
+    // would never reconcile it. Drop it and let the poll re-mirror.
+    if (data.mirroredGcalEventId) data.mirroredGcalEventId = null;
+    // Only the root's tier changes; a follow-up inherits its parent's.
+    return { ref: doc(db, "workspaces", toWs, "tasks", d.id), data: d.id === taskId ? { ...data, ...patch } : data };
+  }));
+
+  const landed = await collectTaskChain(toWs, taskId);
+  if (landed.tasks.length < got.tasks.length) {
+    throw new Error(
+      `Only ${landed.tasks.length} of ${got.tasks.length} tasks arrived on the new board, so ` +
+      `NOTHING has been deleted. The task and its follow-ups are still where they were.`);
+  }
+
+  await deleteAll(got.tasks.map(d => d.ref));
+  for (const d of got.tasks) noteWhere("tasks", d.id, toWs);
+  return { moved: got.tasks.length };
+}
+
+/**
+ * Does this edit move the document to a tier on a DIFFERENT board?
+ * Returns null when it does not, so the ordinary path stays one updateDoc.
+ */
+function rehomeFor(coll, id, fields) {
+  if (!fields || !("tierId" in fields) || fields.tierId == null) return null;
+  const from = wsOf(coll, id);
+  const to = wsOfTier(fields.tierId);
+  return from === to ? null : { from, to };
+}
+
 /** Move a tier and its contents from one board to another, ids intact. */
 async function moveTier(fromWs, toWs, tierId, tierPatch = {}) {
   const got = await collectTier(fromWs, tierId);
@@ -1800,6 +1946,13 @@ export function deleteTask(taskId) {
  * human moving a date does.
  */
 export async function updateTask(taskId, fields) {
+  // ⚠️ 0.28.0 — §0d, task half. Checked BEFORE the dueAt bookkeeping below,
+  // because a move rewrites the document wholesale and the reschedule count
+  // rides along inside it. Doing it the other way round would write the
+  // counter to the old board and then move a copy without it.
+  const move = rehomeFor("tasks", taskId, fields);
+  if (move) return moveTask(move.from, move.to, taskId, fields);
+
   const ref = docIn("tasks", taskId);
   if (!("dueAt" in fields)) return updateDoc(ref, fields);   // nothing to count
 
@@ -2085,14 +2238,41 @@ export async function addProjectWithStages({ name, color, startDate, endDate, ti
   return ref;
 }
 
-export function deleteProject(projectId) {
-  return deleteDoc(docIn("projects", projectId));
+/**
+ * ⚠️ 0.28.0 — DELETING A PROJECT TAKES ITS CLOCKED TIME WITH IT.
+ *
+ * This used to delete one document. Sessions carry `projectId` and nothing
+ * else, and every surface that can show a session reaches it THROUGH its
+ * project — so the ledger of a deleted project became unreachable rows that
+ * no screen in the app could render and nothing would ever clean up.
+ *
+ * Found on 2026-07-31 by whereis 1.2.0's session audit, which was built to
+ * catch mis-ROUTING and caught this instead: an 8:02 PM session sitting on a
+ * personal board whose project was "not visible to you" from BOTH accounts
+ * that hold keys to that board. The project was gone; the ledger was not.
+ *
+ * Deleted rather than re-homed, deliberately: the time was spent on a thing
+ * the user has just said they no longer want a record of, and a session with
+ * no project cannot be displayed, exported or attributed.
+ */
+export async function deleteProject(projectId) {
+  const home = wsOf("projects", projectId);
+  const sess = await getDocs(query(colIn(home, "sessions"), where("projectId", "==", projectId)));
+  await deleteAll([...sess.docs.map(d => d.ref), docIn("projects", projectId)]);
+  return { sessionsRemoved: sess.docs.length };
 }
 
 /** Edit project fields (name, color, tierId, startDate, endDate). Stage
  *  activations are COMPUTED from dates, so moving a project reflows its
  *  pipeline automatically — no stage cleanup needed. */
-export function updateProject(projectId, fields) {
+export async function updateProject(projectId, fields) {
+  // ⚠️ 0.28.0 — §0d. `docIn` resolves to the board the document is ALREADY
+  // on, so changing tierId to a tier on another board used to rewrite the
+  // field and leave the document behind. It then became invisible to every
+  // later share and unshare, because collectTier queries the SOURCE board
+  // only — which is how `gmail made I` ended up stranded.
+  const move = rehomeFor("projects", projectId, fields);
+  if (move) return moveProject(move.from, move.to, projectId, fields);
   return updateDoc(docIn("projects", projectId), fields);
 }
 
