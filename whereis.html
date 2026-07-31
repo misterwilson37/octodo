@@ -1,7 +1,26 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — whereis.html
-     Version 1.3.1 — THE VERSION IS ON THE PAGE. Jake, 2026-07-30: "You
+     Version 1.4.0 — RETIRES FIVE CONSOLE-DIVING TESTS. TIER-6, TIER-7,
+     SKIN-1, SKIN-2 and BASE-7 were all written as "open the Firestore
+     console, click into a document, eyeball a field" — from two accounts,
+     for some of them. Every fact they ask for is readable from here, from
+     one account, in one page load. A test that costs a console session is a
+     test that waits for a free evening.
+
+     Three new sections: your tier order and colours beside the canonical
+     values and everybody else's published ranks; every key on every board
+     you can see, with roles; and a provenance audit that COUNTS the four E9
+     stamps across every task, project and stage instead of asking you to
+     eyeball one document and generalise.
+
+     ⚠️ The boards table header is now derived FROM `SUBS`. It used to be a
+     hand-written list sitting beside a `SUBS.map()` loop, so adding
+     "members" to the scan shifted every count one column left, silently. A
+     second list that must be kept in step with the first is the same shape
+     of bug as the keep-list that ate `completedBy` and the `?v=` pins.
+
+     (prev) Version 1.3.1 — THE VERSION IS ON THE PAGE. Jake, 2026-07-30: "You
      didn't put the version anywhere on that page, so I can't see what version
      it is on load." A diagnostic that cannot tell you whether IT is the
      current one is a diagnostic you have to diagnose. It is beside the title,
@@ -106,11 +125,12 @@
   .stage-detail { padding: 4px 0 4px 14px; line-height: 1.7; }
   .stage-detail code { font-size: 11px; opacity: .55; }
   #wv { font-size: 13px; font-weight: 400; opacity: .55; vertical-align: middle; }
+  .hit { color: #4dd0c4; font-weight: 600; }
 </style>
 </head>
 <body>
 
-<h1>🔍 Where is it? <span id="wv">v1.3.1</span></h1>
+<h1>🔍 Where is it? <span id="wv">v1.4.0</span></h1>
 <p class="sub">Read-only. Lists every board you hold a key to, everything in it, and flags any <b>task</b> or <b>project</b> sitting in a different board from its own tier — or any <b>session</b> sitting in a different board from its project.</p>
 
 <div class="box">
@@ -165,7 +185,7 @@ function stageDetail(r) {
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const SUBS = ["tiers", "tasks", "projects", "sessions", "settings", "eventsCache"];
+const SUBS = ["tiers", "tasks", "projects", "sessions", "settings", "eventsCache", "members"];
 
 $("#go").onclick = async () => {
   $("#go").disabled = true;
@@ -201,6 +221,16 @@ $("#go").onclick = async () => {
     }
     boards.push(b);
   }
+
+  // 1.4.0 — YOUR profile. tierRanks / tierColors / tierLabels live here,
+  // keyed "wsId:tierId", and they are the entire per-user layer: your order,
+  // your colours, your names. Rules allow users/{email} only where it is your
+  // own, so this is exactly as private as it looks.
+  let profile = {};
+  try {
+    const u = await getDoc(doc(db, "users", me));
+    profile = u.exists() ? u.data() : {};
+  } catch { profile = null; }   // null = could not read, which is itself a finding
 
   // tierId -> the board its tier document actually lives in
   const tierHome = new Map();
@@ -321,7 +351,12 @@ $("#go").onclick = async () => {
   }
 
   h += `<h2>Boards you hold a key to (${boards.length})</h2>` + tbl(
-    ["name", "kind", "owner", "your key", "tiers", "tasks", "projects", "sessions", "settings", "events", "id"],
+    // 1.4.0 — this header is generated FROM `SUBS`, because it used to be a
+    // hand-written list beside a `SUBS.map()` loop, and adding "members" to
+    // the scan silently shifted every count one column left. A second list
+    // that has to be kept in step with the first is the same shape of bug as
+    // the keep-list that ate `completedBy` (5b-i) and the `?v=` pins.
+    ["name", "kind", "owner", "your key", ...SUBS.map(s => s === "eventsCache" ? "events" : s), "id"],
     boards.map(b => `<tr>
       <td>${esc(b.meta?.name ?? "?")}</td><td>${esc(b.meta?.kind ?? "?")}</td>
       <td class="dim">${esc(b.meta?.ownerEmail ?? "?")}</td><td>${esc(b.role)}</td>
@@ -337,6 +372,110 @@ $("#go").onclick = async () => {
           <code>${esc(t.color)}</code></td>
       <td><code>${esc(t.id)}</code></td></tr>`)).join("")
   );
+
+  // ======================================================================
+  // 1.4.0 — THE SECTIONS BELOW EXIST TO RETIRE CONSOLE-DIVING TESTS.
+  // TIER-6, TIER-7, SKIN-1, SKIN-2 and BASE-7 were all written as "open the
+  // Firestore console, click into a document, eyeball a field" — from two
+  // accounts, for some of them. Every fact they ask for is readable here,
+  // from one account, in one page load. A test that costs a console session
+  // is a test that waits for a free evening; this is the same trade the
+  // version badge made against a separate checkup page.
+  // ======================================================================
+
+  // ---- Who your order and colours actually belong to -------------------
+  // canonical: the tier document, which is what somebody with no overrides sees.
+  // yours:     users/{you}, keyed "wsId:tierId".
+  // theirs:    workspaces/{ws}/members/{them}.tierRanks, keyed by BARE tierId —
+  //            a different key shape, shared boards only. Getting that wrong
+  //            is how a rank silently reads as unset.
+  if (profile === null) {
+    h += `<h2>Your order and colours</h2><p class="bad">Could not read your own
+          <code>users/</code> profile. That is unusual — the rules allow it only for yourself,
+          so it usually means you are signed in as a different account than you think.</p>`;
+  } else {
+    const skinRows = [];
+    for (const b of boards) for (const t of b.docs.tiers) {
+      const key = `${b.wsId}:${t.id}`;
+      const myRank  = (profile.tierRanks  || {})[key];
+      const myColor = (profile.tierColors || {})[key];
+      const myLabel = (profile.tierLabels || {})[key];
+      const others = (b.docs.members || [])
+        .filter(m => m.id !== me && (m.tierRanks || {})[t.id] != null)
+        .map(m => `${m.id}: ${(m.tierRanks || {})[t.id]}`);
+      const overridden = myLabel != null || myColor != null;
+      const rankDiffers = myRank != null && String(myRank) !== String(t.rank);
+      if (myRank == null && !overridden && !others.length) continue;   // nothing personal here
+      skinRows.push(`<tr>
+        <td>${esc(t.name)}<br><span class="dim">${esc(label(b.wsId))}</span></td>
+        <td>${esc(t.rank)}</td>
+        <td class="${rankDiffers ? "hit" : "dim"}">${myRank == null ? "\u2014" : esc(myRank)}</td>
+        <td class="dim">${others.length ? others.map(esc).join("<br>") : "\u2014"}</td>
+        <td class="${myLabel != null ? "hit" : "dim"}">${myLabel == null ? "\u2014" : esc(myLabel)}</td>
+        <td class="${myColor != null ? "hit" : "dim"}">${myColor == null ? "\u2014" :
+          `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${esc(myColor)};vertical-align:middle"></span> <code>${esc(myColor)}</code>`}</td></tr>`);
+    }
+    h += `<h2>Your order and colours, next to everybody else's</h2>
+          <p class="dim">Canonical is the tier document \u2014 what somebody with no overrides sees.
+          <b>TIER-6/7</b>: your number and theirs must both persist, and visiting their board must show
+          <i>theirs</i>. <b>SKIN-1</b>: your name and colour must never appear in their column.
+          <b>SKIN-2</b>: these hydrate once at sign-in, so a second device shows "\u2014" here until you
+          set them again \u2014 that is expected, not a regression.</p>` +
+      (skinRows.length
+        ? tbl(["tier", "canonical rank", "your rank", "their published rank", "your name", "your colour"], skinRows.join(""))
+        : `<p class="dim">No personal order, name or colour is set on any tier you can see.</p>`);
+  }
+
+  // ---- Keys and roles, per board ---------------------------------------
+  {
+    const memberRows = boards.flatMap(b => (b.docs.members || []).map(m => `<tr>
+      <td>${esc(label(b.wsId))}</td>
+      <td class="${m.id === me ? "hit" : ""}">${esc(m.id)}${m.id === me ? ` <span class="dim">(you)</span>` : ""}</td>
+      <td>${esc(m.role || "viewer")}</td></tr>`));
+    h += `<h2>Every key, on every board you can see</h2>
+          <p class="dim"><b>KEYS-2/6</b>: a key granted shows up here on reload; a key taken back
+          disappears. <b>TIER-8</b>: this is who can reach each shared tier \u2014 a tier you share with a
+          third person lists them here, and must NOT appear on a board you visit that they hold no
+          key to.</p>` +
+      (memberRows.length ? tbl(["board", "person", "role"], memberRows.join(""))
+        : `<p class="dim">No member documents readable.</p>`);
+  }
+
+  // ---- Provenance audit (E9) -------------------------------------------
+  // BASE-7 asked for four fields to be eyeballed on ONE task in the console.
+  // One hand-picked document proves nothing about the rest, so count them all.
+  {
+    const gaps = [];
+    const want = (obj, fields, what, name) => {
+      const missing = fields.filter(f => obj[f] == null);
+      if (missing.length) gaps.push({ what, name, missing });
+    };
+    const FOUR = ["createdBy", "createdAt", "completedBy", "completedAt"];
+    const TWO  = ["createdBy", "createdAt"];
+    for (const b of boards) {
+      for (const t of b.docs.tasks) want(t, t.completedAt ? FOUR : TWO, "task", t.title);
+      for (const p of b.docs.projects) {
+        want(p, TWO, "project", p.name);
+        (p.stages || []).forEach((st, i) => want(st, st?.completedAt ? FOUR : TWO,
+          "stage", `${p.name} \u2192 ${i + 1}. ${st?.name || "(unnamed)"}`));
+      }
+    }
+    h += `<h2>Provenance (E9) \u2014 who made it, who finished it</h2>`;
+    if (!gaps.length) {
+      h += `<p class="ok">\u2713 Every task, project and stage carries all four stamps.
+            <b>BASE-7 passes.</b></p>`;
+    } else {
+      h += `<p class="bad">${gaps.length} document(s) are missing at least one stamp.</p>
+            <p class="dim">\u26a0\ufe0f <b>Old gaps are expected and are NOT a failure.</b> Completions that
+            predate E9, and everything imported from 1.x, never recorded who \u2014 those stamps are gone
+            and are not recoverable. <b>BASE-7 fails only if something you made just now appears
+            here.</b> Add a task, finish it, re-scan: it must not be in this table.</p>` + tbl(
+        ["what", "which", "missing"],
+        gaps.map(g => `<tr><td>${esc(g.what)}</td><td>${esc(g.name)}</td>
+          <td class="bad">${esc(g.missing.join(", "))}</td></tr>`).join("")
+      );
+    }
+  }
 
   h += `<h2>Every project (${projRows.length})</h2>` + (projRows.length ? tbl(
     ["", "project", "board", "tier", "tier lives in", "stages", "created by", "id"],
