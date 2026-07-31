@@ -4,13 +4,19 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.35.1 · store 0.26.1 · queue 0.20.1 · css 0.56.1 · html 0.51.4 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.3.0 · version-check 1.1.0 · stage-merge.test 1.0.0 |
+| **Versions** | app 1.36.0 · store 0.26.1 · queue 0.20.1 · css 0.57.0 · html 0.51.5 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.3.1 · version-check 1.2.0 · stage-merge.test 1.0.0 |
 | **Deployed** | **NOTHING from 2026-07-30 evening is uploaded yet.** whereis 1.1.0 and app ~1.34.1 are what is running. **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
 ### ⚠️ Three things to do before you write a line
+
+**0. `TESTS.md` is the test list. `node version-check.mjs` and
+`node stage-merge.test.mjs` both gate every drop, and BOTH ARE FOR YOU, NOT
+FOR JAKE** — he has no CLI on a school-managed Mac and should never be told to
+run one. Commit them; run them yourself. The browser-facing half of
+version-check now lives in the app's version badge (1.36.0).
 
 **1. `node version-check.mjs`.** It EXISTS NOW (Haliphron, 2026-07-30). Six
 files had instructed the reader to run it since 2026-07-29 and it had never
@@ -172,9 +178,12 @@ project reads exactly as it always did. **The time report still rolls up
 everyone** — that is the billable-hours surface — and `sessionsToCSV` already
 emitted `createdBy`, so "who" was always recoverable from the export.
 
-**Untested in a browser.** TEST-0c below is unrun.
+✅ **ALL SEVEN PASSED, 2026-07-30, two accounts.** The repair works. The
+tests are recorded in `TESTS.md` under their proper names (`STAGE-1…7`) and
+STAGE-3/4 have been promoted to standing checks, because "one clock each" can
+regress the moment anything touches the session layer.
 
-| id | test |
+| id (now STAGE-n in TESTS.md) | test |
 |---|---|
 | 0c-1 | Two accounts, one shared project. A ticks stage 3. B — **with the pipeline editor already open** — reorders and saves. **A's tick survives, and B is told it was kept.** This is the data-loss case. |
 | 0c-2 | B reorders while A's project card is on screen; A then ticks a stage. The tick lands on the stage A clicked, or refuses by name — never on its neighbour. |
@@ -228,6 +237,39 @@ URL and pinned by nothing, so it can go up alone and be run against the
 CURRENT live data before anything else changes. **Do that first**: it captures
 the before-picture of the four stale-order stages while the defect is still
 live. Everything else is an ordinary drop.
+
+---
+
+### 0c-ter. THE BADGE NOW CHECKS ITSELF (app 1.36.0 · css 0.57.0)
+
+D130 has watched for new deploys since 1.x, and it watches **one stamp** —
+`index.html`'s `data-html-version`. That catches an ordinary deploy and is
+blind to the thing that cost 2026-07-30 an evening: **a `?v=` pin left
+pointing at the version before the one on the server.** index.html is never
+cached, so it loads fresh and then asks the browser for a URL the browser
+already holds. The fix is live on the server; the tab runs the old code;
+nothing says so.
+
+`checkDeployedVersions()` fetches **every module's banner from the server**
+with the cache bypassed, reads only the first chunk (so it is not pulling
+300KB of app.js hourly to look at line 3), and compares it to the constant
+this tab is running. Stale rows go into the badge's tooltip and turn the badge
+amber. It runs 4 seconds after boot and hourly.
+
+⚠️ **This was nearly built as a separate `checkup.html`.** Jake killed that:
+*"Isn't the whole point of the hover the version check? Can we just add it to
+the hover in the top left to see if it's stale or not? Why would I want to
+open a new page?"* He is right, and the principle generalises — **a check you
+have to remember to open is a check that does not get run.** That is the same
+failure as the `version-check.mjs` that six files told you to run and nobody
+had written. Put the answer where the question gets asked.
+
+**And the same mistake was made once more in the same session:** whereis 1.3.0
+shipped with no version anywhere on the page. *"You didn't put the version
+anywhere on that page, so I can't see what version it is on load."* A
+diagnostic that cannot tell you whether IT is current is a diagnostic you have
+to diagnose. Fixed in 1.3.1; version-check.mjs now reads the on-page badge as
+that file's constant, so the banner and the badge can never drift apart.
 
 ---
 
@@ -646,34 +688,29 @@ There is **no CNAME** and there should not be one yet — the custom domain gets
 - ~~**Her phone, still blocked on one number.**~~ **The number does not exist. Stop asking for it.** Jake checked: default zoom 100%, no per-site zoom saved, **no "Text scaling" entry in that menu at all**, Samsung screen-zoom / font-size / font-style changed nothing on the page, Magnifier off. Four theories now, and the diagnostic path is exhausted — *and* 5a.1 forbids spending her time on a fifth.
   **What that means for whoever picks this up:** the fix has to be code-side and robust to an unknown scale factor, not a setting to be located. Do not open this by asking either of them to read a number off a phone.
 
-### 5b. Smoke tests
+### 5b. Smoke tests → **`TESTS.md`**
 
-> **Passed one-time tests are DELETED, not archived** — Jake, 2026-07-28: *"I would think that you could safely just clean them out of the document when they're passed."* Right, with one exception kept below: a handful guard invariants that can silently regress, so they move to **Standing checks** rather than disappearing. A test that proved a build step happened has no second life; a test that proves isolation still holds has one every time the data layer moves.
->
-> **VOCABULARY, because this document leaked an implementation detail into Jake's hands.** A **shared tier** is the only thing that exists in the UI. Under it, the app creates a small hidden **workspace** to hold that tier — because E1 makes access a property of the PATH, so a thing two people can reach has to *live* somewhere both hold a key to. **You never see it:** it is filtered out of the switcher, has no dashboard, and the word "workspace" appears nowhere on screen. It is visible only in the Firestore console, as a `workspaces/` document with `kind: "shared"`. Tests below say **"the tier's own hidden board (`kind: "shared"` in the console)"** and never just "the shared workspace."
+⚠️ **THE TEST LIST LIVES IN `TESTS.md` NOW. Do not re-create one here.**
 
-**⏳ Still to run.**
+Jake, 2026-07-30: *"I just need to know which smoke tests still need to be
+done. There are a lot, and I feel like we've done several of them. And I
+still don't understand what a lot of these numbering systems mean."* Both
+complaints were fair and both were caused by this section: passed tests were
+being kept for their reasoning, seven id schemes had accumulated, and the
+to-do was interleaved with the history.
 
-1. **BASE-7. Provenance is landing — all four fields, tasks AND stages.** *Partially failed 2026-07-28 and fixed twice; this is the re-run.* Console: [console.firebase.google.com](https://console.firebase.google.com) ▸ project ▸ **Build ▸ Firestore Database** ▸ **Data** ▸ `workspaces` ▸ your board ▸ `tasks` ▸ a completed task. Want `createdBy` + `createdAt` + `completedBy` + `completedAt`. **Then the harder half:** open a project, complete a stage, **edit the stage list and save**, and confirm the finished stage *still* carries `completedBy` and now also `createdBy`. That edit is what used to erase it.
-2. **KEYS-2. Somebody invites you to a whole BOARD.** They sign in, ⚙️ ▸ **People**, your address, "Can edit", *Give them a key*. **Nothing for you to accept.** Reload: the chip appears. *(A colleague has invited Jake to a TIER, which is a different mechanism and passed as TIER-1.)*
-3. **KEYS-4. Your settings stay yours.** In their house you keep *your* view, *your* hidden tiers, *your* week layout — per-device, not per-board, deliberately.
-4. **KEYS-5. It remembers.** **One reload is the whole test.** Switch to Nico's board, **reload**, land back on Nico's. Switch to your own, reload, your own.
-5. **KEYS-6. They can take the key back.** Removed in ⚙️ ▸ People → that board leaves your switcher on reload, and opening it directly fails.
-6. **TIER-4. The tier went in whole.** Projects on that tier came across, and so did their clocked sessions — the Time Report still totals them. Most likely to be half-done, because sessions are matched to their projects client-side.
-7. **TIER-5. New work lands on the right board.** Add a task to the shared tier. In the console it must appear under **the tier's own hidden board** — the `workspaces/` document with `kind: "shared"` — and **not** under your personal board. If it lands in yours, `wsOfTier` is not resolving and sharing is cosmetic: they will never see it.
-8. **TIER-6. Order is per person, and is a POSITION.** Reorder with ▲▼ — **there is no number to type any more** (app 1.30.0). Your order and theirs both hold. `users/{you}.tierRanks` gains a `"wsId:tierId"` entry, and your row in the shared tier's `members/` gains a `tierRanks` map.
-9. **TIER-7. Visiting is an honest picture.** Rank the shared tier differently from them and **save yours LAST**, then visit their board: it must show at **their** number. *Saving last is the test — run it the other way and the broken and fixed versions both pass.*
-10. **TIER-8. Jake's merge rule.** On someone's board, a tier you share **with them** is still there; a tier you share with a **third** person must **not** appear. Nothing else tests the rule he corrected.
-11. **⚠️ TIER-9. Bring it back.** 🤝 ▸ *Bring it back to my board* → everything returns, the tier's hidden board **disappears from the console**, and they can no longer see any of it. **Can lose data if wrong.**
-12. **⚠️ TIER-10. Undo lands on the right board.** Delete a task on a shared tier, undo, and confirm **in the console** that it returned to the tier's hidden board rather than your personal one. Only test of the tombstone map, and **its failure is silent** — the task looks correct on your screen and is gone forever from theirs. **Can lose data if wrong.**
+**The split is now:** `TESTS.md` holds what is left to run, in plain language,
+grouped by consequence — and a test comes off it when it passes.
+`HANDOFF-2.0.md` holds why, and the failure modes worth remembering. The
+sections below (5b-i, 5b-ii) are history and stay history.
 
-**🔁 Standing checks — re-run after ANY data-layer change.** These passed; they are here because they can regress without anybody noticing.
+**`TESTS.md` opens with a decoder for every prefix** — BASE, KEYS, TIER,
+STAGE, CAL, E41, RULES — and says plainly that D-numbers and E-numbers are
+*not tests*, which is what made the list unreadable.
 
-1. **BASE-6. Isolation (E1).** A second account gets its own board with its own three tiers and **cannot see Jake's tasks**. Console: two `workspaces/` documents with different `ownerEmail`s. *This is the entire security model. If it ever fails, nothing else on this page matters.*
-2. **BASE-9. You can sign in as somebody ELSE.** After ⏻, signing in must **offer a list of accounts**, including *Use another account*. Regressing this makes every two-person test below unreachable and looks like a broken sign-out. *(Was broken until store 0.21.2: `signInWithPopup` with a bare provider never draws a chooser where the device has one Google account.)*
-3. **TIER-3. Same document, live, two real people.** Two people on one shared tier see one task and either can toggle it, live. *Passed 2026-07-28 with a colleague — this is item 5 actually working, and it is the thing all the machinery is for.*
-
-**Item 7 — calendars.** Group **CAL-1…8**, in SETUP-PHASE3-2.0.md Part 6 as WW1–WW8. **CAL-8 is new and 1.x could not have had it:** the report must name more than one board, and one person's broken calendar share must show as `error` on *their* row while everybody else's is fine.
+⚠️ **Never name a test after where it is written down.** `0c-1…0c-7` were
+numbered after a section of this file, which means nothing to anybody reading
+the app. They are `STAGE-1…STAGE-7` now.
 
 ### 5b-i. Closed 2026-07-28
 
