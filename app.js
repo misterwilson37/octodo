@@ -1,11 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.38.0
+// Version 1.39.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.39.0 — A "LATER" GROUP, so finishing a project actually clears the
+//          plate. Duplicate-for-next-year works exactly as designed and
+//          handed the reward straight back: the copy appears immediately in
+//          the projects panel. Anything starting past a configurable horizon
+//          (default 90 days) now folds into a collapsed group beside
+//          Finished — same idiom on purpose; a second way to say "present
+//          but out of the way" would be one to learn for nothing.
+//          Undated projects are NEVER folded: undated means someday, which
+//          is the Want-tos tab's job.
 // 1.38.0 — Deleting a project now warns that its clocked time goes too
 //          (store 0.28.0 stopped orphaning it), with the hours in the
 //          confirm. Time somebody spent is the thing worth warning about.
@@ -65,7 +74,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.38.0";
+export const APP_VERSION = "1.39.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -381,6 +390,7 @@ const S = {
   uncheckTarget: null,      // task pending the un-complete rewind choice (D53)
   expandedProjects: new Set(JSON.parse(localStorage.getItem("tc-expanded-projects") || "[]")), // D56
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
+  showLater: localStorage.getItem("tc-show-later") === "1",        // 1.39.0
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
   view: ["year", "week", "day", "dash"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88/D105 (persists per device; setView bounces "dash" to "day" on small glass)
   dashCols: Math.min(80, Math.max(20, parseFloat(localStorage.getItem("tc-dash-cols")) || 50)),  // D105: year pane's share of the wall
@@ -1909,6 +1919,13 @@ function timelessTier() {
  *  change the WHOLE workspace's character, not just the center panel.
  *  Both #projects-list (the sidebar) and #wanttos-list read through here
  *  now, so they can't disagree about what belongs on screen right now. */
+/** 1.39.0 — the Later horizon, in ms. 0 disables folding entirely, which is
+ *  the honest way to say "I want to see everything" without a second flag. */
+function laterHorizonMs() {
+  const days = S.config?.laterHorizonDays ?? 90;
+  return days > 0 ? days * 86400000 : Infinity;
+}
+
 function projectsForMode() {
   const tt = timelessTier();
   return S.projects.filter(p => S.todoMode === "want" ? p.tierId === tt?.id : p.tierId !== tt?.id);
@@ -2605,8 +2622,28 @@ function renderProjects(now) {
   // D56: unfinished projects up top (whatever their dates — a stalled
   // past project stays visible on purpose); finished ones fold into
   // their own collapsed section below. Both keep start-date order.
-  const open = projects.filter(p => !p.completedAt);
+  const openAll = projects.filter(p => !p.completedAt);
   const finished = projects.filter(p => p.completedAt);
+  // 1.39.0 — "I just completed a couple of projects (huzzah!) and
+  // Tentacalendar helpfully duplicated them for next year (double huzzah!).
+  // But now, they're already visible in my project pane, so it doesn't feel
+  // like I've emptied my plate at all."
+  //
+  // The duplicate-for-next-year feature works exactly as intended and its
+  // reward — a cleared plate — was being handed straight back. A project
+  // that starts in eleven months is not work; it is a placeholder, and
+  // placeholders belong where Finished already lives: real, reachable, and
+  // not in the way. Same collapsed-group pattern, deliberately: a second
+  // idiom for "present but out of the way" would be one to learn for
+  // nothing.
+  //
+  // Threshold is a horizon in DAYS from today, not a date, so it stays true
+  // as time passes. A project with no start date is never "later" — undated
+  // means someday, which is the want-tos tab's whole job.
+  const horizon = laterHorizonMs();
+  const isLater = p => p.startDate != null && startOfDayTs(p.startDate) > Date.now() + horizon;
+  const open = openAll.filter(p => !isLater(p));
+  const later = openAll.filter(isLater);
 
   // D122 — Katie's NOW bar: the current project and how long she's been
   // on it, at the top of the list. Exists ONLY while a timer runs (an
@@ -2653,6 +2690,22 @@ function renderProjects(now) {
   }
 
   for (const p of open) box.append(projectCard(p));
+
+  if (later.length) {
+    const toggle = document.createElement("button");
+    toggle.className = "mini finished-toggle later-toggle";
+    const soonest = later.reduce((m, p) => Math.min(m, startOfDayTs(p.startDate)), Infinity);
+    toggle.textContent = `${S.showLater ? "▾" : "▸"} Later (${later.length})`;
+    toggle.title = `Not started yet — the nearest begins ${fmtDay(soonest)}. ` +
+      `Change the horizon in ⚙️ Settings ▸ Timing.`;
+    toggle.addEventListener("click", () => {
+      S.showLater = !S.showLater;
+      localStorage.setItem("tc-show-later", S.showLater ? "1" : "0");
+      render();
+    });
+    box.append(toggle);
+    if (S.showLater) for (const p of later) box.append(projectCard(p));
+  }
 
   if (finished.length) {
     const toggle = document.createElement("button");
@@ -5926,6 +5979,7 @@ function openSettings() {
   $("#cfg-alert-vol").value = String(Math.round(alertVol() * 100));
   refreshAlertStatus();
   $("#cfg-deadline-hour").value = c.deadlineHour ?? 16;   // D51
+  $("#cfg-later-days").value = c.laterHorizonDays ?? 90;  // 1.39.0
   $("#cfg-decision-days").value = c.decisionThresholdDays ?? 2; // D52
   $("#cfg-cleardeck").value = Math.round((c.clearDeckThreshold ?? 0.6) * 100); // D85
   updatePollCostHint();
@@ -6370,6 +6424,7 @@ function onSaveSettings() {
     sleepStart: clampInt($("#cfg-sleep-start").value, 0, 23, 22),
     sleepEnd: clampInt($("#cfg-sleep-end").value, 0, 23, 6),
     deadlineHour: clampInt($("#cfg-deadline-hour").value, 0, 23, 16),      // D51
+    laterHorizonDays: clampInt($("#cfg-later-days").value, 0, 3650, 90),   // 1.39.0
     decisionThresholdDays: clampInt($("#cfg-decision-days").value, 1, 30, 2), // D52
     clearDeckThreshold: clampInt($("#cfg-cleardeck").value, 0, 100, 60) / 100 // D85
   });
