@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.37.0 · store 0.27.0 · queue 0.20.1 · css 0.57.0 · html 0.51.6 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.2.0 · stage-merge.test 1.0.0 |
+| **Versions** | app 1.38.0 · store 0.28.0 · queue 0.20.1 · css 0.57.0 · html 0.51.7 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
 | **Deployed** | ✅ Through app 1.36.0 / whereis 1.3.1 uploaded and swept. **app 1.37.0 · store 0.27.0 · html 0.51.6 · whereis 1.5.0 are NOT uploaded.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
@@ -383,51 +383,47 @@ forbids it. Jake: *"the silly naming system for onboarding (e41? Really?)"*
 
 ---
 
-### 0d. THE TIER-CHANGE HOLE — FOUND, NOT FIXED (next session's opening task)
+### 0d. THE TIER-CHANGE HOLE — CLOSED (app 1.38.0 · store 0.28.0), UNRUN
 
-**`updateProject` and `updateTask` route with `wsOf(id)` — the board the
-document is ALREADY on — so changing a tier from a personal one to a shared
-one rewrites `tierId` and leaves the document behind.** That is how
-`sumnerk12 made project` came to sit in a personal board with its tier in a
-shared one. **Jake confirmed the repro: he created it, then changed its tier.**
-It is not the creation path; `addProject` and `addProjectWithStages` both use
-`wsOfTier` correctly and were verified doing so.
+`updateProject` and `updateTask` routed with `wsOf(id)` — the board the
+document was ALREADY on — so changing a tier from a personal one to a shared
+one rewrote `tierId` and left the document behind. Jake confirmed the repro on
+2026-07-30 (*"I created it and then changed it"*), and the 07-31 sweep showed
+it does not stop there: **`collectTier` queries the SOURCE board only, so a
+mis-routed document is invisible to every later share, unshare and re-share.**
+It is not moved, not reported, and quietly accumulates.
 
-**Only two call sites can change a tierId**: `app.js` task-edit save and
-project-edit save. Everything else passes dates, estimates, recurrence.
+**`rehomeFor(coll, id, fields)`** returns null unless the edit names a tier on
+a different board, so the ordinary path is still one `updateDoc`. When it does
+fire:
 
-**Deliberately deferred, and the reasoning is the point:** it loses nothing
-(the document is intact and `whereis` 1.2.0 now finds it), it needs an
-uncommon deliberate action, and it is a different subsystem from §0c. Shipping
-both at once, on a day that had already been spent chasing version ghosts, is
-how the next session starts by chasing these.
+- **`moveProject`** takes the project **and its sessions**. `clockIn` routes
+  off `wsOf("projects", …)`, not the tier, so a project that moves without its
+  ledger splits the record — and each half looks complete.
+- **`moveTask`** takes the whole follow-up chain, transitively, and **nulls
+  `mirroredGcalEventId`**: E40 scopes mirror tags per workspace, so a carried
+  id points at an event on the OLD board's calendar that nothing on the new
+  one owns, and the poll would never reconcile it.
+- Both use moveTier's copy → verify → delete order, so a refused write leaves
+  the originals in place.
 
-**Build it on `moveTier`** (store.js) — `collectTier` / `writeAll` /
-`deleteAll` / verify-before-delete / the "copied but could not clear the
-originals" branch all exist and are proven. Three things make it bigger than
-it looks:
+⚠️ **Undo comes free and must stay that way.** `pushUndo("project edit",
+before, after)` captures `tierId`, so an undo routes back through the same
+path and moves the document home. Anything that starts stripping `tierId` from
+undo snapshots silently re-opens this.
 
-1. **A project takes its sessions.** `clockIn` routes off the project, so
-   moving one without its ledger splits the time records across two boards.
-2. **A task takes its chain, transitively.** `createFollowUpChain` sets
-   `parentTaskId = prevId`, so chains are a linked list, and
-   `rewindFollowUps` queries ONE board. A partial move breaks the query
-   rather than erroring.
-3. **A moved task's `mirroredGcalEventId` points into the SOURCE board's
-   mirror calendar** (E40 scoped mirror tags per workspace). Null it and let
-   the poll re-mirror.
+**`node move.test.mjs` — 16 assertions**, extracting `walkChain` and
+`rehomeFor` from the real source. The chain walk is where a bug would be
+SILENT: miss a descendant and the chain splits, and `rewindFollowUps` queries
+one board so it does not error — it just stops seeing the far half.
 
-Undo comes free: `pushUndo("project edit", before, after)` captures `tierId`,
-so an undo routes back through the same path.
+⚠️ **Honest note on the sabotage check.** Removing the cycle guard makes the
+suite **hang rather than fail**. That proves the guard is load-bearing and it
+does block a drop, but a hanging suite is a worse signal than a red one. If
+anybody adds a step cap to `walkChain`, this becomes a clean failure.
 
-**The regression test also repairs the specimen.** Change
-`sumnerk12 made project` to `Personal`, then back to `sumner vs gmail`.
-Pre-fix both are no-ops on location; post-fix the second moves it onto the
-shared board and gmail sees it appear. **Do not delete the specimen until
-then** — it is the only mis-routed document in the system and `whereis` flags
-it identically from both accounts, which is a working test fixture.
-
----
+**Still open, and related:** `deleteAll` does not roll back (§0f), and tier
+membership has no roles.
 
 ### PER-USER TIER COLOUR AND NAME — BUILT, UNTESTED (app 1.34.0 · store 0.25.0)
 
