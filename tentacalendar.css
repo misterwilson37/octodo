@@ -1,6 +1,7 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
+   Version 0.59.0 — .st-spawn-wrap, the hurrah follow-up field.
+   (prev) Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
    there is room; "Later" group in the projects panel.
    (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
    state for app 1.36.0's per-file server check.
@@ -17,7 +18,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.58.0"; }
+:root { --tc-version: "0.59.0"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -1973,3 +1974,14 @@ header, .dash-split { transition: opacity 1.2s ease; }
   font-weight: 700;
   cursor: help;
 }
+
+/* 0.59.0 — the hurrah's follow-up field. Lives on the 🎆 row only; hidden
+   rather than removed so toggling the climax between stages does not
+   reflow the editor. */
+.st-spawn-wrap {
+  display: inline-flex; align-items: center; gap: .15rem;
+  font-size: .72rem; color: var(--ink-dim); white-space: nowrap;
+}
+.st-spawn-wrap.hidden { display: none; }
+.st-spawn { width: 3.4em; padding: .15rem .25rem; font-size: .72rem; }
+.later-toggle { opacity: .75; }
