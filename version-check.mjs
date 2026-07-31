@@ -1,0 +1,156 @@
+#!/usr/bin/env node
+// ============================================================
+// Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
+// Version 1.0.0
+//
+// THE THING SIX FILES ALREADY TOLD YOU TO RUN.
+//
+// `app.js`, `store.js`, `queue.js`, `index.html`, `CHANGELOG.md` and
+// `HANDOFF-2.0.md` have all instructed the reader to run
+// `node version-check.mjs` before handing anything over. It did not exist.
+// Every one of those instructions was a prose warning wearing a command's
+// clothes — which is the exact failure mode the warnings were written to
+// stop. Four banner/constant drifts and four stale `?v=` pins accumulated
+// under a check nobody could run.
+//
+// It checks three things and nothing else:
+//
+//   1. BANNER vs CONSTANT. Every file declares its version twice — once in
+//      the comment header a human reads first, once in the constant the code
+//      actually uses. They must agree.
+//
+//   2. PIN vs TARGET. Every `?v=` cache-bust must equal the version of the
+//      file it points at. A pin one patch behind is WORSE than no pin: the
+//      file uploads cleanly and the browser serves the cached old one, so
+//      the fix appears shipped and is not. This is how a repaired bug comes
+//      back in a smoke test.
+//
+//   3. HANDOFF TABLE vs REALITY. The version row at the top of
+//      HANDOFF-2.0.md is what the next instance believes. If it disagrees
+//      with the files, the next instance starts wrong.
+//
+// Exit code 0 = clean, 1 = something drifted. No dependencies, no install.
+//
+// Run from the repo root:  node version-check.mjs
+// ============================================================
+
+import { readFileSync, existsSync } from "node:fs";
+
+const VERSION_CHECK_VERSION = "1.0.0";
+
+const SEMVER = String.raw`\d+\.\d+\.\d+`;
+
+// ---- what carries a version, and how to read both copies of it ----------
+// banner: the version in the comment header.  constant: the one code uses.
+const FILES = [
+  { file: "app.js",              banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const APP_VERSION\s*=\s*"(V)"/m },
+  { file: "store.js",            banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const STORE_VERSION\s*=\s*"(V)"/m },
+  { file: "queue.js",            banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const QUEUE_VERSION\s*=\s*"(V)"/m },
+  { file: "celebrate.js",        banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const CELEBRATE_VERSION\s*=\s*"(V)"/m },
+  { file: "config.js",           banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const CONFIG_VERSION\s*=\s*"(V)"/m },
+  { file: "import-transform.js", banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const TRANSFORM_VERSION\s*=\s*"(V)"/m },
+  { file: "tentacalendar.css",   banner: /^\s*Version\s+(V)/m,               constant: /--tc-version:\s*"(V)"/ },
+  { file: "index.html",          banner: /^\s*Version\s+(V)/m,               constant: /data-html-version="(V)"/ },
+  { file: "import.html",         banner: /^\s*Version\s+(V)/m,               constant: null },
+  { file: "whereis.html",        banner: /^\s*Version\s+(V)/m,               constant: null },
+  { file: "firestore-2.0.rules", banner: /^\/\/\s*Version\s+(V)/m,           constant: null },
+  { file: "functions/index.js",  banner: /^\/\/.*—\s*Version\s+(V)/m,        constant: /^const FUNCTIONS_VERSION\s*=\s*"(V)"/m },
+];
+
+// Files that are pinned but carry no internal version to compare against.
+// manifest.json has no version field; its pin is bumped by hand.
+const UNVERIFIABLE_TARGETS = new Set(["manifest.json"]);
+
+const rx = (r) => (r ? new RegExp(r.source.replace("(V)", `(${SEMVER})`), r.flags) : null);
+
+let problems = 0;
+const fail = (msg) => { problems++; console.log(`  \u2717 ${msg}`); };
+const pass = (msg) => console.log(`  \u2713 ${msg}`);
+
+// ---- 1. banner vs constant ---------------------------------------------
+console.log("\nBANNER vs CONSTANT");
+const actual = new Map();   // filename -> the version we believe it to be
+
+for (const spec of FILES) {
+  if (!existsSync(spec.file)) { fail(`${spec.file} — MISSING FROM REPO`); continue; }
+  const text = readFileSync(spec.file, "utf8");
+
+  const bm = rx(spec.banner)?.exec(text);
+  const cm = spec.constant ? rx(spec.constant).exec(text) : null;
+
+  if (!bm) { fail(`${spec.file} — no version banner found (regex did not match; header reformatted?)`); continue; }
+
+  if (!spec.constant) {
+    actual.set(spec.file, bm[1]);
+    pass(`${spec.file} ${bm[1]} (banner only)`);
+    continue;
+  }
+  if (!cm) { fail(`${spec.file} — banner says ${bm[1]} but the version CONSTANT was not found`); continue; }
+
+  actual.set(spec.file, cm[1]);   // the constant is what runs, so it is the truth
+  if (bm[1] !== cm[1]) fail(`${spec.file} — banner ${bm[1]} \u2260 constant ${cm[1]}   <<< THE DRIFT`);
+  else pass(`${spec.file} ${cm[1]}`);
+}
+
+// ---- 2. every ?v= pin vs its target -------------------------------------
+console.log("\nCACHE-BUST PINS");
+const PIN_HOSTS = ["index.html", "app.js", "store.js", "queue.js", "import.html", "whereis.html"];
+const PIN_RX = /["'](?:\.\/)?([A-Za-z0-9._-]+\.(?:js|css|json))\?v=(\d+\.\d+\.\d+)["']/g;
+let pinCount = 0;
+
+for (const host of PIN_HOSTS) {
+  if (!existsSync(host)) continue;
+  const text = readFileSync(host, "utf8");
+  for (const m of text.matchAll(PIN_RX)) {
+    const [, target, pinned] = m;
+    if (UNVERIFIABLE_TARGETS.has(target)) continue;
+    pinCount++;
+    const line = text.slice(0, m.index).split("\n").length;
+    const truth = actual.get(target);
+    if (!truth) { fail(`${host}:${line} pins ${target}?v=${pinned} — target has no readable version`); continue; }
+    if (truth !== pinned) {
+      fail(`${host}:${line} pins ${target}?v=${pinned} but ${target} is ${truth}` +
+           `\n      \u2192 the file uploads fine and the browser keeps serving ${pinned}. The fix will look shipped and will not be.`);
+    } else pass(`${host}:${line} \u2192 ${target} ${pinned}`);
+  }
+}
+if (!pinCount) fail("no ?v= pins found at all — the pin regex or the markup changed");
+
+// ---- 3. handoff table vs reality ----------------------------------------
+console.log("\nHANDOFF TABLE");
+const HANDOFF = "HANDOFF-2.0.md";
+// the row reads: | **Versions** | app 1.34.0 · store 0.25.0 · ... |
+const LABELS = {
+  app: "app.js", store: "store.js", queue: "queue.js", css: "tentacalendar.css",
+  html: "index.html", celebrate: "celebrate.js", config: "config.js",
+  rules: "firestore-2.0.rules", functions: "functions/index.js",
+  "import.html": "import.html", "import-transform": "import-transform.js",
+  "whereis.html": "whereis.html",
+};
+if (!existsSync(HANDOFF)) fail(`${HANDOFF} missing`);
+else {
+  const row = readFileSync(HANDOFF, "utf8").split("\n").find((l) => /\*\*Versions\*\*/.test(l));
+  if (!row) fail(`${HANDOFF} — no "**Versions**" row found in the header table`);
+  else {
+    for (const [label, file] of Object.entries(LABELS)) {
+      const m = new RegExp(`${label.replace(".", "\\.")}\\s+(${SEMVER})`).exec(row);
+      const truth = actual.get(file);
+      if (!m || !truth) continue;
+      if (m[1] !== truth) fail(`${HANDOFF} says ${label} ${m[1]}, file is ${truth}`);
+      else pass(`${label} ${m[1]}`);
+    }
+  }
+}
+
+// ---- the paste-able row -------------------------------------------------
+const rowOrder = ["app.js","store.js","queue.js","tentacalendar.css","index.html","celebrate.js","config.js","firestore-2.0.rules","functions/index.js","import.html","import-transform.js","whereis.html"];
+const short = { "tentacalendar.css": "css", "index.html": "html", "firestore-2.0.rules": "rules", "functions/index.js": "functions", "import-transform.js": "import-transform" };
+const nice = (f) => short[f] || f.replace(/\.js$/, "");
+console.log("\nCURRENT STATE, ready to paste into the handoff table:\n");
+console.log("| **Versions** | " + rowOrder.filter((f) => actual.has(f)).map((f) => `${nice(f)} ${actual.get(f)}`).join(" \u00b7 ") + " |\n");
+
+console.log(problems === 0
+  ? "\u2705 CLEAN \u2014 banners, constants, pins and the handoff table all agree.\n"
+  : `\u274c ${problems} problem${problems === 1 ? "" : "s"}. Nothing goes to Jake until this is clean.\n`);
+
+process.exit(problems ? 1 : 0);
