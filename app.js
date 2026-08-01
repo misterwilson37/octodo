@@ -1,11 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.40.0
+// Version 1.41.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.41.0 — TWO BUGS FOUND BY JAKE RUNNING THE TESTS.
+//          (1) The first ✎ click after a hard refresh warned about unsaved
+//          changes on an untouched form: D131 baselines the project form at
+//          boot, when #project-tier is still EMPTY, and refreshTierSelects
+//          then fills it — a change the user never made. The clean/dirty
+//          state now carries ACROSS a programmatic refill.
+//          (2) Waiting rows assumed every entry was a follow-up. queue
+//          0.21.0 routes off-day dated tasks there, so they get a checkbox
+//          and the real reason instead of a "+Nd after:" with no parent.
 // 1.40.0 — The 🎆 hurrah carries an optional "↳ +N d" in the stage editor:
 //          ticking it finishes the project AND spawns a dated task. Shown
 //          only on the hurrah row, because on any other row it is the
@@ -80,7 +89,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.40.0";
+export const APP_VERSION = "1.41.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -112,7 +121,7 @@ import {
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
   rollupSessions, rollupToCSV, sessionsToCSV
-} from "./queue.js?v=0.20.1";
+} from "./queue.js?v=0.21.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
 const $ = sel => document.querySelector(sel);
@@ -2203,10 +2212,34 @@ function renderWaiting(waiting) {
   list.innerHTML = "";
   box.hidden = waiting.length === 0;
   for (const t of waiting) {
-    const parent = S.tasks.find(p => p.id === t.parentTaskId);
     const tier = S.tiers.find(x => x.id === t.tierId);
     const row = document.createElement("div");
     row.className = "row waiting-row";
+
+    // 1.41.0 — queue 0.21.0 routes a DATED task here when its due date lands
+    // on a day its tier does not work. It is not a follow-up, so it gets a
+    // checkbox and the real reason instead of a "+Nd after:" line it has no
+    // parent for. Before this it appeared on no screen at all.
+    if (t.offDay) {
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.addEventListener("change", ev => { setTaskDone(t.id, true); celebrate(1, clickPoint(ev)); });
+      rowScaffold(row, {
+        lead: cb, tier,
+        mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">due ${fmtDay(t.dueAt)} — ` +
+          `${esc(tier?.name || "this tier")} doesn't run that day, so it waits here instead of nagging</span>`,
+        buttons: [
+          iconBtn("✎", "Edit this task", () => startTaskEdit(t)),
+          iconBtn("✕", "Delete", () => deleteTask(t.id))
+        ],
+        notes: t.notes || "",
+        noteKey: t.id
+      });
+      list.append(row);
+      continue;
+    }
+
+    const parent = S.tasks.find(p => p.id === t.parentTaskId);
     rowScaffold(row, {
       lead: null, tier,
       mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">+${fmtOffset(t.offsetDays)} after: ${esc(parent ? parent.title : "(deleted task)")}</span>`,
@@ -3425,6 +3458,19 @@ function renderDecision() {
 // ---------- Task form (create + edit) ----------
 
 function refreshTierSelects() {
+  // ⚠️ 1.41.0 — A PROGRAMMATIC REFILL MUST NOT MANUFACTURE DIRT.
+  //
+  // D131 baselines the project form at boot, when this <select> is still
+  // EMPTY (tiers arrive from Firestore a moment later). This function then
+  // fills the options and picks a default — so the signature changed without
+  // the user touching anything, and the very first ✎ click asked "You have
+  // unsaved changes. Leave without saving?" over an untouched form. Jake,
+  // 2026-08-01: "Edit was the first button I clicked after a hard refresh."
+  //
+  // Nothing is wrong with the guard; the baseline was taken before the form
+  // finished existing. So: carry the clean/dirty state ACROSS the refill. If
+  // the user really had unsaved edits, they stay dirty and still get warned.
+  const wasClean = !isDirty("projectForm", projectFormSignature);
   const taskTiers = S.tiers.filter(t => t.kind !== "anchor"); // rank-sorted upstream
   const taskOpts = taskTiers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
   const projOpts = taskTiers.map(t => `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
@@ -3440,6 +3486,7 @@ function refreshTierSelects() {
   }
   refreshTypeSelect();   // D124 — keep the project-type picker in sync
   syncProjectDateRequirement();   // D126
+  if (wasClean) markClean("projectForm", projectFormSignature);   // 1.41.0
 }
 
 // D124 — the project-type picker on the new-project form: Default + each
