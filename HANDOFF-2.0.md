@@ -4,10 +4,10 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.40.0 · store 0.29.0 · queue 0.20.1 · css 0.59.0 · html 0.51.9 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
+| **Versions** | app 1.41.0 · store 0.29.0 · queue 0.21.0 · css 0.59.0 · html 0.51.10 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
 | **Deployed** | ✅ Through app 1.36.0 / whereis 1.3.1 uploaded and swept. **app 1.37.0 · store 0.27.0 · html 0.51.6 · whereis 1.5.0 are NOT uploaded.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
-| **Next** | **moveProject / moveTask — a tier change across a board boundary does not move the document** (§0c). Then owner rename-for-everyone, per-user hide, delete-refuses-when-shared, orphan sweep. |
+| **Next** | **§0h — outrider stages become tasks.** Fully specified, no open questions, migration ruling recorded. Then TESTS.md's unrun list, tier member roles, deleteAll rollback. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
 ### ⚠️ Three things to do before you write a line
@@ -383,6 +383,76 @@ forbids it. Jake: *"the silly naming system for onboarding (e41? Really?)"*
 
 ---
 
+### 0i. TWO BUGS FOUND BY RUNNING THE TESTS (app 1.41.0 · queue 0.21.0)
+
+Both were found by Jake running TESTS.md, and neither was findable by reading.
+
+**⚠️ 1. A DATED TASK COULD EXIST ON NO SCREEN AT ALL.** D61's off-day rule was
+`if (offDay(t.tierId)) continue;` — which dropped the task out of active, out
+of waiting, out of everything. **A Work task dated to a Saturday was in
+Firestore and rendered nowhere**, returning silently on Monday as overdue.
+Jake, running MOVE-3: *"I can't see 'This happened' anywhere to check it
+off."* He read it as a follow-up bug; it was not, and MOVE-3 is still unrun.
+
+D61's intent is kept — Work must not nag on a Saturday — but **"don't nag" and
+"cannot be reached" are different things**, and the user typed that date
+deliberately. It now lands in WAITING carrying `offDay: true`, with a checkbox
+and the actual reason.
+
+⚠️ `renderWaiting` had assumed every entry was a follow-up and rendered
+`+Nd after: <parent>`. An off-day task has no parent, so it would have read
+`+0d after: (deleted task)` — **a fix that lands in an unexamined renderer is
+half a fix.** Check the consumer, not just the producer.
+
+#### ⚠️ THE SECOND MECHANISM — and why browsing for the task never finds it
+
+Jake pushed back, correctly, on the first write-up of this: *"I don't think
+your theory is correct on the workday thing, as I went forward to Wednesday,
+and the task is still not there. It's not on Friday or Monday, either. I do
+not know where it is."*
+
+The off-day rule was right but **it is only half the reason**, and the missing
+half is the more surprising one:
+
+```js
+const overdueIntoToday = viewingToday && t.dueAt < dayStart;
+if (!(dueThisDay || overdueIntoToday)) continue;
+```
+
+**An overdue task resurfaces ONLY on today.** Browse to any other day —
+forward or back — and `viewingToday` is false, so the overdue carry does not
+apply and a task due Aug 1 is invisible on Aug 5. That is deliberate and
+correct: a browsed day shows what is due THAT day, not a running tally of
+everything outstanding. It is not a bug.
+
+So the task had exactly one day it could ever appear on — **Saturday Aug 1,
+"today"** — and on that one day the off-day rule suppressed it. Two
+independent, individually-sensible filters intersecting at zero. Neither is
+wrong on its own, which is precisely why this read as a disappearance rather
+than as a filter, and why hunting for it on other days could not work.
+
+**Both halves are needed to explain the report, and queue 0.21.0 only fixes
+one of them** — the suppressed one. The overdue-carry rule stays as it is.
+**The lesson is the general one: when two filters are each defensible, check
+whether their intersection is empty.** `whereis` is the instrument that
+settles it — the task was in Firestore the whole time, which is what told us
+this was a rendering question and not a write one.
+
+**2. THE FIRST ✎ CLICK ALWAYS WARNED ABOUT UNSAVED CHANGES.** D131 baselines
+the project form at boot — when `#project-tier` is still EMPTY, because tiers
+arrive from Firestore a moment later. `refreshTierSelects` then fills the
+options and picks a default, so the signature changed without the user
+touching anything. *"Edit was the first button I clicked after a hard
+refresh."*
+
+The guard was right and the baseline was taken before the form finished
+existing. The clean/dirty state now carries ACROSS a programmatic refill, so a
+genuinely dirty form still warns. **General rule worth keeping: any code that
+writes to a form field on the app's own initiative has to preserve the dirty
+flag, or it manufactures dirt.**
+
+---
+
 ### 0g. BUGS FROM THE PRIMARY USER, 2026-07-31 — two fixed, two waiting
 
 Four reports came in from the person actually living in this thing daily.
@@ -447,6 +517,83 @@ not `startDate`. That matters: a stage anchored BEFORE the start pulls its
 project out of Later on its own, so nothing with real work in view can be
 folded away. Undated projects are never folded. **The full 4a — removing
 inactive projects from the agenda outright — is still not built, on purpose.**
+
+---
+
+### 0h. ⚠️ NEXT SESSION STARTS HERE — "OUTRIDER STAGES BECOME TASKS"
+
+**Katie corrected the requirement, and the correction is bigger than the
+thing it corrects.** Jake relayed it 2026-08-01, explicitly retracting his own
+earlier ask:
+
+> *"I had asked that the projects are shown one week before the first task in
+> it, but after discussion with Katie, I got that wrong. Any task set to
+> before the start of a project (send out engagement letter) should be treated
+> as a task. In other words, that engagement letter set to -14d should show up
+> on that day and on that day alone. Once it's checked off, it's checked off.
+> The project does not show until the project window opens. Projects are
+> projects with their pipelines, and any task set before or after the project
+> should be treated as a task."*
+
+**One rule, stated once:**
+
+> **A project's pipeline is what happens DURING the project. Anything anchored
+> outside the project window is a TASK, and always was.**
+
+This subsumes the hurrah follow-up (0g) rather than sitting beside it — that
+was the same insight arriving from the far end. `spawnDays` on a 🎆 is the
++N case already built and working; **this generalises it to −N**, and makes
+both of them the same feature instead of two.
+
+**What it replaces.** `laterHorizonMs` / `isLater` currently measure against
+`projectPipelineWindow`, precisely so a stage anchored before the start keeps
+its project visible. Under Katie's rule that is **the wrong safety property**:
+such a stage should not be holding the project visible at all, it should have
+left as a task. Once outrider stages are gone, `isLater` should measure
+`startDate` again and the special case disappears. **Do not preserve the
+window-based logic out of politeness to 0g — it was scaffolding for a
+requirement that has been withdrawn.**
+
+**Sketch, not a spec.** The machinery mostly exists; this is mostly deletion.
+
+1. A stage whose computed date falls outside `[startDate, endDate]` is an
+   **outrider**. `stageEffectiveDate` already computes that date; the test is
+   a comparison, not new arithmetic.
+2. Outriders spawn a task **when the project is created or its dates change**,
+   not when a stage is ticked — a −14d engagement letter must exist before the
+   project does. Guard with a `spawnedTaskId` on the stage exactly as
+   store 0.29.0 does for the hurrah; that guard is proven.
+3. Outriders then **leave the pipeline entirely**: not in `projectProgress`,
+   not in `nextDeadline`, not in the queue's stage loop. A project with a
+   −14d letter and a +14d follow-up shows 0/3, not 0/5.
+4. `projectPipelineWindow` collapses toward `[startDate, endDate]`.
+
+⚠️ **THE MIGRATION IS THE HARD PART AND IT IS NOT OPTIONAL.** Katie has live
+projects whose pipelines already contain outrider stages, some of them
+**already ticked**. Turning them into tasks must not resurrect finished work
+as an open task, and must not lose a completion that is somebody's record of
+having done it.
+
+✅ **ANSWERED — Jake, 2026-08-01: "Already ticked outriders should be stored as
+tasks on the import. The reflection is important, and I don't want to lose any
+data."** So:
+
+- **A ticked outrider becomes a COMPLETED task**, carrying its original
+  `completedAt` and `completedBy` verbatim. Not re-stamped with the migration
+  date and not with whoever happens to run it — that would credit the wrong
+  person on the wrong day, which is the same failure `stampNewStages` was
+  written to avoid (see D59's note on next year's run).
+- **An unticked outrider becomes an OPEN task** dated to its computed day.
+- **Nothing is dropped.** The record of having done the engagement letter is
+  the point; a migration that tidies it away has destroyed the thing the
+  feature exists to preserve.
+
+⚠️ **This makes the migration a WRITE against live data, so it needs the
+moveTier discipline**: build the new tasks, verify they landed, and only then
+strip the stages from the pipeline. A half-migrated project — stages gone,
+tasks absent — is unrecoverable by hand because the computed dates are gone
+with the stages. There is no open question left; **build it, gated on that
+ordering.**
 
 ---
 
@@ -1100,6 +1247,35 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **FIRST DEPLOY, FIRST FAILURE.** Nico's sign-in died on permission-denied. Cause was mine: rules 1.1.0's collection-group clause matched the document ID, which cannot secure a query. **The clause carried a paragraph of confident reasoning for why it was safe, and that reasoning was about the wrong operation** — the surest sign a comment needs checking is that it argues rather than states. Fixed in 1.1.1 (match the field, filter on the field). Two things fixed alongside that were not the bug but made it expensive: the E17 screen blamed the network for a refusal that retrying can never fix, and the console said "bootstrap failed" without naming which of four steps. **Also made the failing query non-fatal — it was an optional lookup that could strand every new user, which is not optional.** Filled in SETUP-2.0's Part 0 and Part 9 blanks, which Jake caught: the real values were in the completion block at the top, so the document disagreed with itself and read as unfinished work. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th, cont.) | **ITEM 4 — houses and keys.** Jake stopped the deploy, said the permission description was more technical than he could follow, and re-described the target audiences himself. **He was right to stop, and the re-description contained a correction I had got wrong:** E25 had Jake owning Katie's board, which made her a guest in her own practice. Reversed — she owns hers, he owns Nico's, same mechanism opposite directions. He then improved on it, inventing the dependent workspace and the minor flag unprompted. **Two bugs came out of walking HIS description through MY rules rather than re-reading them:** Nico could have left his own board through a door marked "leave" (E33), and Nico's first sign-in would have built him a second board his parents never held (the adoption path). Neither was findable by reading the file; both were obvious the moment a real person's Tuesday was traced through it. **Lesson worth keeping: when the human re-describes the problem in their own words, walk the code through THEIR version, not yours.** Also declined to hotfix a latent 1.x tab-selector bug — no symptom, so E27 doesn't fire; a dual-fix window that covers every shared imperfection stops being paid. |
 | 2026-07-27 | Opus 5 · **Marginatus** (12th) | **Named for *Amphioctopus marginatus*, the coconut octopus — the only one that carries its shelter with it, disassembled, and rebuilds it somewhere else, never exposed in between.** That is §11 and §15 exactly. The other half: *marginatus* means "bordered," and E1 is the whole design — the boundary is a path, not a field. **Built items 1→3.** Jake's answers from the day became E23–E31; the two biggest are E24 (2.0.0 = the board switcher, his own definition, D67's shape) and E30 (store.js absorbs the workspace so 7,100 lines of app.js + queue.js cross unchanged). **Found the doubled 1.x stylesheet** while reading it to port it, measured the blast radius instead of assuming it, and explicitly ruled it OUT as an explanation for Katie's phone — the finding that would have been most tempting to over-claim. Caught the manifest's absolute `id` by running E4a's sweep rather than trusting that a byte-identical carry is a safe carry. **Process note for successors: the 1.x repo did not arrive in the first upload and I said so instead of inferring the missing files** — three of the four documents I needed were in hand, and the fourth was one sentence away. |
+
+---
+
+### WHERE THIS SESSION LEFT IT — read this first
+
+**Every question Jake was holding is answered.** He asked for that
+deliberately: *"I want to leave all questions answered so I can start fresh."*
+Nothing below waits on him.
+
+- **§0h is the opening task.** Outrider stages become tasks. The rule, the
+  sketch, and the migration ruling are all recorded; the only discipline it
+  needs is copy → verify → delete, because the computed dates die with the
+  stages.
+- **§0d, §0g, §0i all shipped and are unrun.** `TESTS.md` is the list, and it
+  is the only list — do not rebuild one here.
+- **One thing shipped this session is already superseded.** `isLater` measures
+  the pipeline window so a pre-start stage keeps its project visible. §0h
+  removes the reason for that. **Do not defend it.**
+
+⚠️ **The habit that found most of this session's bugs was not reading code.**
+It was Jake driving two accounts against one shared project and saying what he
+saw, then `whereis` settling whether the data or the rendering was at fault.
+Three of the four hardest findings — the stage clobber, the orphaned session,
+the two-filter intersection — were invisible to review and obvious in use.
+**When a report does not match the code, the code is being read at the wrong
+altitude; get the data on screen before theorising.** And when a theory is
+challenged, check whether it was merely INCOMPLETE rather than wrong: §0i's
+off-day diagnosis was correct and still failed to explain the report, because
+a second filter sat behind it.
 
 ---
 
