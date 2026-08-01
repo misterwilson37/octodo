@@ -1,11 +1,18 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.20.1
+// Version 0.21.0
 //
 // Pure scheduling logic: priority, pipelines, week and clock geometry,
 // holidays. Has never known Firestore exists — that is why it is testable.
 //
 // RECENT:
+// 0.21.0 — A DATED TASK NO LONGER VANISHES ON ITS TIER'S OFF DAY. D61's
+//          `continue` dropped it from active AND waiting AND everything —
+//          a Work task dated to a Saturday existed in Firestore and appeared
+//          on no screen, silently returning Monday as overdue. D61's intent
+//          (Work must not nag on a Saturday) is kept; it now goes to WAITING
+//          carrying `offDay: true` so the UI can say why. "Don't nag" and
+//          "cannot be reached" are different things.
 // 0.20.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
@@ -15,7 +22,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const QUEUE_VERSION = "0.20.1";
+export const QUEUE_VERSION = "0.21.0";
 
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -432,7 +439,22 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
       continue;
     }
     if (t.dueAt == null) { waiting.push(t); continue; }
-    if (offDay(t.tierId)) continue; // D61
+    /**
+     * ⚠️ 0.21.0 — D61 USED TO MAKE THIS TASK DISAPPEAR FROM THE WHOLE APP.
+     *
+     * `continue` dropped it out of active, out of waiting, out of everything.
+     * A task explicitly dated to a Saturday, on a tier that works Mon–Fri,
+     * existed in Firestore and appeared on NO screen — it silently came back
+     * on Monday as overdue. Jake hit it on 2026-08-01 running MOVE-3: "I
+     * can't see 'This happened' anywhere to check it off."
+     *
+     * D61's intent is sound and is kept: Work should not nag on a Saturday.
+     * But "don't nag" and "cannot be reached" are different things, and the
+     * user typed that date deliberately. So it moves to WAITING — visible,
+     * checkable, not shouting — carrying `offDay` so the UI can say why it
+     * is there rather than leaving it looking like an undated stray.
+     */
+    if (offDay(t.tierId)) { waiting.push({ ...t, offDay: true }); continue; } // D61
     const dueThisDay = t.dueAt >= dayStart && t.dueAt < dayEnd;
     const overdueIntoToday = viewingToday && t.dueAt < dayStart;
     if (!(dueThisDay || overdueIntoToday)) continue;
