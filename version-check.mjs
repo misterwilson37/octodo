@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
-// Version 1.1.0 — knows about stage-merge.test.mjs.
+// Version 1.3.0 — watches move.test.mjs too.
 //
 // THE THING SIX FILES ALREADY TOLD YOU TO RUN.
 //
@@ -36,7 +36,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const VERSION_CHECK_VERSION = "1.1.0";
+const VERSION_CHECK_VERSION = "1.3.0";
 
 const SEMVER = String.raw`\d+\.\d+\.\d+`;
 
@@ -52,10 +52,11 @@ const FILES = [
   { file: "tentacalendar.css",   banner: /^\s*Version\s+(V)/m,               constant: /--tc-version:\s*"(V)"/ },
   { file: "index.html",          banner: /^\s*Version\s+(V)/m,               constant: /data-html-version="(V)"/ },
   { file: "import.html",         banner: /^\s*Version\s+(V)/m,               constant: null },
-  { file: "whereis.html",        banner: /^\s*Version\s+(V)/m,               constant: null },
+  { file: "whereis.html",        banner: /^\s*Version\s+(V)/m,               constant: /id="wv">v(V)</ },
   { file: "firestore-2.0.rules", banner: /^\/\/\s*Version\s+(V)/m,           constant: null },
   { file: "functions/index.js",  banner: /^\/\/.*—\s*Version\s+(V)/m,        constant: /^const FUNCTIONS_VERSION\s*=\s*"(V)"/m },
   { file: "stage-merge.test.mjs", banner: /^\/\/\s*Version\s+(V)/m,          constant: null },
+  { file: "move.test.mjs",       banner: /^\/\/\s*Version\s+(V)/m,          constant: null },
 ];
 
 // Files that are pinned but carry no internal version to compare against.
