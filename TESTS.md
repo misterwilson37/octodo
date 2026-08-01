@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.2.0 · current as of 2026-07-31 (Haliphron)**
+**Version 2.3.0 · current as of 2026-08-01 (Haliphron)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -86,6 +86,25 @@ invisible to both accounts that held keys to that board.*
 
 ---
 
+## 🟠 Fix verification — run these first
+
+**OFFDAY-1. A task dated to a day its tier doesn't work is still reachable.**
+On a Saturday, make a task on a Mon–Fri tier due that same Saturday. It must
+appear under **WAITING ON…** with a checkbox and a line explaining why, and it
+must be checkable from there.
+→ *Before this it appeared on NO screen and came back Monday as overdue. This
+is what actually broke MOVE-3.*
+
+**DIRTY-1. Hard refresh, then click ✎ on a project as your first action.**
+No "unsaved changes" prompt. Then type in the project name, click ✎ on a
+different project — the prompt **should** appear. Both halves matter.
+
+**MOVE-3 (re-run).** Now that the parent task is visible, the actual test can
+run: make a task with a chained follow-up, move the parent to a tier on
+another board, then undo. Both come back together.
+
+---
+
 ## 🟠 New from the primary user's reports — unrun
 
 **HURRAH-1. The follow-up leaves as a task.**
@@ -109,11 +128,10 @@ the climax.
 Finish a project, duplicate it for next year. The copy lands in a collapsed
 **Later** group, not the main list.
 
-**LATER-2. Nothing with work in view gets folded.**
-Give a project a stage anchored *before* its start date, far enough out that
-the project would otherwise be Later. It must stay in the main list.
-→ *The horizon measures the pipeline window, not the start date, exactly so
-this can't hide real work.*
+**LATER-2. ⚠️ SUPERSEDED — do not run.** It tested that a stage anchored
+before the start keeps its project visible. Katie's correction (handoff §0h)
+says such a stage should have left as a *task*, so the behaviour this test
+protects is being removed. Left here so nobody re-derives it from the code.
 
 **LABEL-1. The date range is whole on the TV.**
 The year view's header should read the full range, with the Layout/Year/Bars
