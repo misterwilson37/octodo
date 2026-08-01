@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
-// Version 1.3.0 — watches move.test.mjs too.
+// Version 1.4.0 — watches ITSELF, and derives its lists instead of
+//                  keeping three of them in step by hand.
 //
 // THE THING SIX FILES ALREADY TOLD YOU TO RUN.
 //
@@ -36,27 +37,40 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const VERSION_CHECK_VERSION = "1.3.0";
+const VERSION_CHECK_VERSION = "1.4.0";
 
 const SEMVER = String.raw`\d+\.\d+\.\d+`;
 
 // ---- what carries a version, and how to read both copies of it ----------
 // banner: the version in the comment header.  constant: the one code uses.
+// label:  what this file is called in the handoff's **Versions** row.
+//
+// ⚠️ 1.4.0 — THIS IS NOW THE ONLY LIST. It used to be three: FILES, then
+// LABELS, then rowOrder, each hand-written, each having to be extended
+// whenever a file joined. That is the shape that has bitten this project
+// four times (the keep-list that ate `completedBy`, the ?v= pins, whereis's
+// column header, and this). LABELS and the paste-able row are now DERIVED
+// from the `label` below, so adding a file here adds it everywhere.
 const FILES = [
-  { file: "app.js",              banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const APP_VERSION\s*=\s*"(V)"/m },
-  { file: "store.js",            banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const STORE_VERSION\s*=\s*"(V)"/m },
-  { file: "queue.js",            banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const QUEUE_VERSION\s*=\s*"(V)"/m },
-  { file: "celebrate.js",        banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const CELEBRATE_VERSION\s*=\s*"(V)"/m },
-  { file: "config.js",           banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const CONFIG_VERSION\s*=\s*"(V)"/m },
-  { file: "import-transform.js", banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const TRANSFORM_VERSION\s*=\s*"(V)"/m },
-  { file: "tentacalendar.css",   banner: /^\s*Version\s+(V)/m,               constant: /--tc-version:\s*"(V)"/ },
-  { file: "index.html",          banner: /^\s*Version\s+(V)/m,               constant: /data-html-version="(V)"/ },
-  { file: "import.html",         banner: /^\s*Version\s+(V)/m,               constant: null },
-  { file: "whereis.html",        banner: /^\s*Version\s+(V)/m,               constant: /id="wv">v(V)</ },
-  { file: "firestore-2.0.rules", banner: /^\/\/\s*Version\s+(V)/m,           constant: null },
-  { file: "functions/index.js",  banner: /^\/\/.*—\s*Version\s+(V)/m,        constant: /^const FUNCTIONS_VERSION\s*=\s*"(V)"/m },
-  { file: "stage-merge.test.mjs", banner: /^\/\/\s*Version\s+(V)/m,          constant: null },
-  { file: "move.test.mjs",       banner: /^\/\/\s*Version\s+(V)/m,          constant: null },
+  { file: "app.js",              banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const APP_VERSION\s*=\s*"(V)"/m , label: "app" },
+  { file: "store.js",            banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const STORE_VERSION\s*=\s*"(V)"/m , label: "store" },
+  { file: "queue.js",            banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const QUEUE_VERSION\s*=\s*"(V)"/m , label: "queue" },
+  { file: "celebrate.js",        banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const CELEBRATE_VERSION\s*=\s*"(V)"/m , label: "celebrate" },
+  { file: "config.js",           banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const CONFIG_VERSION\s*=\s*"(V)"/m , label: "config" },
+  { file: "import-transform.js", banner: /^\/\/\s*Version\s+(V)/m,           constant: /^export const TRANSFORM_VERSION\s*=\s*"(V)"/m , label: "import-transform" },
+  { file: "tentacalendar.css",   banner: /^\s*Version\s+(V)/m,               constant: /--tc-version:\s*"(V)"/ , label: "css" },
+  { file: "index.html",          banner: /^\s*Version\s+(V)/m,               constant: /data-html-version="(V)"/ , label: "html" },
+  { file: "import.html",         banner: /^\s*Version\s+(V)/m,               constant: null , label: "import.html" },
+  { file: "whereis.html",        banner: /^\s*Version\s+(V)/m,               constant: /id="wv">v(V)</ , label: "whereis.html" },
+  { file: "firestore-2.0.rules", banner: /^\/\/\s*Version\s+(V)/m,           constant: null , label: "rules" },
+  { file: "functions/index.js",  banner: /^\/\/.*—\s*Version\s+(V)/m,        constant: /^const FUNCTIONS_VERSION\s*=\s*"(V)"/m , label: "functions" },
+  { file: "stage-merge.test.mjs", banner: /^\/\/\s*Version\s+(V)/m,          constant: null , label: "stage-merge.test" },
+  { file: "move.test.mjs",       banner: /^\/\/\s*Version\s+(V)/m,          constant: null , label: "move.test" },
+  // ⚠️ THE CHECKER CHECKS THE CHECKER. This file shipped for three versions
+  // unable to see its own drift — and drifted: the repo held 1.1.0 while the
+  // handoff row said 1.3.0. That is the one file where the mistake is
+  // invisible by construction, because a check blind to itself reports ok.
+  { file: "version-check.mjs",   banner: /^\/\/\s*Version\s+(V)/m,          constant: /^const VERSION_CHECK_VERSION\s*=\s*"(V)"/m , label: "version-check" },
 ];
 
 // Files that are pinned but carry no internal version to compare against.
@@ -121,35 +135,55 @@ if (!pinCount) fail("no ?v= pins found at all — the pin regex or the markup ch
 // ---- 3. handoff table vs reality ----------------------------------------
 console.log("\nHANDOFF TABLE");
 const HANDOFF = "HANDOFF-2.0.md";
+let handoffRow = "";
 // the row reads: | **Versions** | app 1.34.0 · store 0.25.0 · ... |
-const LABELS = {
-  app: "app.js", store: "store.js", queue: "queue.js", css: "tentacalendar.css",
-  html: "index.html", celebrate: "celebrate.js", config: "config.js",
-  rules: "firestore-2.0.rules", functions: "functions/index.js",
-  "import.html": "import.html", "import-transform": "import-transform.js",
-  "whereis.html": "whereis.html",
-};
+// DERIVED from FILES (1.4.0) — see the note on that array.
+const LABELS = Object.fromEntries(FILES.map((f) => [f.label, f.file]));
+
+// Labels the row legitimately carries that no file can be read for.
+// manifest.json has no version field; its number is maintained by hand.
+const UNVERIFIABLE_LABELS = new Set(["manifest"]);
 if (!existsSync(HANDOFF)) fail(`${HANDOFF} missing`);
 else {
   const row = readFileSync(HANDOFF, "utf8").split("\n").find((l) => /\*\*Versions\*\*/.test(l));
+  handoffRow = row || "";
   if (!row) fail(`${HANDOFF} — no "**Versions**" row found in the header table`);
   else {
     for (const [label, file] of Object.entries(LABELS)) {
       const m = new RegExp(`${label.replace(".", "\\.")}\\s+(${SEMVER})`).exec(row);
       const truth = actual.get(file);
-      if (!m || !truth) continue;
+      if (!truth) { fail(`${HANDOFF} row covers ${label}, but ${file} could not be read for a version`); continue; }
+      if (!m) { fail(`${HANDOFF} row does not mention ${label} at all — it is ${truth}`); continue; }
       if (m[1] !== truth) fail(`${HANDOFF} says ${label} ${m[1]}, file is ${truth}`);
       else pass(`${label} ${m[1]}`);
+    }
+    // ⚠️ THE CHECK THAT WOULD HAVE CAUGHT move.test.mjs. The row announced
+    // `move.test 1.0.0` for a session while no such file existed in the
+    // repo — a version table describing a file nobody had shipped, which is
+    // this project's signature failure (a warning wearing a command's
+    // clothes). Anything the row NAMES must be a file that can be read.
+    for (const m of row.matchAll(new RegExp(`([A-Za-z][\\w.-]*)\\s+(${SEMVER})`, "g"))) {
+      const label = m[1];
+      if (LABELS[label] || UNVERIFIABLE_LABELS.has(label)) continue;
+      fail(`${HANDOFF} row claims "${label} ${m[2]}" and nothing in FILES answers to that name` +
+           `\n      \u2192 either the file is missing from the repo, or the label drifted. Both look identical from the row.`);
     }
   }
 }
 
 // ---- the paste-able row -------------------------------------------------
-const rowOrder = ["app.js","store.js","queue.js","tentacalendar.css","index.html","celebrate.js","config.js","firestore-2.0.rules","functions/index.js","import.html","import-transform.js","whereis.html"];
-const short = { "tentacalendar.css": "css", "index.html": "html", "firestore-2.0.rules": "rules", "functions/index.js": "functions", "import-transform.js": "import-transform" };
-const nice = (f) => short[f] || f.replace(/\.js$/, "");
+// ⚠️ DERIVED, and it must stay that way. The old hand-written rowOrder
+// listed twelve files while FILES held fourteen and the handoff row held
+// sixteen — so pasting this row SILENTLY DELETED manifest, version-check
+// and both test harnesses from the table. A suggestion that quietly drops
+// rows is worse than no suggestion, because it looks authoritative.
 console.log("\nCURRENT STATE, ready to paste into the handoff table:\n");
-console.log("| **Versions** | " + rowOrder.filter((f) => actual.has(f)).map((f) => `${nice(f)} ${actual.get(f)}`).join(" \u00b7 ") + " |\n");
+const cells = FILES.filter((f) => actual.has(f.file)).map((f) => `${f.label} ${actual.get(f.file)}`);
+for (const label of UNVERIFIABLE_LABELS) {
+  const m = new RegExp(`${label}\\s+(${SEMVER})`).exec(handoffRow || "");
+  if (m) cells.push(`${label} ${m[1]} (by hand)`);
+}
+console.log("| **Versions** | " + cells.join(" \u00b7 ") + " |\n");
 
 console.log(problems === 0
   ? "\u2705 CLEAN \u2014 banners, constants, pins and the handoff table all agree.\n"
