@@ -1,11 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.41.0
+// Version 1.41.1
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.41.1 — DASH-FILL. The timeline year grid left a black band under
+//          itself on a tall dashboard pane. The lane fit is clamped to
+//          34px, and on a 4K pane with few concurrent projects the
+//          surplus was simply discarded. settleYearRows() measures what
+//          is actually left below the view and hands it to the rows —
+//          D106's idiom, not a new constant. See the function comment.
 // 1.41.0 — TWO BUGS FOUND BY JAKE RUNNING THE TESTS.
 //          (1) The first ✎ click after a hard refresh warned about unsaved
 //          changes on an untouched form: D131 baselines the project form at
@@ -89,7 +95,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.41.0";
+export const APP_VERSION = "1.41.1";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -4884,6 +4890,76 @@ function fitAvail(el) {
   return window.innerHeight - (el.getBoundingClientRect().top + window.scrollY);
 }
 
+/** DASH-FILL — the timeline year grid must reach the bottom of a tall pane.
+ *
+ *  The lane fit (D68) solves LANE_H across the row mix and then clamps it
+ *  to 34px, because a 90px-tall Gantt bar is not a readable Gantt bar. On
+ *  Katie's 4K dashboard pane that ceiling BINDS: eight lanes in the current
+ *  quarter and one in each of the other three come to ~570px of grid inside
+ *  ~1150px of pane, and the ~600px difference was thrown away as a black
+ *  band under the legend.
+ *
+ *  ⚠️ THE SURPLUS GOES TO THE ROWS, NOT TO THE LANES, AND THAT IS THE WHOLE
+ *  DESIGN DECISION HERE. Feeding it back into LANE_H would fill the pane
+ *  too — with 30px bars floating 90px apart, which trades one wrong-looking
+ *  year for another. Giving each quarter row the same share of the slack
+ *  keeps bar density exactly as it is today and turns the dead band into
+ *  four equal quarter bands. The weekend shading, day/week gridlines and
+ *  today line are all `top:0; bottom:0`, so they extend into the new space
+ *  for free: what fills the pane is CALENDAR, not padding.
+ *
+ *  D106's idiom, deliberately — the model proposes, the layout disposes.
+ *  Nothing here is a constant tuned against a screen I cannot see; it is a
+ *  measurement of the gap that is actually there. Two passes: the first
+ *  spends the slack, the second mops up what integer division dropped.
+ *
+ *  ⚠️ Timeline only, on purpose, and it is double-guarded. The wall/Annual
+ *  and Months branches have the same 14px-ceiling shape (see GL), but they
+ *  build `.yvg-lanes` — week rows nested inside month cells in a CSS grid,
+ *  dozens of them, whose height is not what drives that layout. Sharing
+ *  slack across those is a different fix and needs its own screenshot.
+ *  This pass is scoped by class AND by `:scope > .yv-row >`, so pointing it
+ *  at the wall layout would be a deliberate act, not an accident.
+ */
+const YV_SLACK_MIN = 16;   // below this it is measurement noise, not a band
+
+/** How much room is left BELOW the last thing the year view actually draws.
+ *  Measured from the last laid-out child of the section rather than from
+ *  #yv-grid, because the legend, the hint and the button sit under the grid
+ *  and are part of what has to fit. */
+function yvSlackBelow(grid) {
+  const sec = grid.closest("section");
+  if (!sec) return 0;
+  let last = null;
+  for (const el of sec.children) {
+    if (el.hidden || el.offsetParent === null) continue;
+    if (el.getBoundingClientRect().height === 0) continue;
+    last = el;
+  }
+  if (!last) return 0;
+  return Math.floor(fitAvail(last) - last.getBoundingClientRect().height);
+}
+
+function settleYearRows(grid) {
+  // D110 / E41-6: a hidden element measures zero, and zero here would read
+  // as "no slack" — harmless — but offsetParent is the honest gate and it
+  // also skips the reparenting beat when the dashboard is mid-swap.
+  if (!grid || !grid.offsetParent) return;
+  const lanes = [...grid.querySelectorAll(":scope > .yv-row > .yv-lanes")];
+  if (!lanes.length) return;
+  for (let pass = 0; pass < 2; pass++) {
+    const slack = yvSlackBelow(grid);
+    if (slack < YV_SLACK_MIN) return;
+    const add = Math.floor(slack / lanes.length);
+    if (add < 1) return;
+    // Never shrink. An overflowing grid is honest clipping and already the
+    // behaviour today; only the surplus case is the reported defect.
+    for (const l of lanes) {
+      l.style.height = `${(parseFloat(l.style.height) || 0) + add}px`;
+    }
+  }
+}
+
 function fitWeekHeight() {
   const sec = $("#week-view");
   if (!sec || sec.hidden) return;
@@ -5756,6 +5832,7 @@ function renderYear() {
     grid.append(row);
   }
   renderYearLegend(projs);
+  settleYearRows(grid);   // DASH-FILL — AFTER the legend: it is part of what has to fit
 }
 
 function hexToRgba(hex, a) {
