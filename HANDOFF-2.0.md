@@ -4,10 +4,11 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.41.0 · store 0.29.0 · queue 0.21.0 · css 0.59.0 · html 0.51.10 · celebrate 0.2.0 · config 1.2.0 · manifest 0.2.0 · rules 1.2.1 · functions 1.3.0 · import.html 1.0.0 · import-transform 1.0.0 · whereis.html 1.5.0 · version-check 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 |
-| **Deployed** | ✅ Through app 1.36.0 / whereis 1.3.1 uploaded and swept. **app 1.37.0 · store 0.27.0 · html 0.51.6 · whereis 1.5.0 are NOT uploaded.** **app 1.35.0 / store 0.26.0 / html 0.51.3 are NOT** — shared-project repair, browser-untested. Per-user tier colour (1.34.0/0.25.0) IS live and worked. |
+| **Versions** | app 1.41.1 · store 0.29.0 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.0 · html 0.51.11 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 · version-check 1.4.0 · manifest 0.2.0 |
+| **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
-| **Next** | **§0h — outrider stages become tasks.** Fully specified, no open questions, migration ruling recorded. Then TESTS.md's unrun list, tier member roles, deleteAll rollback. |
+| **Next** | **§0h — outrider stages become tasks.** Fully specified, no open questions, migration ruling recorded. ⚠️ **Run TESTS.md's 🔴 MOVE-1…4 first** — §0h's migration reuses §0d's copy→verify→delete mover, and that mover has never run in a browser. Building a live-data migration on an unverified mover gives any failure two suspects. |
+| ⚠️ **Katie is on 1.x** | Her 2026-08-01 screenshot reads **v1.21.0**. Every fix in this repo — DASH-FILL, LABEL-1, the lot — reaches her **only at the flip**. See §0j before promising her anything. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
 ### ⚠️ Three things to do before you write a line
@@ -479,6 +480,12 @@ idiom as Finished** — a second way to say "present but out of the way" would
 be one to learn for nothing. Undated projects are never folded; undated means
 someday, which is the Want-tos tab. (app 1.39.0 · html 0.51.8)
 
+**✅ FIXED 2026-08-01 (app 1.41.1) — see §0j. The paragraph below is the
+diagnosis as written when it was held; it was right about the mechanism and
+wrong about which cap.** Katie's screenshot shows **Timeline**, so it is the
+34px ceiling that binds, not the wall layout's 14px. Left as written because
+the reasoning is what made the fix cheap.
+
 **⚠️ HELD — the year grid does not fill a tall pane.** Diagnosed, not fixed.
 `fitAvail(grid)` correctly measures the dashboard pane, but the wall layout
 then clamps lane height with `GL = Math.max(3, Math.min(14, GL))`. On a 4K
@@ -517,6 +524,109 @@ not `startDate`. That matters: a stage anchored BEFORE the start pulls its
 project out of Later on its own, so nothing with real work in view can be
 folded away. Undated projects are never folded. **The full 4a — removing
 inactive projects from the agenda outright — is still not built, on purpose.**
+
+---
+
+### 0j. DASH-FILL FIXED — and the screenshot answered a bigger question (Thaumoctopus, 2026-08-01)
+
+**⚠️ READ THE SECOND HALF OF THIS SECTION BEFORE THE FIRST. The screenshot's
+most important pixel is not the black band — it is the version badge.**
+
+#### The fix (app 1.41.1 · html 0.51.11)
+
+Katie runs **Timeline** with **Quarter first** and **Bars: Auto**. That settles
+which of the two ceilings binds: the timeline branch's `Math.min(34, …)`, not
+the wall branch's 14. Eight lanes in the current quarter and one in each of
+the other three came to ~570px of grid inside ~1150px of pane, and the
+difference was discarded.
+
+`settleYearRows()` measures the gap that is actually below the last thing the
+view draws and hands it to the rows. **D106's idiom on purpose — the model
+proposes, the layout disposes** — because the alternative was a constant tuned
+against a 4K TV nobody in the conversation can see.
+
+⚠️ **THE SURPLUS GOES TO THE ROWS, NOT BACK INTO `LANE_H`, AND THAT IS THE
+DESIGN DECISION.** Feeding it into the lane pitch also fills the pane — with
+30px bars floating 90px apart, which trades one wrong-looking year for
+another. Equal shares per row keep bar density exactly as it is today and turn
+one dead band into four quarter bands. The weekend shading, gridlines and
+today line are all `top:0; bottom:0`, so **what fills the pane is calendar,
+not padding.**
+
+Simulated against the screenshot's own numbers: a 606px band becomes 2px, rows
+go 427/189/189/189. An already-overflowing year is left alone — it never
+shrinks, because clipping is honest and only the surplus was reported.
+
+⚠️ **The case I am least sure of is a ZOOMED month**, where one row takes the
+whole surplus (8 bars at the top of an ~1100px band). Defensible — it is a
+month of day gridlines — but it is one click to check and worth a look.
+**Timeline only, double-guarded:** the wall and Months branches build
+`.yvg-lanes`, a different class, and the selector is scoped `:scope >
+.yv-row >` as well. Their 14px ceiling is untouched and needs its own
+screenshot.
+
+#### ⚠️ E27 FIRES, AND IT IS THE REAL FINDING
+
+**The badge in Katie's screenshot reads `v1.21.0`. That is 1.x** — 2.0 forked
+at app 1.22.0 and this repo is at 1.41.1. She has never signed in to Octodo,
+which §0a has said all along; what is new is that **her bug reports are
+arriving against a tree this repo cannot fix.**
+
+Two of them are visible in that one image:
+
+- **DASH-FILL** — fixed here, still live for her.
+- **LABEL-1** — *"Jul 2026 – J…"*, truncated with half the bar empty beside
+  it. §0g records this as FIXED in css 0.58.0. It is fixed **in 2.0**. She
+  looks at it every morning.
+
+**So the honest status of both is: fixed for Jake, open for the primary user.**
+E27's rule is that a defect in code that exists in both trees must be *called
+out* as shared, not silently fixed in whichever copy is open — and it has now
+been silently one-sided twice.
+
+**The decision is Jake's and it is a real fork, not a formality:** hotfix 1.x
+(needs 1.x's `app.js`, `index.html` and `tentacalendar.css` uploaded — they
+are not in this repo) and pay the dual-fix tax twice more, **or** accept that
+her screen stays wrong until flip day and let that sharpen the case for
+IMPORT-1. ⚠️ **Do not let a successor read §0g's "FIXED" and tell Katie it is
+fixed.** 5a.1 stands: nothing goes to her to be checked.
+
+#### The checker had the hole it was built to find (version-check 1.4.0)
+
+The repo held `version-check.mjs` **1.1.0** while the handoff row said
+**1.3.0**, and `move.test.mjs` — announced in that row and cited in §0d as
+"16 assertions" — **was not in the repo at all**. Jake supplied both.
+
+The two facts are one fact. 1.3.0 *does* check `existsSync`, so it would have
+caught the missing harness immediately — but the copy in the repo was 1.1.0,
+which had never heard of it. **The checker's own drift is exactly what hid the
+missing file**, and it was the one drift the checker could not see, because it
+was not in its own `FILES`.
+
+1.4.0 closes three things:
+
+1. **It checks itself.** Banner vs `VERSION_CHECK_VERSION`.
+2. **`LABELS` and the paste-able row are DERIVED from `FILES`.** They were
+   three hand-written lists — and they had already diverged: `rowOrder` held
+   twelve files, `FILES` fourteen, the handoff row sixteen, so **pasting the
+   suggested row silently deleted `manifest`, `version-check` and both test
+   harnesses from the table.** A suggestion that quietly drops rows is worse
+   than none, because it looks authoritative. **Fifth instance of the
+   second-list bug**, after the `completedBy` keep-list, the `?v=` pins and
+   whereis's column header.
+3. **Anything the row NAMES must be a readable file.** This is the check that
+   would have caught `move.test 1.0.0` in the first place.
+
+⚠️ **Both new checks were verified by sabotage**, per §0c-bis: hiding
+`move.test.mjs` gives two clean failures, and drifting the checker's own
+banner gives `banner 1.9.9 ≠ constant 1.4.0`. **And one of them earned its
+keep inside the same hour** — a string replace of mine silently no-opped while
+adding the self-check row, and the new "label nothing answers to" check is
+what reported it. Do the sabotage again to anything added here.
+
+**Where the `.mjs` files belong: the repo root, where they already are.** They
+read `app.js`, `store.js` and `HANDOFF-2.0.md` by relative path. Nothing needs
+moving.
 
 ---
 
@@ -1232,6 +1342,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-08-01 | Opus 5 · **Thaumoctopus** (18th, 16th named) | **DASH-FILL SHIPPED, AND THE SCREENSHOT ANSWERED A QUESTION NOBODY ASKED IT.** Opened by checking the handoff against the repo, as three predecessors have, and the finding was the inverse of theirs: **the "NOT uploaded" warnings were stale in the safe direction** — everything through 1.41.0 was live, so TESTS.md's whole 🔴 list became runnable and nothing had to be re-shipped. Then the two real ones: `move.test.mjs` was **announced in the versions row and absent from the repo**, and `version-check.mjs` was **1.1.0 in the repo against 1.3.0 in the row** — and those are one fact, because 1.3.0 would have caught the missing harness and the copy that ran was the one that had never heard of it. **The checker's own drift is what hid the missing file, and it was the single drift the checker could not see.** Fixed by making it check itself and derive `LABELS`/the paste row from `FILES`; the old hand-written `rowOrder` had already diverged badly enough that **pasting its own suggestion would have deleted four entries from the handoff table.** Fifth instance of the second-list bug. **DASH-FILL: Katie runs Timeline, so the 34px ceiling binds and the wall layout's 14px is a red herring** — the surplus goes to the ROWS rather than back into the lane pitch, because filling the pane with 90px lane gaps is a different wrong answer, and the gridlines' `top:0;bottom:0` mean the new space renders as calendar. **The screenshot's most valuable pixel was the version badge: `v1.21.0` — Katie is on 1.x, so DASH-FILL and LABEL-1 are both "fixed for Jake, open for the primary user."** §0g says LABEL-1 is FIXED without saying in which tree, which is E27's exact failure and now the second time it has gone one-sided. **Process note: a string replace of mine silently no-opped while installing the self-check, and the check I had just written is what caught it** — which is the argument for this project's whole mechanical-check habit, made against its author within the hour. |
 | 2026-07-29 | Opus 5 · **Hapalochlaena** (17th, 15th named) | **THE MIS-ROUTING FIX, AND A HANDOFF THAT HELD UP.** Jake opened by saying the previous instance had started to hallucinate and the code needed a go-over. **It did not — every claim in §0a checked out against the code, and all fourteen version constants agreed with the banner.** Saying so first was the useful part: the alternative was a session spent hunting phantom defects in a file that was fine. Fixed §0b: both routers refuse, seven creators stamp, one global rejection net, `octodoWhere()` left in the file. **Found that the fallback was in TWO resolvers rather than the one the handoff named, and the unnamed one is worse** — `restoreDoc` routes through it and uses `setDoc`, which creates, which is TIER-10's data-loss case. Three more defects found by reading: a catch that swallowed everything and blamed permissions, a latent `undefined` write that would have landed in that same catch, and a `hidden` flag that skipped `refreshMerge`. **What I did not do is the entry worth reading: §0a named two candidate root causes and told me not to guess between them, and I could not settle it.** I found a third that fits Jake's evidence better and said it was a hypothesis rather than dressing it as a finding — the fix is correct under all three, which is what made it shippable without the answer. **Nothing was pushed and nothing was run in a browser; the fix is code, not a verified fix.** Process note for successors: the previous session's own closing lesson was "state the plan in one line before doing it, put the instruction on its own line" — I read it before starting and it is good advice, so it is repeated here rather than left in a paragraph nobody reaches. |
 | 2026-07-28 | Opus 5 · **Argonauta** (14th, cont.) | **FIRST REAL-WORLD USE, AND THE DOCUMENT'S OWN NUMBERING FAILED IN JAKE'S HANDS.** A colleague shared a tier with him and **TIER-3 passed between two real people** — same document, live, both toggling it. Two defects came from actual use rather than review. (1) **The rank collision:** a shared tier arrives carrying a number chosen by somebody who has never seen your board, and a typed rank cannot express "put this above that." That control was fine for four years because ONE person authored every number; item 5 ended that. Now ▲▼, rank assigned 1..N from position — which answers his "it should kick back an error" by making the state unconstructible instead. (2) **`signInWithPopup` never drew an account chooser** on a device with one Google account, so ⏻ looked broken and **every two-person test was unreachable.** One line. **The bigger lesson belongs to this document:** lettering tests IA…JA made `IS`, `IT` and `IN` English words, ran the list past IZ into JA, and — because item 5's block was inserted where item 5 was *discussed* — made the file physically read IS…JA **then IQ, IR**, doubling back to two already-passed tests. Jake had to hand-decode the mapping before he could report anything, which taxes the one person this document exists to protect. Replaced with `GROUP-n`. **Do not re-letter it.** | Jake read back the visiting rule to confirm agreement and was right about the requirement (zero differences; an honest picture of her load) and wrong that 0.21.0 met it. **Personal tiers were fine and the SHARED tier was not**, because both people write that one document and the last save wins — so visiting Katie could have shown Family at Jake's rank while looking like hers. Fixed in **0.21.1** with per-member ranks on the member row, which the rules already permit exactly (readable by co-holders, writable only by its subject) and which needed no clause. **Also found while fixing it: the person whose order you see is the RESIDENT, not the deed-holder** — E32's `minor` flag already marks that relationship and now does a second job. Version cascade store 0.21.1 → app 1.29.1 → html 0.47.1, bumped rather than reused because the earlier drop may already be pushed and two different files must never wear one number. **Two false positives in my own ship-check this round** (a div-balance regex eaten by a heredoc; a census widened until `const stages` in three scopes read as a redefinition) — §7's rule cuts both ways: a check that flags legal code stops being read, exactly as one that misses stops being worth running. |
 | 2026-07-28 | Opus 5 · **Argonauta** (14th, earlier) | **ITEM 5 — SHARED TIERS, BUILT.** Opened by ship-checking the drop against §0a and finding the one thing that mattered: **`firestore-2.0.rules` in the repo was still 1.1.1 — the version WITH the catch-all hole — while 1.2.1 was live in the console.** Stopped and asked for the published text rather than writing against the file in hand, which would have handed back the hole inside a document that looked authoritative. Everything else green: banners, pins, div balance 148/148, no absolute paths. **No rules change was needed for item 5** and confirming that was most of the value of asking. **Jake corrected the merge rule and the correction is better** — a shared tier follows you into a house where somebody who lives there also holds a key to it, rather than merging only at home. That is the THIRD design fixed by him re-describing it in his own words (E25, E32, now this), which is enough evidence to call it a rule. **Told him one thing he asked for could not be built:** "her priority in her house" needs to read Katie's profile, which the rules correctly forbid; shipped the honest approximation and wrote down what the stronger version would cost. Three defects found in review, **all in failure paths and none in the feature** — empty merge set at first bind (app booted blank), a copy-succeeded-delete-failed message that read like total failure, and an `unshareTier` that would have orphaned an `eventsCache` the poll wrote after the tier left. **The ship-check earned its keep again:** `APP_VERSION` moved to 1.29.0 while the banner above it still said 1.28.0 — §8g's exact complaint, caught mechanically rather than by me. |
@@ -1276,6 +1387,21 @@ altitude; get the data on screen before theorising.** And when a theory is
 challenged, check whether it was merely INCOMPLETE rather than wrong: §0i's
 off-day diagnosis was correct and still failed to explain the report, because
 a second filter sat behind it.
+
+---
+
+**Thaumoctopus (18th)** — *Thaumoctopus mimicus*, the mimic octopus, the one
+whose whole trick is looking convincingly like something it is not. That was
+the session: a versions row wearing the costume of a file that did not exist;
+a checker whose job was catching drift and which was itself the drifted file;
+a `FIXED` in §0g that meant fixed in a tree the person who reported it does
+not run. Haliphron's limb was real and miscounted from outside. These were
+counted correctly and were not what they appeared to be — which is why the
+answer each time was to *measure* rather than to read: the pane's slack rather
+than a constant, the badge rather than the assumption, `existsSync` rather
+than the table.
+
+*Thaumoctopus, 2026-08-01.* 🐙
 
 ---
 
