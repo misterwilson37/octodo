@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.9
+     Version 0.51.10
 
      The whole UI. One page, no templating.
 
      RECENT:
+     0.51.10 — no markup change; pin moves to app.js 1.41.0.
      0.51.9 — Later wording follows app 1.40.0: the horizon is measured from
         the pipeline window, not the start date.
      0.51.8 — #cfg-later-days in Settings ▸ Timing (app 1.39.0's Later group).
@@ -51,7 +52,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.59.0">
 </head>
-<body data-html-version="0.51.9">
+<body data-html-version="0.51.10">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -944,6 +945,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.40.0"></script>
+  <script type="module" src="app.js?v=1.41.0"></script>
 </body>
 </html>
