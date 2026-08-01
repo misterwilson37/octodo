@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.3.0 · current as of 2026-08-01 (Haliphron)**
+**Version 2.4.0 · current as of 2026-08-01 (Thaumoctopus)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -103,6 +103,25 @@ different project — the prompt **should** appear. Both halves matter.
 run: make a task with a chained follow-up, move the parent to a tier on
 another board, then undo. Both come back together.
 
+**DASH-FILL-1. The year grid reaches the bottom of the pane.**
+Dashboard, left pane, **Timeline** layout, **Bars: Auto**. The quarter rows
+should share the whole pane with no black band under the legend — four bands
+of roughly equal height, bars still tight at the top of each.
+→ *Verified by simulation against the screenshot's numbers, not in a browser.
+606px of dead space becomes 2px on paper.*
+
+**DASH-FILL-2. It does not overcorrect anywhere else.**
+Same pane, then: switch to **Annual** and **Months** (should be unchanged —
+they were deliberately not touched); pin **▮ / ▪ / ▁ / 🧵** (bar thickness is
+still yours); tap a month name to **zoom** into it.
+→ *⚠️ Zoom is the case I am least sure of — one row takes the entire surplus,
+so eight bars sit at the top of a very tall band. Say if that reads wrong.*
+
+**DASH-FILL-3. A short pane still clips honestly.**
+Drag the dashboard split so the year pane is small, or use a busy quarter.
+The grid must **not** shrink or rearrange — overflow and a scrollbar are the
+existing, correct behaviour and the fix never shrinks.
+
 ---
 
 ## 🟠 New from the primary user's reports — unrun
@@ -136,6 +155,10 @@ protects is being removed. Left here so nobody re-derives it from the code.
 **LABEL-1. The date range is whole on the TV.**
 The year view's header should read the full range, with the Layout/Year/Bars
 controls wrapping to a second row rather than eating it.
+⚠️ **This will pass in Octodo and is still broken on Katie's screen.** Her
+2026-08-01 screenshot shows `Jul 2026 – J…` truncated — because she is on
+**1.x v1.21.0**, and the fix is in 2.0's css 0.58.0. Same for DASH-FILL.
+Handoff §0j has the decision that follows from that; it is Jake's to make.
 
 ---
 
@@ -149,12 +172,11 @@ removed.
 **TIER-MEMBER-ROLES.** Anyone holding a shared tier can remove anyone,
 including the owner. Boards have four roles; tiers have none.
 
-**DASH-FILL.** The year grid does not fill a tall dashboard pane — the wall
-layout clamps lane height at 14px, so on a 4K pane with few projects the
-surplus is thrown away and a black band sits under the grid. **Diagnosed, not
-fixed: needs a screenshot of the TV and which of the three layouts is in use**,
-because the fix is a measure-and-refit pass and a constant tuned blind to
-somebody else's screen is a guess.
+**DASH-FILL. ✅ Fixed in app 1.41.1 — moved to the fix-verification list
+below.** The screenshot settled it: Katie runs **Timeline**, so the binding
+ceiling was 34px, not the wall layout's 14px. ⚠️ **The wall/Annual and Months
+layouts still have the ceiling** and were deliberately not touched — they
+build a different DOM and need their own screenshot.
 
 **AGENDA-ACTIVE.** *"Projects that are not currently active should not appear
 in the daily agenda at all."* Partly served by Later; the full version is
