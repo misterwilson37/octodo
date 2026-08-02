@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
-// Version 1.4.0 — watches ITSELF, and derives its lists instead of
-//                  keeping three of them in step by hand.
+// Version 1.5.0 — also watches the HEADERS, which regrow.
 //
 // THE THING SIX FILES ALREADY TOLD YOU TO RUN.
 //
@@ -37,9 +36,23 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const VERSION_CHECK_VERSION = "1.4.0";
+const VERSION_CHECK_VERSION = "1.5.0";
 
 const SEMVER = String.raw`\d+\.\d+\.\d+`;
+
+// ---- header budget ------------------------------------------------------
+// ⚠️ A HEADER THAT REGROWS IS NOT A TIDINESS PROBLEM. CHANGELOG.md exists
+// because app.js's header reached 949 lines and put the version banner 980
+// lines away from the constant it must agree with — which is how they drifted
+// apart four separate times, the last one costing a deploy. The rule was
+// written down, and by 2026-08-02 app.js was back to 19 entries and 135 lines
+// with nothing to stop it. Jake, unprompted: *"comments are getting deep
+// again in some of the files."*
+//
+// A rule a human has to remember is a rule this project has already watched
+// fail. So it is a check. Entries below the cap go to CHANGELOG.md verbatim.
+const HEADER_MAX_LINES = 60;      // from line 1 to the first import/export
+const HEADER_MAX_ENTRIES = 6;     // "// X.Y.Z — ..." blocks in the header
 
 // ---- what carries a version, and how to read both copies of it ----------
 // banner: the version in the comment header.  constant: the one code uses.
@@ -86,6 +99,25 @@ const pass = (msg) => console.log(`  \u2713 ${msg}`);
 // ---- 1. banner vs constant ---------------------------------------------
 console.log("\nBANNER vs CONSTANT");
 const actual = new Map();   // filename -> the version we believe it to be
+
+// The header budget runs over the .js sources only — .rules, .html and the
+// test harnesses do not carry a RECENT block.
+for (const spec of FILES.filter(f => f.file.endsWith(".js") && !f.file.includes("test"))) {
+  let text;
+  try { text = readFileSync(spec.file, "utf8"); } catch { continue; }
+  const lines = text.split("\n");
+  const firstCode = lines.findIndex(l => /^(export |import |const |let |function )/.test(l));
+  const headLines = firstCode === -1 ? lines.length : firstCode;
+  const entries = lines.slice(0, headLines).filter(l => /^\/\/ \d+\.\d+\.\d+ /.test(l)).length;
+  if (headLines > HEADER_MAX_LINES || entries > HEADER_MAX_ENTRIES) {
+    fail(`${spec.file} header is ${headLines} lines / ${entries} entries ` +
+         `(budget ${HEADER_MAX_LINES} / ${HEADER_MAX_ENTRIES})` +
+         `\n      \u2192 move the oldest entries into CHANGELOG.md, verbatim. This is the ` +
+         `drift that cost a deploy; the banner belongs NEXT TO its constant.`);
+  } else {
+    pass(`${spec.file} header ${headLines}L / ${entries} entries`);
+  }
+}
 
 for (const spec of FILES) {
   if (!existsSync(spec.file)) { fail(`${spec.file} — MISSING FROM REPO`); continue; }

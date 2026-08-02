@@ -1,11 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.45.0
+// Version 1.46.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
-// RECENT:
+// 1.46.0 — THE FOLLOW-UP OFFER ON PROJECT COMPLETION, which Katie asked for
+//          an hour into 2.0. Its own button beside "same time next year?",
+//          independent of it: a follow-up on a project that does NOT repeat
+//          is the commonest case and hanging it off Create would have made
+//          that unreachable. Does not replace the pipeline's ↳ +Nd.
 // 1.45.0 — TOUR REPLAY, at last. Settings ▸ foot ▸ "Show me around". It was
 //          filed as cosmetic from the first roadmap and stopped being so the
 //          moment Katie finished the old tour: markTourCompleted is
@@ -25,100 +29,6 @@
 //          to #phone-tray at the bottom of the page, as 1.x did. It MOVES
 //          the node rather than cloning it — a second button means a dead
 //          listener on one of them. 600px, matching the CSS block.
-// 1.42.0 — fitLine(). "Her screen starts too large every time" had no
-//          instrument but a photograph of a phone. The version tooltip and
-//          the Settings versions line now say whether the document is wider
-//          than the viewport, by how much, and which element is furthest
-//          right. Free when nothing is wrong; the DOM walk only runs once
-//          the page is already overflowing.
-// 1.41.2 — DIRTY-1 ON PROJECTS. 1.41.0 fixed the manufactured-dirt bug in
-//          refreshTierSelects and left its two twins untouched — both on
-//          Firestore subscriptions, both writing fields in the project form
-//          signature. Adding a project changed bestFreeColor()'s answer,
-//          which is why the failing repro needed one. §8c #4, again, by the
-//          instance that wrote §8c. All three now go through
-//          preservingProjectFormState().
-// 1.41.1 — DASH-FILL. The timeline year grid left a black band under
-//          itself on a tall dashboard pane. The lane fit is clamped to
-//          34px, and on a 4K pane with few concurrent projects the
-//          surplus was simply discarded. settleYearRows() measures what
-//          is actually left below the view and hands it to the rows —
-//          D106's idiom, not a new constant. See the function comment.
-// 1.41.0 — TWO BUGS FOUND BY JAKE RUNNING THE TESTS.
-//          (1) The first ✎ click after a hard refresh warned about unsaved
-//          changes on an untouched form: D131 baselines the project form at
-//          boot, when #project-tier is still EMPTY, and refreshTierSelects
-//          then fills it — a change the user never made. The clean/dirty
-//          state now carries ACROSS a programmatic refill.
-//          (2) Waiting rows assumed every entry was a follow-up. queue
-//          0.21.0 routes off-day dated tasks there, so they get a checkbox
-//          and the real reason instead of a "+Nd after:" with no parent.
-// 1.40.0 — The 🎆 hurrah carries an optional "↳ +N d" in the stage editor:
-//          ticking it finishes the project AND spawns a dated task. Shown
-//          only on the hurrah row, because on any other row it is the
-//          pipeline step it exists to replace. Later now measures against
-//          the PIPELINE WINDOW rather than the start date, so a stage
-//          anchored before the start keeps its project visible.
-// 1.39.0 — A "LATER" GROUP, so finishing a project actually clears the
-//          plate. Duplicate-for-next-year works exactly as designed and
-//          handed the reward straight back: the copy appears immediately in
-//          the projects panel. Anything starting past a configurable horizon
-//          (default 90 days) now folds into a collapsed group beside
-//          Finished — same idiom on purpose; a second way to say "present
-//          but out of the way" would be one to learn for nothing.
-//          Undated projects are NEVER folded: undated means someday, which
-//          is the Want-tos tab's job.
-// 1.38.0 — Deleting a project now warns that its clocked time goes too
-//          (store 0.28.0 stopped orphaning it), with the hours in the
-//          confirm. Time somebody spent is the thing worth warning about.
-// 1.37.0 — THE SHARE PANEL KNOWS WHO OWNS THE TIER. A guest was shown
-//          "Bring it back to my board" and the ✕ that takes somebody's key
-//          away. Jake pressed the first one, got a permission error AFTER the
-//          copy had run, and said the obvious thing: "if a user doesn't have
-//          the ability to steal a tier, they probably shouldn't think they
-//          have an option." Both controls are now owner-only, and a guest
-//          gets the one decision that IS theirs — Leave this tier.
-// 1.36.0 — THE BADGE TELLS YOU WHEN YOU ARE RUNNING OLD CODE. D130 watched
-//          ONE stamp (index.html's) and so could not see a stale ?v= pin —
-//          the file uploads, index loads fresh, and it then asks for a URL
-//          the browser already has. checkDeployedVersions() reads every
-//          module's banner FROM THE SERVER, cache bypassed, first chunk only,
-//          and compares it to the constant this tab is running. Stale rows go
-//          in the tooltip and turn the badge amber. Jake: "Isn't the whole
-//          point of the hover the version check? Why would I want to open a
-//          new page?" — so it is in the hover, not a new page.
-// 1.35.1 — A REFUSED TICK NOW REPAINTS. The checkbox flips itself — that is
-//          the browser's default, not ours — so when store.js refuses a
-//          stage write, nothing is written, no snapshot arrives, render() is
-//          never called, and the tick sits there looking saved. The one
-//          screen whose job is to say what is done cannot show a state that
-//          never reached the server. Found by reviewing 1.35.0, not by
-//          running it.
-// 1.35.0 — YOUR CLOCK IS YOURS. openSessionNow() returned the first open
-//          session in the MERGED view, so a colleague's running timer drew
-//          as yours with a ⏹ that would have stopped it from your screen.
-//          projectClockedMs now returns {mine, team} and the badge reads
-//          "Σ 1h / 31h" when somebody else has logged time — Jake: those
-//          are different questions. Stage writes address by sid (store
-//          0.26.0) instead of by position, and a save that had to keep
-//          somebody else's ticks says so instead of doing it quietly.
-// 1.34.2 — Repoint only: ./store.js?v= and ./queue.js?v= were still asking
-//          for 0.25.0 / 0.20.0 while those files were 0.25.1 / 0.20.1, so
-//          the browser kept serving what it already had and the upload
-//          looked like a deploy without being one.
-// 1.34.1 — Jake's marker bump. A predecessor stripped this header down to
-//          the short form; the patch was raised on every file it touched so
-//          that if removing half the comment lines broke something, the
-//          version would say which files to suspect. NO CODE CHANGE.
-// 1.34.0 — Per-user tier colour and name, UI half. ⚠️ THE WHOLE FEATURE
-//          IS ONE BRANCH IN THE SETTINGS SAVE LOOP: on a shared row,
-//          name and color are deleted from the payload before saveTier
-//          and sent to saveTierSkin instead. Lose that delete and the
-//          propagation bug returns looking identical.
-// 1.33.0 — Global unhandledrejection listener, so store 0.24.0's routing
-//          refusals reach a person instead of the console. tierChip()
-//          picks its own foreground (was black on black). Role dropdown
-//          ascending. window.octodoWhere() for live routing diagnosis.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -127,7 +37,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.45.0";
+export const APP_VERSION = "1.46.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -784,6 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#dup-snooze-7").addEventListener("click", () => dupSnooze(7));
   $("#dup-snooze-30").addEventListener("click", () => dupSnooze(30));
   $("#dup-no").addEventListener("click", () => { S.dupTarget = null; $("#dup-modal").hidden = true; });
+  $("#dup-fu-add").addEventListener("click", dupFollowUpAdd);
 
   // Any date/time field opens its native picker on click/focus where
   // supported (Chromium). Safari ignores showPicker — typing still works.
@@ -3222,7 +3133,75 @@ function openDuplicateModal(p) {
     `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
   $("#dup-tier").value = p.tierId;
   $("#dup-workload").value = String(p.workload || 2);
+  // Fresh every open: a stale "✓ Added" from the last project would read as
+  // a promise about this one.
+  $("#dup-fu-title").value = "";
+  $("#dup-fu-days").value = "14";
+  $("#dup-fu-add").disabled = false;
+  $("#dup-fu-note").textContent =
+    "It lands on this project's tier, dated from today, and lives its own life — the project stays finished either way.";
   $("#dup-modal").hidden = false;
+}
+
+/** ⚠️ THE FOLLOW-UP OFFER ON PROJECT COMPLETION (1.46.0).
+ *
+ *  Katie asked for this an hour into 2.0: the "same time next year?" moment
+ *  is also the moment you realise there is one more thing to do — and until
+ *  now the only way to say so was `↳ +Nd` on the 🎆 stage, decided back when
+ *  the pipeline was built, before anybody knew.
+ *
+ *  ⚠️ INDEPENDENT OF THE DUPLICATE, ON PURPOSE. Its own button, its own
+ *  write. She can add a follow-up AND create next year's run, or add one and
+ *  snooze the duplicate, or add one and say No thanks. Hanging it off
+ *  dupConfirm would have made the commonest case — a follow-up on a project
+ *  that does not repeat — impossible to reach.
+ *
+ *  ⚠️ THE STAGE'S `spawnedTaskId` GUARD DOES NOT COVER THIS, and pretending
+ *  otherwise would be the fifth "comment more confident than its code" of the
+ *  session. That guard stops an AUTOMATIC spawn firing twice when a hurrah is
+ *  un-ticked and re-ticked. This is a person clicking a button that says Add
+ *  it, which should do what it says every time. So the guard here is
+ *  narrower and honest: the button disables after a successful write so one
+ *  click cannot become two, and re-opening the modal deliberately allows
+ *  another — because a second click on a second visit IS a second intention.
+ *
+ *  Dated from TODAY rather than from the project's end date: the project is
+ *  finished now, and "in 14 days" means fourteen days from the moment you
+ *  said it, not from a planned end that may be weeks behind you.
+ */
+async function dupFollowUpAdd() {
+  const btn = $("#dup-fu-add"), note = $("#dup-fu-note");
+  const title = $("#dup-fu-title").value.trim();
+  if (!title) { $("#dup-fu-title").focus(); return; }
+  const p = S.projects.find(x => x.id === S.dupTarget?.projectId);
+  if (!p) return;
+  const days = clampInt($("#dup-fu-days").value, 0, 365, 14);
+  // ⚠️ These four helpers take and RETURN timestamps, not Dates
+  // (addDaysLocal, isDayAllowed, allowedNeighbors, fmtDay — all `ts`).
+  // The tier's working days decide when it can actually land: a Mon–Fri tier
+  // must not quietly schedule a task onto Sunday, which is the same rule the
+  // pipeline offsets already follow.
+  const tier = S.tiers.find(t => t.id === p.tierId);
+  const allowed = tier?.allowedDays || [1, 2, 3, 4, 5];
+  let due = addDaysLocal(Date.now(), days);
+  if (!isDayAllowed(due, allowed)) due = allowedNeighbors(due, allowed).next;
+  // 5 PM, matching the deadline hour a dated stage lands on, rather than
+  // midnight — which would read as overdue the moment the day turned.
+  due = new Date(due).setHours(17, 0, 0, 0);
+  btn.disabled = true;
+  try {
+    await addTask({
+      title, tierId: p.tierId, dueAt: due,
+      escalation: { every: 1, unit: "hours" },
+      notes: `Follow-up from “${p.name}”.`
+    });
+    note.textContent = `✓ Added — “${title}”, due ${fmtDay(due)}. The project stays finished.`;
+    $("#dup-fu-title").value = "";
+  } catch (err) {
+    console.error("[dup] follow-up task failed:", err);
+    note.textContent = `Could not add it: ${err && err.message ? err.message : err}`;
+    btn.disabled = false;
+  }
 }
 
 /** D62: bump year tokens in a project name — the full year (2026→2027)

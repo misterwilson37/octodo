@@ -5,7 +5,6 @@
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
-// RECENT:
 // 0.29.1 — moveTask STRANDED EVERY FOLLOW-UP IT CARRIED. The chain moved
 //          board; only the root's tierId was rewritten, so each child landed
 //          on the new board still pointing at a tier on the old one. The
@@ -32,40 +31,6 @@
 //          so the ledger of a deleted project became unreachable rows nothing
 //          could render and nothing would clean up. Found by whereis's
 //          session audit on 2026-07-31, in Jake's live data.
-// 0.27.0 — UNSHARE IS OWNER-ONLY, AND deleteAll STOPS LYING.
-//          (1) unshareTier refused nothing, so a guest's "bring it back"
-//          COPIED the entire tier onto their own board and only THEN hit the
-//          rules on the delete — reporting failure after a successful
-//          duplication. Now refused up front with the name of the owner.
-//          (2) deleteAll commits in BATCHES; each is atomic, the sequence is
-//          not. moveTier promised "Nothing was lost" on any delete failure,
-//          which is true for one batch and false for two. It now carries the
-//          count that DID commit and says which of the two states it is in.
-// 0.26.1 — mergeStages() lifted out of setProjectStages as a pure function.
-//          BEHAVIOUR IS UNCHANGED — the seam moved so the rule that decides
-//          whether somebody's finished work survives can be tested without
-//          Firebase. `node stage-merge.test.mjs` reads it out of this file.
-// 0.26.0 — SHARED PROJECTS STOP EATING EACH OTHER. Three defects, all of
-//          them item 5 meeting code that assumed a board was one person:
-//          (1) setProjectStages wrote the stage editor's stale copy of
-//          completedAt, so reordering un-ticked whatever your colleague had
-//          ticked while the modal was open. It now merges completion from
-//          the SERVER — the editor owns shape, the server owns completion.
-//          (2) Stages had no stable identity, so every write addressed them
-//          by POSITION; `sid` fixes that and rides through reorders free.
-//          (3) openSessions() closed EVERYBODY's running clock, because
-//          "at most one open session" was written when a board was one
-//          person. Now scoped to createdBy == me.
-// 0.25.1 — Jake's marker bump after a predecessor shortened this header.
-//          NO CODE CHANGE.
-// 0.25.0 — Per-user tier colour and name (tierColors/tierLabels on the
-//          profile, composite-keyed). skinFor() applies them; canonName
-//          and canonColor ride along for Settings' "shared as" line.
-// 0.24.0 — THE BOARD ROUTERS REFUSE INSTEAD OF GUESSING. wsOf() and
-//          wsOfTier() both used to fall back to the ACTIVE board, so a
-//          task typed into a shared tier landed on the author's own and
-//          was invisible to everyone else. Both now throw. Every creator
-//          stamps the id it mints, which is what makes refusing safe.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the

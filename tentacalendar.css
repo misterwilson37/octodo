@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.59.3 — .st-spawn-wrap, the hurrah follow-up field.
+   Version 0.59.4 — .st-spawn-wrap, the hurrah follow-up field.
    (prev) Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
    there is room; "Later" group in the projects panel.
    (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
@@ -18,7 +18,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.59.3"; }
+:root { --tc-version: "0.59.4"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -625,6 +625,21 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
      caught, and Katie has run one before (D130). */
   .version { white-space: nowrap; }
 }
+
+/* The follow-up offer in the dup modal (1.46.0). Set apart from the
+   duplicate fields above it, because they are two independent choices and
+   nothing about the layout should suggest one depends on the other. */
+.dup-followup {
+  margin: .8rem 0 .2rem; padding: .7rem .8rem;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.dup-fu-head { font-weight: 600; margin-bottom: .5rem; }
+.dup-followup .form-row { align-items: end; gap: .5rem; }
+.dup-followup label { flex: 0 1 auto; }
+.dup-followup .dup-wide { flex: 1 1 12rem; min-width: 0; }
+.dup-followup #dup-fu-days { width: 4.5rem; }
+.dup-followup .hint { margin: .5rem 0 0; }
 
 /* Tour replay row in the Settings foot. */
 .settings-tours {

@@ -122,6 +122,8 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 3. Publish `firestore-2.0.rules` in the Firebase console. **Do not skip this** — a project in test mode is a public database.
 4. Serve the files from anywhere static. GitHub Pages needs no configuration beyond enabling it.
 
+**Before handing over any file: `node version-check.mjs`.** It reads every source file's banner against the constant in its code, every `?v=` pin against its target, the handoff's version table against all of them, and — since 1.5.0 — the size of each file's comment header. That last one exists because the headers had grown into full changelogs (949 lines in `app.js`) which put a version banner 980 lines from the constant it must agree with; they drifted four times and the last one cost a deploy. Old entries live in `CHANGELOG.md`, verbatim. `node stage-merge.test.mjs` and `node move.test.mjs` extract real functions out of `store.js` and assert against them — they do not re-implement anything, and a rename fails the run rather than quietly passing.
+
 **Testing the rules.** `firestore-2.0.rules` is the one file where a mistake is silent and expensive, and the Firebase console no longer carries an inline simulator — its "Develop & Test" button now just points at the Emulator Suite docs. There is a suite for this: `cd rules-test && npm install && npm test`. It tests a **copy**, so `cp ../firestore-2.0.rules ./firestore.rules` before every run, and check that file's declared version against what is actually published in the console. A rules file that lives in two places will disagree with itself, and the stale copy is the one a newcomer reads and believes. The two rules bugs this project has shipped were both of a kind a three-line test would have caught.
 
 ⚠️ **Every path in this project must be relative** (`./store.js`, never `/store.js`). It is served from a subpath during development and a domain root in production; an absolute path works in one and 404s in the other, which makes it broken only *in between* — the worst possible timing for a bug.
@@ -132,9 +134,11 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 
 **Built:** the app on a multi-tenant database, auto-created personal workspaces, the board switcher, membership and the four roles, dependent workspaces, calendar sync in both directions, **shared tiers with per-person priority**, and a skippable onboarding layer (splash, tours, hints, help panels).
 
-**Written but never run for real:** the 1.x migration. `import.html` is green against a real 245-document export in the emulator and has never touched live Firestore. Its own biggest risk is not in the code: an export holds calendar **ids** and cannot hold calendar **permissions**, and 2.0 runs under a different service account — so calendars must be re-shared by hand or the tiers import perfectly and stay empty forever.
+**Migrated, for real:** on 2026-08-02 the 1.x household board moved onto 2.0 — 245 documents, in one run, with no dry rehearsal. There was never a throwaway account to practise on, and the reason that was an acceptable bet is that **1.x is still live and untouched**: a failed import costs a wiped 2.0 board and nothing else. The risk that mattered was never in the code — an export holds calendar **ids** and cannot hold calendar **permissions**, and 2.0 runs under a different service account, so calendars are re-shared by hand or the tiers import perfectly and stay empty forever, silently.
 
-**Not built yet:** the activity feed and kudos; per-user tier colours and names.
+**Not built yet:** the activity feed and kudos. A **soft delete for projects** — today, deleting one destroys its clocked hours and stage history, which on a shared project means one person can erase another's work and credit with a button. A **super-admin panel** to export and wipe a user, which the migration plan above quietly assumes exists. And **outrider stages** — turning a stage that is really a separate errand into a task.
+
+**Per-user tier colours and names** shipped: on a shared tier the name and colour you type are yours alone, so renaming *ELA 8* to *ELA* on your screen does not rename it on anybody else's.
 
 Version 2.0.0 arrives when two people can sign in separately, see separate boards, and visit each other's. Until then the app carries 1.x's continuing version numbers, and the badge in the header reports exactly what is running.
 

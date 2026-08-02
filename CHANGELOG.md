@@ -26,6 +26,74 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ## `store.js`
 
+<!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
+     had regrown to 19 entries / 135 lines — the exact shape this file was
+     created to prevent. version-check 1.5.0 now fails when it happens. -->
+
+### 0.27.0
+
+```
+0.27.0 — UNSHARE IS OWNER-ONLY, AND deleteAll STOPS LYING.
+         (1) unshareTier refused nothing, so a guest's "bring it back"
+         COPIED the entire tier onto their own board and only THEN hit the
+         rules on the delete — reporting failure after a successful
+         duplication. Now refused up front with the name of the owner.
+         (2) deleteAll commits in BATCHES; each is atomic, the sequence is
+         not. moveTier promised "Nothing was lost" on any delete failure,
+         which is true for one batch and false for two. It now carries the
+         count that DID commit and says which of the two states it is in.
+```
+
+### 0.26.1
+
+```
+0.26.1 — mergeStages() lifted out of setProjectStages as a pure function.
+         BEHAVIOUR IS UNCHANGED — the seam moved so the rule that decides
+         whether somebody's finished work survives can be tested without
+         Firebase. `node stage-merge.test.mjs` reads it out of this file.
+```
+
+### 0.26.0
+
+```
+0.26.0 — SHARED PROJECTS STOP EATING EACH OTHER. Three defects, all of
+         them item 5 meeting code that assumed a board was one person:
+         (1) setProjectStages wrote the stage editor's stale copy of
+         completedAt, so reordering un-ticked whatever your colleague had
+         ticked while the modal was open. It now merges completion from
+         the SERVER — the editor owns shape, the server owns completion.
+         (2) Stages had no stable identity, so every write addressed them
+         by POSITION; `sid` fixes that and rides through reorders free.
+         (3) openSessions() closed EVERYBODY's running clock, because
+         "at most one open session" was written when a board was one
+         person. Now scoped to createdBy == me.
+```
+
+### 0.25.1
+
+```
+0.25.1 — Jake's marker bump after a predecessor shortened this header.
+         NO CODE CHANGE.
+```
+
+### 0.25.0
+
+```
+0.25.0 — Per-user tier colour and name (tierColors/tierLabels on the
+         profile, composite-keyed). skinFor() applies them; canonName
+         and canonColor ride along for Settings' "shared as" line.
+```
+
+### 0.24.0
+
+```
+0.24.0 — THE BOARD ROUTERS REFUSE INSTEAD OF GUESSING. wsOf() and
+         wsOfTier() both used to fall back to the ACTIVE board, so a
+         task typed into a shared tier landed on the author's own and
+         was invisible to everyone else. Both now throw. Every creator
+         stamps the id it mints, which is what makes refusing safe.
+```
+
 ```
 // Version 0.26.1 — mergeStages() lifted out of setProjectStages as a pure
 //   function. BEHAVIOUR IS BYTE-IDENTICAL; the seam moved so the rule that
@@ -370,6 +438,179 @@ references in the code, so treat this as a dictionary rather than a history.
 ---
 
 ## `app.js`
+
+<!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
+     had regrown to 19 entries / 135 lines — the exact shape this file was
+     created to prevent. version-check 1.5.0 now fails when it happens. -->
+
+### 1.42.0
+
+```
+1.42.0 — fitLine(). "Her screen starts too large every time" had no
+         instrument but a photograph of a phone. The version tooltip and
+         the Settings versions line now say whether the document is wider
+         than the viewport, by how much, and which element is furthest
+         right. Free when nothing is wrong; the DOM walk only runs once
+         the page is already overflowing.
+```
+
+### 1.41.2
+
+```
+1.41.2 — DIRTY-1 ON PROJECTS. 1.41.0 fixed the manufactured-dirt bug in
+         refreshTierSelects and left its two twins untouched — both on
+         Firestore subscriptions, both writing fields in the project form
+         signature. Adding a project changed bestFreeColor()'s answer,
+         which is why the failing repro needed one. §8c #4, again, by the
+         instance that wrote §8c. All three now go through
+         preservingProjectFormState().
+```
+
+### 1.41.1
+
+```
+1.41.1 — DASH-FILL. The timeline year grid left a black band under
+         itself on a tall dashboard pane. The lane fit is clamped to
+         34px, and on a 4K pane with few concurrent projects the
+         surplus was simply discarded. settleYearRows() measures what
+         is actually left below the view and hands it to the rows —
+         D106's idiom, not a new constant. See the function comment.
+```
+
+### 1.41.0
+
+```
+1.41.0 — TWO BUGS FOUND BY JAKE RUNNING THE TESTS.
+         (1) The first ✎ click after a hard refresh warned about unsaved
+         changes on an untouched form: D131 baselines the project form at
+         boot, when #project-tier is still EMPTY, and refreshTierSelects
+         then fills it — a change the user never made. The clean/dirty
+         state now carries ACROSS a programmatic refill.
+         (2) Waiting rows assumed every entry was a follow-up. queue
+         0.21.0 routes off-day dated tasks there, so they get a checkbox
+         and the real reason instead of a "+Nd after:" with no parent.
+```
+
+### 1.40.0
+
+```
+1.40.0 — The 🎆 hurrah carries an optional "↳ +N d" in the stage editor:
+         ticking it finishes the project AND spawns a dated task. Shown
+         only on the hurrah row, because on any other row it is the
+         pipeline step it exists to replace. Later now measures against
+         the PIPELINE WINDOW rather than the start date, so a stage
+         anchored before the start keeps its project visible.
+```
+
+### 1.39.0
+
+```
+1.39.0 — A "LATER" GROUP, so finishing a project actually clears the
+         plate. Duplicate-for-next-year works exactly as designed and
+         handed the reward straight back: the copy appears immediately in
+         the projects panel. Anything starting past a configurable horizon
+         (default 90 days) now folds into a collapsed group beside
+         Finished — same idiom on purpose; a second way to say "present
+         but out of the way" would be one to learn for nothing.
+         Undated projects are NEVER folded: undated means someday, which
+         is the Want-tos tab's job.
+```
+
+### 1.38.0
+
+```
+1.38.0 — Deleting a project now warns that its clocked time goes too
+         (store 0.28.0 stopped orphaning it), with the hours in the
+         confirm. Time somebody spent is the thing worth warning about.
+```
+
+### 1.37.0
+
+```
+1.37.0 — THE SHARE PANEL KNOWS WHO OWNS THE TIER. A guest was shown
+         "Bring it back to my board" and the ✕ that takes somebody's key
+         away. Jake pressed the first one, got a permission error AFTER the
+         copy had run, and said the obvious thing: "if a user doesn't have
+         the ability to steal a tier, they probably shouldn't think they
+         have an option." Both controls are now owner-only, and a guest
+         gets the one decision that IS theirs — Leave this tier.
+```
+
+### 1.36.0
+
+```
+1.36.0 — THE BADGE TELLS YOU WHEN YOU ARE RUNNING OLD CODE. D130 watched
+         ONE stamp (index.html's) and so could not see a stale ?v= pin —
+         the file uploads, index loads fresh, and it then asks for a URL
+         the browser already has. checkDeployedVersions() reads every
+         module's banner FROM THE SERVER, cache bypassed, first chunk only,
+         and compares it to the constant this tab is running. Stale rows go
+         in the tooltip and turn the badge amber. Jake: "Isn't the whole
+         point of the hover the version check? Why would I want to open a
+         new page?" — so it is in the hover, not a new page.
+```
+
+### 1.35.1
+
+```
+1.35.1 — A REFUSED TICK NOW REPAINTS. The checkbox flips itself — that is
+         the browser's default, not ours — so when store.js refuses a
+         stage write, nothing is written, no snapshot arrives, render() is
+         never called, and the tick sits there looking saved. The one
+         screen whose job is to say what is done cannot show a state that
+         never reached the server. Found by reviewing 1.35.0, not by
+         running it.
+```
+
+### 1.35.0
+
+```
+1.35.0 — YOUR CLOCK IS YOURS. openSessionNow() returned the first open
+         session in the MERGED view, so a colleague's running timer drew
+         as yours with a ⏹ that would have stopped it from your screen.
+         projectClockedMs now returns {mine, team} and the badge reads
+         "Σ 1h / 31h" when somebody else has logged time — Jake: those
+         are different questions. Stage writes address by sid (store
+         0.26.0) instead of by position, and a save that had to keep
+         somebody else's ticks says so instead of doing it quietly.
+```
+
+### 1.34.2
+
+```
+1.34.2 — Repoint only: ./store.js?v= and ./queue.js?v= were still asking
+         for 0.25.0 / 0.20.0 while those files were 0.25.1 / 0.20.1, so
+         the browser kept serving what it already had and the upload
+         looked like a deploy without being one.
+```
+
+### 1.34.1
+
+```
+1.34.1 — Jake's marker bump. A predecessor stripped this header down to
+         the short form; the patch was raised on every file it touched so
+         that if removing half the comment lines broke something, the
+         version would say which files to suspect. NO CODE CHANGE.
+```
+
+### 1.34.0
+
+```
+1.34.0 — Per-user tier colour and name, UI half. ⚠️ THE WHOLE FEATURE
+         IS ONE BRANCH IN THE SETTINGS SAVE LOOP: on a shared row,
+         name and color are deleted from the payload before saveTier
+         and sent to saveTierSkin instead. Lose that delete and the
+         propagation bug returns looking identical.
+```
+
+### 1.33.0
+
+```
+1.33.0 — Global unhandledrejection listener, so store 0.24.0's routing
+         refusals reach a person instead of the console. tierChip()
+         picks its own foreground (was black on black). Role dropdown
+         ascending. window.octodoWhere() for live routing diagnosis.
+```
 
 ```
 // Version 1.36.0 — THE BADGE TELLS YOU WHEN YOU ARE RUNNING OLD CODE.
@@ -1370,6 +1611,169 @@ references in the code, so treat this as a dictionary rather than a history.
 
 
 ---
+
+## `functions/index.js`
+
+<!-- Moved out of the source header 2026-08-02 (Thaumoctopus), verbatim.
+     The header was 191 lines; version-check 1.5.0 now enforces the budget. -->
+
+```
+1.1.0 tagged every mirrored event `tcApp=octodo` and nothing else, then
+listed by that tag and DELETED any event whose task it could not find. One
+app, many workspaces — so if two workspaces ever pointed at the SAME mirror
+calendar, each run would see the other's events as orphans and delete them.
+Every hour. This is the identical failure the 1.x/2.0 tag split was written
+to prevent (E36), one level further down, and it was still open.
+
+Fixed by adding `tcWs: <workspaceId>` to every written event and to the
+list filter (privateExtendedProperty repeats and ANDs). Each workspace now
+sees and prunes only its own events, which turns "two people share one
+mirror calendar" from a mutual-deletion machine into something that simply
+works — a household might well want exactly that.
+
+⚠️ FREE ONLY BECAUSE NOTHING IS DEPLOYED YET. An event written by 1.0.0 or
+1.1.0 carries no tcWs, so it would fall outside the new filter, become
+invisible, and never be pruned. There are no such events today. If this
+ever changes after a real deploy, the migration is a one-off pass that
+lists by tcApp alone and stamps tcWs onto anything missing it.
+
+(prev) Version 1.1.0 (E14 work queue + E37 calendar guard)
+
+1.1.0 — ⚠️ CLOSES A REAL HOLE THAT 1.0.0 SHIPPED WITH, found by Jake
+asking whether a colleague could end up with HIS calendar. He could have
+ended up with worse: a colleague could have TAKEN it.
+
+  THE HOLE. The service account is PROJECT-WIDE. When Jake shares his
+  calendar with the robot so his own poll works, he grants that robot
+  access for EVERY workspace in the project — the grant lives on Google's
+  side and knows nothing about workspaces. 1.0.0 then read whatever
+  calendar id a tier happened to name, with no check that the workspace
+  was entitled to it. So any signed-up user could type
+  jacob.v.wilson@gmail.com into their own Home tier and pull his entire
+  calendar into their queue. Firestore isolation (E1) is airtight and
+  completely beside the point here: the leak is on the CALENDAR side.
+
+  THE GUARD (E37). A bare email address is somebody's primary calendar,
+  and it is guessable — so it may only be polled by a workspace that
+  person is a MEMBER of. Everything else (…@group.calendar.google.com and
+  friends) is an opaque random id nobody can guess, so it passes; those
+  are secondary calendars whose id is itself the secret.
+
+  WHAT THIS IS AND IS NOT. It is a real fix for the guessable case, which
+  is the one that matters, and it is defence in depth rather than a proof
+  of ownership — path A cannot prove ownership, because sharing a calendar
+  with a robot leaves no record of WHO shared it. **The complete answer is
+  path B (E13): per-user OAuth, where each person authorises their own
+  calendar and no shared robot exists.** Until then this guard plus a
+  trusted user base is the honest position, and it is written down here so
+  nobody has to rediscover it.
+
+(prev) Version 1.0.0 (E14, the multi-tenant work queue)
+
+1.0.0 — WHAT CHANGED FROM 1.x's 0.4.0, AND WHAT DELIBERATELY DID NOT.
+
+DID NOT CHANGE, and re-deriving any of it by accident would be, in the
+design doc's own words, "a catastrophe wearing a rewrite's clothes":
+  · D135's poll reconcile — deterministic {tierId}_{gcalEventId} doc ids,
+    write-only-what-changed, syncedAt deliberately absent. This took
+    writes from 1,500/day to 116/day. It is carried across verbatim.
+  · D81's mirror ledger — the CALENDAR is the ledger, keyed by tcTaskId;
+    no task-doc writes, honest dueAt only, and the loop guard that refuses
+    to mirror into a calendar some tier polls.
+  · D87's carryover — no hour trigger, because "due before today began" is
+    true whenever it runs, so no cron hiccup can silently skip a morning.
+  · The separate tag namespace between mirror and carryover, so two jobs
+    can write to ONE calendar and stay mutually invisible.
+
+CHANGED:
+  1. THE WORK QUEUE (E14). 0.4.0 hardcoded `WS = "primary"`. A serial loop
+     over every workspace would eventually exceed the request timeout, and
+     its failure mode is silent — the last user in the loop never gets
+     polled and nobody finds out. Instead: claim a bounded batch of
+     workspaces whose nextPollAt is due, oldest first, process each with
+     its own try/catch, and re-stamp. Timeout-safe by construction,
+     self-healing after an outage (the overdue are simply the oldest), and
+     load spreads itself because stamps land at staggered times.
+  2. THE TAG NAMESPACE IS `octodo`, NOT `tentacalendar`. This is the whole
+     answer to "can both apps share a calendar during the migration."
+     The mirror LISTS by exact-match on tcApp, then DELETES any tagged
+     event whose task it cannot find — so two apps sharing one tag would
+     take turns deleting each other's work, every hour. Distinct tags make
+     them mutually invisible, exactly as D87 already made the carryover
+     invisible to the mirror. 1.x keeps its tag and is not touched.
+     ⚠️ A COMBINED TAG ("octodo tentacalendar") CANNOT WORK: the list
+     filter is exact-match, so such an event is invisible to BOTH apps
+     rather than visible to both. The tag records OWNERSHIP, and ownership
+     has to be binary for the prune step to be safe.
+  3. pollIntervalMinutes is read from the WORKSPACE document (E14 needs it
+     queryable), falling back to settings/config and then 60.
+  4. ?ws=<id> runs one workspace only — the testing door 0.4.0 never
+     needed, and the first thing anyone will want when a poll misbehaves.
+
+Deploy: Google Cloud Console inline editor (no CLI). See SETUP-PHASE3-2.0.md.
+
+(prev) Version 0.4.0 (D135, the poll reconcile)
+0.4.0: pollCalendars RECONCILES instead of replacing. It used to delete
+every cached event and re-write all of them under new auto-ids every
+hour regardless of change — ~180 document changes pushed to every open
+tab per run, ~2,900 billed reads per tab per day, scaling with users.
+Now: docs are keyed {tierId}_{gcalEventId} (what HANDOFF §3 always
+specified; the code had drifted to auto-ids, which is WHY nothing could
+be compared), only genuinely-changed events are written, and only
+vanished ones deleted. syncedAt was REMOVED from the payload — it was
+never read anywhere, and being Date.now() it would have made every doc
+differ every run and defeated the whole fix. Legacy auto-id docs delete
+themselves on the first run (they're not in the wanted set). Same
+discipline mirrorTasks has used since 0.2.0. No client change needed:
+nothing keys off an event's doc id, and eventsCache is read-only display.
+0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
+0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
+a task in a ❗ midnightCarryover tier that was due before today began
+and still isn't checked gets "❗ <task>" on today's calendar at
+config.carryoverWriteHour (default 9), tomato colorId 11 — D14, the
+"nothing silently disappears" promise. Deliberately NOT hour-triggered:
+"due before today started" is true whenever it runs, so the first
+waking tick (~06:07, past the 22–6 sleep gate) writes the 9 AM landing
+and no cron hiccup can skip a morning. Its own tag namespace
+(tcApp=octodo-carryover) so the mirror — same calendar, keyed by
+tcTaskId — can't see these and patch the ❗ back to the due time.
+Reconciles TODAY only: create / re-time / delete-when-done; history stands.
+0.2.0: one service, two jobs, routed by ?job= — "poll" (default),
+"mirror", or "all" (what the Scheduler should call). The mirror
+reconciles dated, incomplete tasks onto a DEDICATED write-shared
+calendar (cfg.mirrorCalendarId): create missing, patch drifted
+(title/time), delete completed/deleted/undated. Events are tagged
+with extendedProperties.private.tcTaskId, so the CALENDAR is the
+sync ledger — no task-doc writes, no schema changes. Honest due
+times only (escalation theater stays in the app). 30-min blocks.
+LOOP GUARD: refuses to mirror into any calendar attached to a tier.
+Scope widened readonly → calendar (rw).
+0.1.1: an UNSET POLL_SECRET now refuses everything with a distinct
+message (previously undefined === undefined let header-less requests
+through an unset lock — Jake's "did I miss the variables?" question
+exposed it). The JSON report now includes tz + localHour, so one
+curl verifies BOTH env vars.
+
+pollCalendars: reads Google Calendar events for every anchor tier
+with a gcalCalendarId and mirrors them into eventsCache. The web
+client has subscribed to eventsCache since v0.1.0 — no client
+changes needed; events appear in the queue the moment this runs.
+
+Deploy: Google Cloud Console inline editor (no CLI — Jake's school
+Mac has no admin rights). See SETUP-PHASE3.md. Plain
+functions-framework style on purpose: it's what the console's
+Cloud Run functions editor expects.
+
+Env vars (set in the console):
+  POLL_SECRET  — shared secret; requests must send x-poll-secret
+  TZ           — America/Chicago (makes all Date math Nashville-local,
+                 including all-day event midnights and sleep hours)
+
+Auth to Calendar: the function's runtime service account, using
+Application Default Credentials. Jake & Katie SHARE their calendars
+with that service account's email ("See all event details") — no
+OAuth dance, no token storage.
+```
 
 ## `queue.js`
 

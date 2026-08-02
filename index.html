@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.16
+     Version 0.51.17
 
      The whole UI. One page, no templating.
 
@@ -50,9 +50,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.59.3">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.59.4">
 </head>
-<body data-html-version="0.51.16">
+<body data-html-version="0.51.17">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -917,6 +917,34 @@
         </label>
       </div>
       <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
+
+      <!-- ⚠️ 0.51.17 — THE FOLLOW-UP OFFER, AND IT IS DELIBERATELY INDEPENDENT.
+           Katie, via Jake: *"That 'Do you want to duplicate for next year?'
+           modal should have a 'Do you want to add a follow-up task?' as
+           well… Katie wants the option of creating a follow-up task
+           immediately after completing the project as well as the option of
+           duping the whole project."*
+
+           ⚠️ "AS WELL AS", NOT "INSTEAD OF". It has its OWN button on
+           purpose: she can add a follow-up and still duplicate, add one and
+           snooze the duplicate, or add one and say No thanks. Wiring it to
+           Create would have made the common case — a follow-up on a project
+           that does NOT repeat next year — unreachable.
+
+           ⚠️ This does NOT replace the pipeline's `↳ +Nd` field. Jake: *"the
+           old layout of adding offsets for projects in the pipeline was fine
+           — I'm sure the new one is fine, too."* Same idiom, two entry
+           points: the pipeline for a follow-up you knew about when you built
+           the project, this for one you only discover on finishing it. -->
+      <div class="dup-followup">
+        <div class="dup-fu-head">↳ Also add a follow-up task?</div>
+        <div class="form-row">
+          <label class="dup-wide">Task <input id="dup-fu-title" type="text" placeholder="e.g. Send the invoice"></label>
+          <label>in <input id="dup-fu-days" type="number" min="0" max="365" value="14"> days</label>
+          <button id="dup-fu-add" class="mini" type="button">＋ Add it</button>
+        </div>
+        <p class="hint" id="dup-fu-note">It lands on this project's tier, dated from today, and lives its own life — the project stays finished either way.</p>
+      </div>
       <div class="weekend-choices">
         <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
         <button id="dup-yes" class="primary">Create next year's run</button>
@@ -989,6 +1017,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.45.0"></script>
+  <script type="module" src="app.js?v=1.46.0"></script>
 </body>
 </html>
