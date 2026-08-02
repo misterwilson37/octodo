@@ -1,11 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.41.1
+// Version 1.41.2
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.41.2 — DIRTY-1 ON PROJECTS. 1.41.0 fixed the manufactured-dirt bug in
+//          refreshTierSelects and left its two twins untouched — both on
+//          Firestore subscriptions, both writing fields in the project form
+//          signature. Adding a project changed bestFreeColor()'s answer,
+//          which is why the failing repro needed one. §8c #4, again, by the
+//          instance that wrote §8c. All three now go through
+//          preservingProjectFormState().
 // 1.41.1 — DASH-FILL. The timeline year grid left a black band under
 //          itself on a tall dashboard pane. The lane fit is clamped to
 //          34px, and on a 4K pane with few concurrent projects the
@@ -95,7 +102,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.41.1";
+export const APP_VERSION = "1.41.2";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -119,7 +126,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.29.0";
+} from "./store.js?v=0.29.1";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline, projectPipelineWindow,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -1001,10 +1008,14 @@ function subscribeBoard() {
   S.unsubs.push(subscribeTiers(t => { S.tiers = t; docCensus.tiers = t.length; refreshTierSelects(); renderFilters(); render(); }));
   S.unsubs.push(subscribeTasks(t => { S.tasks = t; docCensus.tasks = t.length; render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeEvents(e => { S.events = e; docCensus.events = e.length; render(); }));
-  S.unsubs.push(subscribeProjects(p => { S.projects = p; docCensus.projects = p.length; suggestProjectColor(); render(); maybeDecisionTime(); }));
+  // DIRTY-1 — suggestProjectColor writes #project-color, which is in the
+  // form signature, and bestFreeColor() changes its answer whenever the set
+  // of project colours changes. Adding a project therefore manufactured dirt.
+  S.unsubs.push(subscribeProjects(p => { S.projects = p; docCensus.projects = p.length; preservingProjectFormState(suggestProjectColor); render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeSessions(s => { S.sessions = s; docCensus.sessions = s.length; render(); }));   // D112
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
-  S.unsubs.push(subscribeProjectTypes(t => { S.projectTypes = t; refreshTypeSelect(); }));  // D124
+  // DIRTY-1 — refreshTypeSelect writes #project-type, also in the signature.
+  S.unsubs.push(subscribeProjectTypes(t => { S.projectTypes = t; preservingProjectFormState(refreshTypeSelect); }));  // D124
   S.unsubs.push(subscribeConfig(c => {
     S.config = c;
     setDeadlineHour(c?.deadlineHour ?? 16); // D51 — queue math follows settings
@@ -3463,9 +3474,38 @@ function renderDecision() {
 
 // ---------- Task form (create + edit) ----------
 
+/** ⚠️ ANY CODE THAT WRITES A PROJECT-FORM FIELD ON THE APP'S OWN INITIATIVE
+ *  GOES THROUGH THIS. Not most of it — all of it.
+ *
+ *  1.41.0 fixed exactly this bug in `refreshTierSelects` and stopped there,
+ *  and DIRTY-1 failed on projects the moment Jake did the one thing that
+ *  first version could not survive: *added a project.* There were two more
+ *  writers, both on Firestore subscriptions, both firing after D131 takes
+ *  its baseline:
+ *
+ *    · `subscribeProjects` → `suggestProjectColor()` → writes #project-color
+ *    · `subscribeProjectTypes` → `refreshTypeSelect()` → writes #project-type
+ *
+ *  Both fields are in `projectFormSignature()`. And `bestFreeColor()` picks
+ *  the colour furthest from the ones already in use, so ADDING A PROJECT
+ *  changes the suggestion — which is why his repro needed a new project and
+ *  the original repro did not. *"Added a new project, hard refresh three
+ *  times, hit the pencil on the project, and it told me I have unsaved
+ *  changes."*
+ *
+ *  This is §8c #4 verbatim, committed by the instance that wrote §8c down:
+ *  harden one call, leave its twins, ship. The rule stands — **when you
+ *  harden one call, grep for every other caller of the same thing.**
+ *  A helper rather than a third copy of the same four lines, because a
+ *  fourth writer is a matter of time and this is the shape that has to
+ *  survive it. */
+function preservingProjectFormState(fn) {
+  const wasClean = !isDirty("projectForm", projectFormSignature);
+  fn();
+  if (wasClean) markClean("projectForm", projectFormSignature);
+}
+
 function refreshTierSelects() {
-  // ⚠️ 1.41.0 — A PROGRAMMATIC REFILL MUST NOT MANUFACTURE DIRT.
-  //
   // D131 baselines the project form at boot, when this <select> is still
   // EMPTY (tiers arrive from Firestore a moment later). This function then
   // fills the options and picks a default — so the signature changed without
@@ -3476,23 +3516,23 @@ function refreshTierSelects() {
   // Nothing is wrong with the guard; the baseline was taken before the form
   // finished existing. So: carry the clean/dirty state ACROSS the refill. If
   // the user really had unsaved edits, they stay dirty and still get warned.
-  const wasClean = !isDirty("projectForm", projectFormSignature);
-  const taskTiers = S.tiers.filter(t => t.kind !== "anchor"); // rank-sorted upstream
-  const taskOpts = taskTiers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
-  const projOpts = taskTiers.map(t => `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
-  const keep1 = $("#task-tier").value, keep2 = $("#project-tier").value;
-  $("#task-tier").innerHTML = taskOpts;
-  $("#project-tier").innerHTML = projOpts;
-  if (keep1 && taskTiers.some(t => t.id === keep1)) $("#task-tier").value = keep1;
-  if (keep2 && taskTiers.some(t => t.id === keep2)) {
-    $("#project-tier").value = keep2;
-  } else {
-    const work = taskTiers.find(t => t.name.toLowerCase() === "work");
-    if (work) $("#project-tier").value = work.id;
-  }
-  refreshTypeSelect();   // D124 — keep the project-type picker in sync
-  syncProjectDateRequirement();   // D126
-  if (wasClean) markClean("projectForm", projectFormSignature);   // 1.41.0
+  preservingProjectFormState(() => {
+    const taskTiers = S.tiers.filter(t => t.kind !== "anchor"); // rank-sorted upstream
+    const taskOpts = taskTiers.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+    const projOpts = taskTiers.map(t => `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
+    const keep1 = $("#task-tier").value, keep2 = $("#project-tier").value;
+    $("#task-tier").innerHTML = taskOpts;
+    $("#project-tier").innerHTML = projOpts;
+    if (keep1 && taskTiers.some(t => t.id === keep1)) $("#task-tier").value = keep1;
+    if (keep2 && taskTiers.some(t => t.id === keep2)) {
+      $("#project-tier").value = keep2;
+    } else {
+      const work = taskTiers.find(t => t.name.toLowerCase() === "work");
+      if (work) $("#project-tier").value = work.id;
+    }
+    refreshTypeSelect();   // D124 — keep the project-type picker in sync
+    syncProjectDateRequirement();   // D126
+  });
 }
 
 // D124 — the project-type picker on the new-project form: Default + each
