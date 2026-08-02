@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.59.0 — .st-spawn-wrap, the hurrah follow-up field.
+   Version 0.59.1 — .st-spawn-wrap, the hurrah follow-up field.
    (prev) Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
    there is room; "Later" group in the projects panel.
    (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
@@ -18,7 +18,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.59.0"; }
+:root { --tc-version: "0.59.1"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -544,6 +544,37 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
      today" wraps to its own line regardless. The wall keeps its 7.5rem. */
   .day-nav .nav-slot, .wanttos-nav .nav-slot { min-width: 0; flex: 1 1 0; }
   .day-nav .nav-slot .mini { white-space: normal; }
+
+  /* ⚠️ 0.59.1 — THE HEADER OVERFLOWS THE GLASS, AND IT IS D138 AGAIN IN A
+     DIFFERENT ROW. `header` and `.header-right` are both plain
+     `display: flex` with NO wrap, and `.view-switch button` is
+     `white-space: nowrap` — so a flex item's default `min-width: auto`
+     floors the row at its min-content, which is the sum of every label
+     laid end to end. On a 360px phone that row wants ~700px: the brand,
+     four view buttons, the board chip, and ⛶ ⚙ ＋ ⏻.
+
+     The row does not clip, it OVERFLOWS — so `header`'s background paints
+     to the viewport and the ＋ sits out past the edge of it, which is
+     exactly what Katie's 2026-08-01 phone screenshot shows. That overflow
+     sets document.scrollWidth, and a document wider than the glass is why
+     her screen "starts too large every time."
+
+     ⚠️ 2.0 IS WORSE THAN THE 1.x IN THAT SCREENSHOT, NOT BETTER: it added a
+     fourth view button (Dashboard), the board chip, and ⏻ to the same
+     unwrappable row. D138 fixed the day-nav and stopped at the panel.
+
+     Wrapping rather than hiding, on purpose — nothing here is a constant
+     tuned against a phone I cannot see, and no control disappears. If it is
+     still tight, the next lever is the Dashboard button, whose own tooltip
+     says "big screens only" and which is ~6rem of a row that has none to
+     spare. That is a judgement about her workflow, so it is Jake's. */
+  header { flex-wrap: wrap; gap: .3rem .5rem; padding: .5rem .7rem; }
+  .header-right { flex-wrap: wrap; justify-content: flex-end; row-gap: .35rem; }
+  .view-switch { flex-wrap: wrap; }
+  .brand { font-size: 1rem; }
+  /* The version badge NEVER shrinks away — it is how a stale cache gets
+     caught, and Katie has run one before (D130). */
+  .version { white-space: nowrap; }
 }
 
 /* ---------- Projects panel ---------- */

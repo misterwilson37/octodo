@@ -1,11 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.41.2
+// Version 1.42.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.42.0 — fitLine(). "Her screen starts too large every time" had no
+//          instrument but a photograph of a phone. The version tooltip and
+//          the Settings versions line now say whether the document is wider
+//          than the viewport, by how much, and which element is furthest
+//          right. Free when nothing is wrong; the DOM walk only runs once
+//          the page is already overflowing.
 // 1.41.2 — DIRTY-1 ON PROJECTS. 1.41.0 fixed the manufactured-dirt bug in
 //          refreshTierSelects and left its two twins untouched — both on
 //          Firestore subscriptions, both writing fields in the project form
@@ -102,7 +108,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.41.2";
+export const APP_VERSION = "1.42.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -798,6 +804,41 @@ function censusLine() {
          `events ${docCensus.events} · projects ${docCensus.projects} · tiers ${docCensus.tiers})`;
 }
 
+/** ⚠️ IS THE PAGE WIDER THAN THE GLASS, AND IF SO WHAT IS DOING IT?
+ *
+ *  "Her screen starts too large every time" was a report nobody could act on
+ *  for weeks, because the only instrument was a photograph of a phone. This
+ *  turns it into a number and a culprit, on whatever device is complaining.
+ *  It rides in the version tooltip AND `#versions-line` in Settings —
+ *  deliberately both, because a `title` needs a hover and the device that
+ *  has this bug is the one with no pointer.
+ *
+ *  Cheap when there is nothing wrong: one scrollWidth read. The DOM walk
+ *  only happens once the page is ALREADY overflowing, which is the case
+ *  where a few milliseconds buys an answer.
+ *
+ *  ⚠️ Reports the FURTHEST-RIGHT element, not the widest. A 700px row inside
+ *  a clipped parent is not the bug; the thing sticking out past the edge is.
+ */
+function fitLine() {
+  const de = document.documentElement;
+  const over = de.scrollWidth - de.clientWidth;
+  if (over <= 1) return `fit: ok (viewport ${de.clientWidth}px)`;
+  let worst = null, edge = de.clientWidth;
+  for (const el of document.querySelectorAll("#app-screen, #app-screen *")) {
+    if (el.offsetParent === null) continue;            // D110 — hidden measures zero
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.right <= edge + 1) continue;
+    edge = r.right; worst = el;
+  }
+  let name = "?";
+  if (worst) {
+    const cls = typeof worst.className === "string" ? worst.className.split(" ")[0] : "";
+    name = worst.id ? `#${worst.id}` : (cls ? `.${cls}` : worst.tagName.toLowerCase());
+  }
+  return `⚠️ fit: content runs ${over}px past the ${de.clientWidth}px viewport — furthest right is ${name}`;
+}
+
 function reportVersions() {
   const cssVersion = getComputedStyle(document.documentElement)
     .getPropertyValue("--tc-version").trim().replace(/"/g, "") || "?";
@@ -832,9 +873,10 @@ function reportVersions() {
     "\n\nworkspace " + (activeWorkspaceId() || "—") +   // E1 — which board am I on?
     (merged.length ? "\n+ shared " + merged.join(", ") : "") +
     "\n" + censusLine() +   // D136
+    "\n" + fitLine() +      // 1.42.0 — FIT-1
     deployLines;
   const line = $("#versions-line");
-  if (line) line.textContent = report + " — " + censusLine();   // D136
+  if (line) line.textContent = report + " — " + censusLine() + " — " + fitLine();   // D136 / 1.42.0
 }
 
 // ---------- D130: update check ----------

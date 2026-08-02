@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.6.0 · current as of 2026-08-01 (Thaumoctopus)**
+**Version 2.7.0 · current as of 2026-08-01 (Thaumoctopus)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -96,25 +96,41 @@ confirm names the hours and no orphaned session is left.
 §0k.3. The soft delete is not built. This test asserts today's truth, not the
 one you want.*
 
-### 5. IMPORT-3. Calendar permissions do not travel. **Flip day.**
+### 5. FIT-1. Katie's phone, in one tap.
+On a phone: Settings → the versions line at the bottom. It should end with
+**`fit: ok (viewport NNNpx)`**. If it instead reads `⚠️ fit: content runs Npx
+past…`, **send that line** — it names the element and settles this without
+another photograph.
+→ *app 1.42.0. Check it on the desktop too: `fit: ok` there is the control.*
+
+### 6. FIT-2. The header stops running off the edge.
+Same phone, Today view. The header should **wrap onto two or three rows** with
+every control reachable — brand, Today/Week/Year/Dashboard, ⚙ ＋ ⏻ — and no
+horizontal scroll or pinch-to-fit on load.
+→ *⚠️ Untested in any browser; the ~860px-in-360px figure is an estimate read
+off the CSS. If it is still tight, the next lever is hiding the Dashboard
+button on phones — its own tooltip says "big screens only" — but that is your
+call about Katie's workflow, not mine.*
+
+### 7. IMPORT-3. Calendar permissions do not travel. **Flip day.**
 Every calendar re-shared with the 2.0 service account — inbound **and** the
 outbound mirror.
 → *Not a rehearsal, a step. The export holds calendar IDs and cannot hold
 calendar PERMISSIONS. Get it wrong and the tiers import perfectly and stay
 empty forever: no error, no warning, nothing.*
 
-### 6. IMPORT-2. Katie runs it herself, or gets Co-owner.
+### 8. IMPORT-2. Katie runs it herself, or gets Co-owner.
 RULES-6b measured it: an editor cannot write `pollIntervalMinutes` to the
 workspace document, so *"Katie adds Jake as an editor and he imports"* cannot
 execute. She owns her board and needs nothing extra.
 
-### 7. HURRAH-2. Re-ticking does not mint a second task.
+### 9. HURRAH-2. Re-ticking does not mint a second task.
 Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
 the first is not deleted by the un-tick.
 → *`spawnedTaskId` guards this, and it is the same guard the completion-modal
 version in §0k.4 will use. Worth knowing it holds before that is built.*
 
-### 8. HURRAH-3. The field only shows on the hurrah.
+### 10. HURRAH-3. The field only shows on the hurrah.
 Move the 🎆 to a different stage. `↳ +Nd` follows it, and the old row's value
 is dropped rather than riding along on a stage that is no longer the climax.
 

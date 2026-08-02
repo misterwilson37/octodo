@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.41.2 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.0 · html 0.51.12 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
+| **Versions** | app 1.42.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.1 · html 0.51.13 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
 | **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **THE FLIP IS THIS WEEKEND** (Jake, 2026-08-01) — `TESTS.md` START HERE is re-ordered around it and IMPORT-1 is now item 1. §0h (outriders) comes after. **MOVE-1 and MOVE-2 passed**; MOVE-3 and MOVE-4 are the mover's remaining browser tests, and §0h's migration reuses that same copy→verify→delete mover. |
@@ -850,6 +850,70 @@ Spec, in his words: a **super-admin panel visible only to
    probably doesn't matter."* It does not. Encrypting a backup against a
    threat model where the holder already has console access is theatre, and
    it costs a lost key later. Plain JSON.
+
+---
+
+### 0l. FIT-1 — THE HEADER OVERFLOWS THE GLASS (css 0.59.1 · app 1.42.0)
+
+Jake, with a phone screenshot of Katie's 1.x: *"You can see that the top bar
+extends past the agenda, and the event plus is the furthest right piece. Is
+that where the bug is that starts her screen too large every time? Or did you
+already address this for 2.0?"*
+
+**Not addressed, and 2.0 was worse than the version in the screenshot.**
+
+`header` and `.header-right` are both plain `display: flex` with **no wrap**,
+and `.view-switch button` is `white-space: nowrap`. A flex item's default
+`min-width: auto` floors a row at its min-content, and for nowrap text that is
+the full label — so the row's floor is every label laid end to end. Estimated
+at phone width: **~860px of refuse-to-shrink content in a 360px viewport.**
+
+The row does not clip, it **overflows**, so `header`'s background paints to
+the viewport while ＋ sits out past the edge of it — exactly the screenshot.
+That overflow sets `document.scrollWidth`, and a document wider than the glass
+is why her screen starts too large.
+
+⚠️ **THIS IS D138 IN A DIFFERENT ROW.** D138 diagnosed this precise mechanism
+in the day-nav — refuse-to-shrink min-content exceeding a phone viewport — and
+fixed the panel. The header has the same shape and was never looked at.
+**Seventh instance of "fixed one, left the twin," and the third this session.**
+When a mechanism gets a name here, grep for the shape, not the symptom.
+
+⚠️ **2.0 ADDED THREE MORE ITEMS TO THE UNWRAPPABLE ROW** since the 1.21.0 in
+that photo: a fourth view button (Dashboard), the board chip, and ⏻. Katie's
+screenshot is of a *better* version of this bug than the one she is about to
+be migrated onto.
+
+**Two symptoms in that one photo, and only one of them is 2.0's problem.** The
+day label word-stacks into `Today / — Sat, / Aug 1` — that is D138's exact
+signature, and D138 **is** fixed in 2.0. The header overflow is separate and
+was not.
+
+#### The fix, and the thing that matters more than the fix
+
+`header`, `.header-right` and `.view-switch` wrap at ≤600px. **Wrapping rather
+than hiding**: nothing here is a constant tuned against a phone nobody in the
+conversation is holding, and no control disappears. If it is still tight, the
+next lever is the **Dashboard button**, whose own tooltip says *"big screens
+only"* — ~6rem in a row with none to spare. That is a judgement about Katie's
+workflow, so it is Jake's, not a successor's.
+
+⚠️ **`fitLine()` (app 1.42.0) is the durable half.** This report survived weeks
+with no instrument but a photograph of a phone. The version tooltip **and
+`#versions-line` in Settings** now say whether the document is wider than the
+viewport, by how much, and which element is furthest right. **Both surfaces on
+purpose: a `title` needs a hover, and the device with this bug has no
+pointer.** Free when nothing is wrong — the DOM walk only runs once the page is
+already overflowing.
+
+It reports the **furthest-right** element, not the widest: a 700px row inside a
+clipped parent is not the bug, the thing sticking out past the edge is.
+
+⚠️ **Neither piece has run in a browser.** The arithmetic is an estimate from
+the CSS, and `fitLine` has never been read on a real phone. FIT-1 and FIT-2 in
+`TESTS.md`. **The measurement is worth more than my fix** — if it says the
+furthest-right element is something other than `.header-right`, believe it over
+this section.
 
 ---
 
