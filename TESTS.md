@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.4.0 · current as of 2026-08-01 (Thaumoctopus)**
+**Version 2.6.0 · current as of 2026-08-01 (Thaumoctopus)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -53,99 +53,85 @@ test says *→ `whereis`*, that is the cheap way to run it.
 
 ---
 
-## 🔴 Run these first — new code, and it moves data
+## ▶ START HERE — one ordered list, and it is the only "first"
 
-**§0d shipped.** A tier change across a board boundary now moves the document
-instead of stranding it. None of it has been run in a browser.
+⚠️ **Do not add a second "first."** This file once had two sections claiming
+the top rank and MOVE-3 in both. One ordered list; the order is the answer.
 
-**MOVE-1. The specimen repair, which is also the regression test.**
-Change `gmail made I`'s tier to `Personal`, save, then change it back to
-`sumner vs gmail`. Re-scan `whereis` from **both** accounts. The ✗ must be
-gone and the project must appear on the shared board for sumner.
-→ *Before this fix both edits were no-ops on location. This one action proves
-the fix and clears the only live mis-route you have.*
-
-**MOVE-2. A project takes its clocked time with it.**
-Clock a minute onto a project, then move it to a tier on another board. The
-Time Report still totals it, and `whereis` shows the session on the **new**
-board with no ✗.
-→ *Sessions route off the project, not the tier. If they don't follow, the
-record splits and each half looks complete.*
-
-**MOVE-3. A task takes its follow-ups.**
-Make a task with a chained follow-up, move the parent to a tier on another
-board, then **undo the whole thing**. Both come back together.
-→ *`rewindFollowUps` queries one board. A split chain doesn't error — it just
-stops seeing half.*
-
-**MOVE-4. Deleting a project warns about the time, and takes it.**
-Delete a project that has clocked sessions. The confirm names the hours;
-afterwards `whereis` shows **no orphaned session**.
-→ *This is the bug your 07-31 scan found: an 8:02 PM session with no project,
-invisible to both accounts that held keys to that board.*
+⚠️ **IMPORT-1's dry run is WITHDRAWN, not deferred.** Jake, 2026-08-01: there
+are no throwaway accounts and no re-shares to rehearse — **Katie's transfer is
+the test**, and 1.x stays live so a failed import costs a wiped 2.0 board and
+nothing else. Do not put it back. Handoff §0k.5 has the reasoning and the
+super-admin wipe/export panel the plan now depends on.
 
 ---
 
-## 🟠 Fix verification — run these first
+### 1. RETIER-1. The stranded follow-up walks home.
+Open **`and then this`**, re-pick tier **Work**, save. Re-scan `whereis` — the
+✗ must be gone and the task must sit in `Jake (personal)` with its parent.
+→ *store 0.29.1. `rehomeFor` fires on any edit naming a tier on another board,
+so the repair is an ordinary save — MOVE-1's specimen fix in a new costume.*
 
-**OFFDAY-1. A task dated to a day its tier doesn't work is still reachable.**
-On a Saturday, make a task on a Mon–Fri tier due that same Saturday. It must
-appear under **WAITING ON…** with a checkbox and a line explaining why, and it
-must be checkable from there.
-→ *Before this it appeared on NO screen and came back Monday as overdue. This
-is what actually broke MOVE-3.*
+### 2. RETIER-2. A whole chain moves and lands routable.
+Make a task with a chained follow-up on a personal tier. Change the **parent's**
+tier to the shared one. `whereis` from **both** accounts: parent *and* child on
+the shared board, **no ✗**, and the child still has its own title and dates.
+Then undo. Both come home together.
+→ *⚠️ This is MOVE-3's other half and the regression test for 0.29.1: the child
+used to arrive on the new board still pointing at the old board's tier. Covered
+by `move.test.mjs` too, but only the browser proves the chain walk.*
 
-**DIRTY-1. Hard refresh, then click ✎ on a project as your first action.**
-No "unsaved changes" prompt. Then type in the project name, click ✎ on a
-different project — the prompt **should** appear. Both halves matter.
+### 3. DIRTY-2. The project form after a NEW project.
+Add a project. Hard refresh. Click ✎ on a project as your **first** action —
+no "unsaved changes". Then type in the name, click ✎ on a **different**
+project — the prompt **should** appear.
+→ *⚠️ Adding a project is load-bearing: `bestFreeColor()` changes its
+suggestion when the colour set changes, which is what made this fail when
+1.41.0's version of the fix passed. Both halves matter.*
 
-**MOVE-3 (re-run).** Now that the parent task is visible, the actual test can
-run: make a task with a chained follow-up, move the parent to a tier on
-another board, then undo. Both come back together.
+### 4. MOVE-4b. Deleting a project still warns honestly.
+Unchanged behaviour — re-run only to confirm 0.29.1 did not disturb it. The
+confirm names the hours and no orphaned session is left.
+→ *⚠️ **You do not like this behaviour and you are right** — see handoff
+§0k.3. The soft delete is not built. This test asserts today's truth, not the
+one you want.*
 
-**DASH-FILL-1. The year grid reaches the bottom of the pane.**
-Dashboard, left pane, **Timeline** layout, **Bars: Auto**. The quarter rows
-should share the whole pane with no black band under the legend — four bands
-of roughly equal height, bars still tight at the top of each.
-→ *Verified by simulation against the screenshot's numbers, not in a browser.
-606px of dead space becomes 2px on paper.*
+### 5. IMPORT-3. Calendar permissions do not travel. **Flip day.**
+Every calendar re-shared with the 2.0 service account — inbound **and** the
+outbound mirror.
+→ *Not a rehearsal, a step. The export holds calendar IDs and cannot hold
+calendar PERMISSIONS. Get it wrong and the tiers import perfectly and stay
+empty forever: no error, no warning, nothing.*
 
-**DASH-FILL-2. It does not overcorrect anywhere else.**
-Same pane, then: switch to **Annual** and **Months** (should be unchanged —
-they were deliberately not touched); pin **▮ / ▪ / ▁ / 🧵** (bar thickness is
-still yours); tap a month name to **zoom** into it.
-→ *⚠️ Zoom is the case I am least sure of — one row takes the entire surplus,
-so eight bars sit at the top of a very tall band. Say if that reads wrong.*
+### 6. IMPORT-2. Katie runs it herself, or gets Co-owner.
+RULES-6b measured it: an editor cannot write `pollIntervalMinutes` to the
+workspace document, so *"Katie adds Jake as an editor and he imports"* cannot
+execute. She owns her board and needs nothing extra.
 
-**DASH-FILL-3. A short pane still clips honestly.**
-Drag the dashboard split so the year pane is small, or use a busy quarter.
-The grid must **not** shrink or rearrange — overflow and a scrollbar are the
-existing, correct behaviour and the fix never shrinks.
+### 7. HURRAH-2. Re-ticking does not mint a second task.
+Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
+the first is not deleted by the un-tick.
+→ *`spawnedTaskId` guards this, and it is the same guard the completion-modal
+version in §0k.4 will use. Worth knowing it holds before that is built.*
+
+### 8. HURRAH-3. The field only shows on the hurrah.
+Move the 🎆 to a different stage. `↳ +Nd` follows it, and the old row's value
+is dropped rather than riding along on a stage that is no longer the climax.
 
 ---
 
 ## 🟠 New from the primary user's reports — unrun
 
-**HURRAH-1. The follow-up leaves as a task.**
-Put a 🎆 on the last stage, set `↳ +14d`, tick it. The project should
-**finish** — fireworks, folds into Finished — and a task should appear dated
-two weeks out, with a notice saying so.
-→ *This is the whole point: the project is done, the follow-up is not, and
-they are two different things.*
+**HURRAH-1. ⚠️ Mechanically passed, wrong placement — do not re-run.**
+The spawn works. Katie wants the offer at the **moment of completion**, in the
+same breath as "duplicate for next year," not only as a `↳ +Nd` decided when
+the pipeline was built. Both, not either — the pipeline field stays. Handoff
+§0k.4. **HURRAH-2 and HURRAH-3 moved to START HERE**, because the guard they
+test is the one the new version will reuse.
 
-**HURRAH-2. Re-ticking does not mint a second task.**
-Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
-the first one is not deleted by the un-tick.
-→ *`spawnedTaskId` guards this. Somebody may already have worked the task.*
-
-**HURRAH-3. The field only shows on the hurrah.**
-Move the 🎆 to a different stage. The `↳ +Nd` field follows it, and the old
-row's value is dropped rather than riding along on a stage that is no longer
-the climax.
-
-**LATER-1. The plate actually clears.**
-Finish a project, duplicate it for next year. The copy lands in a collapsed
-**Later** group, not the main list.
+**LATER-1** ✅ *Passed.* The duplicate lands in the collapsed **Later** group.
+⚠️ Jake: *"I'm not sure Katie's going to love that it's there, but it's better
+than it showing."* Filed as a reaction to watch, not a defect.
 
 **LATER-2. ⚠️ SUPERSEDED — do not run.** It tested that a stage anchored
 before the start keeps its project visible. Katie's correction (handoff §0h)
@@ -184,21 +170,16 @@ deliberately unbuilt. Jake called the current rule temporary.
 
 ---
 
-## 🟠 Blocks Katie moving to 2.0 — which is the whole point of 2.0
+## 🟠 Blocks Katie moving to 2.0 — **moved to the top of this file**
 
-**IMPORT-1. A dry run on a throwaway account.**
-Export a scratch 1.x board, run `import.html` against a spare Google account,
-walk the checklist. The importer is emulator-true against Katie's real
-245-document export and **has never touched live Firestore**.
+IMPORT-1, IMPORT-2 and IMPORT-3 were here. They are now items **1, 2 and 3**
+of START HERE, because Katie moves this weekend and the import has never
+written to live Firestore.
 
-**IMPORT-2. Katie runs it herself.**
-Not a preference — an editor physically cannot (RULES-6b, measured). On flip
-day Katie either gets Co-owner or runs the import from her own account. She
-owns her board and needs nothing extra.
-
-**IMPORT-3. Calendar permissions do not travel.**
-The tiers import perfectly and then stay empty forever, silently, until
-somebody re-shares each calendar. Put this on the flip-day checklist.
+**Left as a pointer rather than deleted outright,** because deleting a heading
+somebody has been navigating by is how a reader concludes the tests were
+dropped. Removing the *text* is the point — this is the file that just had two
+copies of MOVE-3 in it.
 
 ---
 
@@ -279,6 +260,33 @@ can toggle it.
 ---
 
 ## ✅ Passed — do not run again
+
+**2026-08-01, the second run.**
+
+- **OFFDAY-1** — the off-day task is reachable in WAITING and checkable there.
+- **MOVE-1, MOVE-2** — re-run to set up HURRAH; both passed again. **Bonus
+  finding, and it is a feature working:** moving a project from a personal
+  tier to the shared one *pulled its start date onto a working day.*
+  Jake: *"Well done!"*
+- **MOVE-4** — the delete confirm named the hours and did not lie. ⚠️ *Passed
+  and the behaviour is wrong* — §0k.3.
+- **DASH-FILL-1, 2, 3** — all three. *"The timeline resizes correctly no
+  matter how silly I am with the resizing."*
+- **LATER-1** — the plate clears.
+- **DIRTY-1** — passed on the **task** form. Failed on projects → DIRTY-2.
+- **MOVE-3** — the chain moved; the follow-up landed mis-routed → RETIER-2.
+
+**2026-08-01.** Jake: *"Move 1 and Move 2 worked before."*
+
+- **MOVE-1** — the specimen repair. `gmail made I` moved out of its tier and
+  back, clearing the only live mis-route in the data.
+- **MOVE-2** — a project took its clocked sessions across a board boundary.
+  ⚠️ **Neither was ever written down**, because only the MOVE-3 *failure*
+  produced a conversation (handoff §0i) and the passes did not. That is how
+  this file came to say *"none of it has been run in a browser"* about tests
+  that had. **A test that passes is a document edit, not just a relief.**
+  `whereis` re-confirms MOVE-1 in one page load if you want it belt-and-braces
+  — the ✗ on `gmail made I` should be gone.
 
 **2026-07-31, the big sweep.** Jake ran most of the list in one sitting.
 

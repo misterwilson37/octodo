@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.41.1 · store 0.29.0 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.0 · html 0.51.11 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.0.0 · version-check 1.4.0 · manifest 0.2.0 |
+| **Versions** | app 1.41.2 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.0 · html 0.51.12 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
 | **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
-| **Next** | **§0h — outrider stages become tasks.** Fully specified, no open questions, migration ruling recorded. ⚠️ **Run TESTS.md's 🔴 MOVE-1…4 first** — §0h's migration reuses §0d's copy→verify→delete mover, and that mover has never run in a browser. Building a live-data migration on an unverified mover gives any failure two suspects. |
-| ⚠️ **Katie is on 1.x** | Her 2026-08-01 screenshot reads **v1.21.0**. Every fix in this repo — DASH-FILL, LABEL-1, the lot — reaches her **only at the flip**. See §0j before promising her anything. |
+| **Next** | ⚠️ **THE FLIP IS THIS WEEKEND** (Jake, 2026-08-01) — `TESTS.md` START HERE is re-ordered around it and IMPORT-1 is now item 1. §0h (outriders) comes after. **MOVE-1 and MOVE-2 passed**; MOVE-3 and MOVE-4 are the mover's remaining browser tests, and §0h's migration reuses that same copy→verify→delete mover. |
+| ⚠️ **Katie is on 1.x until the flip** | Her 2026-08-01 screenshot reads **v1.21.0**. Every fix in this repo reaches her **at the flip and not before** — which Jake has now made the plan rather than a problem. See §0j. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
 ### ⚠️ Three things to do before you write a line
@@ -584,12 +584,61 @@ E27's rule is that a defect in code that exists in both trees must be *called
 out* as shared, not silently fixed in whichever copy is open — and it has now
 been silently one-sided twice.
 
-**The decision is Jake's and it is a real fork, not a formality:** hotfix 1.x
-(needs 1.x's `app.js`, `index.html` and `tentacalendar.css` uploaded — they
-are not in this repo) and pay the dual-fix tax twice more, **or** accept that
-her screen stays wrong until flip day and let that sharpen the case for
-IMPORT-1. ⚠️ **Do not let a successor read §0g's "FIXED" and tell Katie it is
-fixed.** 5a.1 stands: nothing goes to her to be checked.
+✅ **DECIDED, Jake, 2026-08-01 — NO 1.x HOTFIX. THE FLIP IS THE FIX.** He is
+moving her this weekend, and the reasoning reframes the whole migration:
+
+> *"That way it's not just an upgrade in terms of stuff she may not need
+> (shared resources, etc.), but it's an upgrade in terms of her actual
+> needs."*
+
+**That is the strongest argument for 2.0 anyone has made on this project, and
+it should be the pitch.** Item 5, roles and dependent boards are things 2.0
+does *for Jake*; DASH-FILL and LABEL-1 are things it does for **her**, on the
+screen she looks at every morning. A migration that only carries features the
+user did not ask for is a tax; this one arrives with her own bug reports
+already closed.
+
+**Consequences a successor must not undo:**
+
+- ⚠️ **Do not read §0g's "FIXED" and tell Katie it is fixed** — it is fixed in
+  a tree she does not run until the flip completes. 5a.1 stands: nothing goes
+  to her to be checked, and that includes "can you confirm the label fits now."
+- **The 1.x tree gets nothing further.** E27's dual-fix window closes with the
+  flip; do not spend a session hotfixing a repo that is about to be abandoned
+  in place.
+- ⚠️ **This re-ranks `TESTS.md` and the re-rank is the point.** IMPORT-1, 2
+  and 3 are now items 1–3 of START HERE. **The importer has never written to
+  live Firestore** — it is emulator-true against her 245-document export and
+  nothing more — and IMPORT-3 (calendar permissions do not travel) is the one
+  that fails silently and forever.
+
+#### ⚠️ THE TEST DOCUMENT HAD TWO "FIRSTS" AND TWO MOVE-3s
+
+Jake, reading `TESTS.md` 2.4.0: *"Your tests document has 'run these first'
+twice, and the move tests are identical to the old ones."* Both true, and the
+second question that followed is the better one: *"Are we worried that the
+fixes for 3 broke move 1 and 2, or do the tests need an audit?"*
+
+**The tests needed the audit. The code was never in question, and that is
+checkable rather than reassuring:** the mover has exactly two entry points,
+`updateTask` and `updateProject`, both added in store **0.28.0** and untouched
+since. 0.29.0 is the hurrah spawn, which lives in `setStageDone` and calls
+`addTask` — it never reaches `rehomeFor`. queue 0.21.0 is a rendering change
+in a file that has never known Firestore exists. `move.test.mjs` extracts
+`walkChain` and `rehomeFor` from the live source and passes 16/16.
+
+**What actually happened is worth more than the fix.** Jake ran MOVE-1 and
+MOVE-2 successfully, hit MOVE-3, and MOVE-3 failed for an unrelated reason
+(the off-day rule, §0i). **Only the failure produced a conversation.** The
+passes were never written down, so `TESTS.md` went on saying *"none of it has
+been run in a browser"* about tests that had been — and MOVE-3 got listed a
+second time as a re-run without the first copy being removed.
+
+> **A test that passes is a document edit, not just a relief.**
+
+Ranking by urgency label had also quietly stopped working: two sections both
+claimed the top rank, so "first" meant nothing. `TESTS.md` 2.5.0 replaces both
+with **one ordered START HERE list**, and says not to add a second.
 
 #### The checker had the hole it was built to find (version-check 1.4.0)
 
@@ -627,6 +676,180 @@ what reported it. Do the sabotage again to anything added here.
 **Where the `.mjs` files belong: the repo root, where they already are.** They
 read `app.js`, `store.js` and `HANDOFF-2.0.md` by relative path. Nothing needs
 moving.
+
+---
+
+### 0k. THE 2026-08-01 TEST RUN — two defects, three decisions (Thaumoctopus)
+
+Jake ran the list. **OFFDAY-1, MOVE-1, MOVE-2, MOVE-4, DASH-FILL-1/2/3 and
+LATER-1 all pass.** Two things failed and three things he does not like are
+worth more than any of the passes.
+
+#### ⚠️ 1. moveTask STRANDED EVERY FOLLOW-UP IT EVER CARRIED (store 0.29.1)
+
+MOVE-3 *"passed… mostly."* `whereis` showed the task **`and then this`**
+sitting in `sumner vs gmail (shared)` with its tier `Work` living in
+`Jake (personal)` — the §0b signature, arriving through a door §0d had just
+finished building.
+
+**The cause is one line and it was a comment believing itself.** `moveTask`
+rewrote `tierId` on the **root only**, commented *"a follow-up inherits its
+parent's."* It does not. `addFollowUp` **writes an explicit `tierId` onto the
+child document**, and both of its callers pass the root's. So the sentence was
+true about CREATION and false about STORAGE — and the code believed the false
+half. Every child landed on the new board still pointing at a tier on the old
+one. **Mis-routed the instant the move committed, on every chain that has ever
+moved, silently, because writing to a board you hold is always permitted.**
+
+> **Sixth comment in this project found more confident than its code**, after
+> E41's, §0b's, `TIER_RANKS`'s, SKIN-2's and `moveTier`'s rescue text. Five of
+> the six are the same move: *a narrow true statement restated as a broad
+> one.* Assume the next confident sentence here is also wrong until measured.
+
+⚠️ **A chain must live on ONE board** — `addFollowUp`'s own comment says so,
+because `rewindFollowUps` is a single query. That is what makes "propagate the
+tier" the only available answer rather than a preference.
+
+**`movedTaskData` was lifted out as a pure function** for exactly the reason
+`mergeStages` was in 0.26.1: the rule decides whether a document lands
+routable or stranded and it was born un-runnable, three awaits deep inside a
+batched write. `move.test.mjs` 1.1.0 extracts it — **29 assertions, verified
+by sabotage**: restoring the old line turns 29/0 into 28/1 and the failure
+reads *"a follow-up takes the new tier with it."*
+
+⚠️ **The extractor had a hole and it is fixed in the same drop.** It did
+`indexOf("{", …)` from the function NAME, which finds the body of a function
+whose parameters contain no braces — and finds `{}` inside `patch = {}` for
+one that does, returning a truncated function and dying with a SyntaxError
+several lines from the cause. It now matches the parens first. **Latent since
+the harness was written; it only surfaced because a default parameter finally
+arrived.**
+
+**Repairing `and then this` needs no migration:** open it, re-pick `Work`,
+save. `rehomeFor` fires on any edit naming a tier on another board and walks
+it home — the MOVE-1 specimen repair in a different costume.
+
+#### ⚠️ 2. DIRTY-1 FAILED ON PROJECTS — AND 1.41.0 IS WHY (app 1.41.2)
+
+*"Added a new project, hard refresh three times, hit the pencil on the
+project, and it told me I have unsaved changes."*
+
+1.41.0 fixed manufactured dirt in `refreshTierSelects` **and stopped there.**
+There were two more writers, both on Firestore subscriptions, both firing
+after D131 takes its baseline, both writing fields that are in
+`projectFormSignature()`:
+
+| writer | field |
+|---|---|
+| `subscribeProjects` → `suggestProjectColor()` | `#project-color` |
+| `subscribeProjectTypes` → `refreshTypeSelect()` | `#project-type` |
+
+**And `bestFreeColor()` picks the colour furthest from the ones already in
+use — so ADDING A PROJECT changes the suggestion.** That is why his repro
+needed a new project and why the original one did not reproduce it.
+
+> **This is §8c #4 verbatim, committed by the instance that wrote §8c down:**
+> *"I fixed a failure mode and left its twin untouched. When you harden one
+> call, grep for every other caller of the same thing before you ship."*
+
+All three now go through **`preservingProjectFormState(fn)`** — a helper, not
+a third copy of the same four lines, because a fourth writer is a matter of
+time. **The rule, and it belongs in §6: any code that writes a form field on
+the app's own initiative must preserve the dirty flag, or it manufactures
+dirt.**
+
+#### 3. ⚠️ DELETING A PROJECT DESTROYS THE RECORD — and Jake is right
+
+MOVE-4 passed. The confirm told the truth (*"This also deletes 2 time
+sessions (1.2h). That record cannot be recovered."*) and did exactly what it
+said. **The test passed and the behaviour is wrong.**
+
+> *"I think historical data should stay there no matter what, as work clocked
+> happened and checkboxes happened, even if the project gets deleted from the
+> timeline. I really don't like it on shared projects, as John can be pissed
+> at Susan and delete a whole project worth of work (and credit!) with the
+> click of a button."*
+
+⚠️ **NOTE THE TENSION, because a successor will otherwise "fix" this by
+reverting 0.28.0.** `deleteProject` started taking its sessions in store
+0.28.0 *because it did not* — the 07-31 scan found an 8:02 PM session whose
+project was gone, unreachable from every surface, invisible to both accounts
+holding keys to that board. **Orphaning the ledger and destroying the ledger
+are both wrong, and neither is the other's fix.**
+
+**The shape that resolves both is a soft delete**: the project document stays,
+flagged, and leaves the timeline, the agenda and the project pane. Its
+sessions and stage completions stay reachable *through it* — so the Time
+Report and `whereis` still total honestly, no row is orphaned, and nothing
+anybody did is destroyed by somebody else's bad afternoon. **Not built. It
+touches every project query and is a bigger change than it sounds**, which is
+why it is written down here rather than attempted at the end of a test run.
+⚠️ It is also the natural home for **TIER-MEMBER-ROLES**: a hard delete on a
+shared board should be an owner's verb, and a soft one need not be.
+
+#### 4. HURRAH-1 "probably worked" and is not what Katie asked for
+
+The spawn works. The **placement** is wrong. Today `↳ +Nd` lives on the 🎆
+row in the pipeline editor, decided when the pipeline is built. She wants it
+offered **at the moment of completion**, beside the choice that is already
+there:
+
+> *"That 'Do you want to duplicate for next year?' modal should have a 'Do you
+> want to add a follow-up task?' as well… Katie wants the option of creating a
+> follow-up task immediately after completing the project as well as the
+> option of duping the whole project."*
+
+⚠️ **BOTH, NOT EITHER.** *"The old layout of adding offsets for projects in
+the pipeline was fine — I'm sure the new one is fine, too."* The pipeline
+field stays; the completion modal gains the same offer for the case where you
+did not know at build time that there would be a follow-up. **Same idiom, two
+entry points, one `spawnedTaskId` guard** — which already exists and already
+prevents a second task.
+
+⚠️ **DO NOT TOUCH THE SNOOZE.** *"She loves being able to snooze that dupe, so
+don't get rid of that!"* Whether the two offers share one modal or run as two
+consecutive ones is explicitly open.
+
+#### 5. The import plan changed, and TESTS.md's top three are void
+
+**Jake, 2026-08-01: there are no throwaway accounts and no re-shares to
+rehearse. Katie's transfer IS the test.**
+
+> *"If they fail, they fail — she's lost nothing, because Tentacalendar 1.0 is
+> still live."*
+
+That is a sound call and it rests on something real: **1.x is untouched and
+running**, so the downside of a failed import is a wiped 2.0 board, not a lost
+practice. IMPORT-1's dry run is therefore **withdrawn, not deferred** — do not
+put it back. IMPORT-3 (calendar permissions do not travel) stays, because it
+is not a rehearsal, it is a step on flip day and it fails silently.
+
+**What the plan now REQUIRES that it did not before: a way to wipe and retry.**
+
+> *"Deleting a user and all of their data sounds terrifying, but is an
+> important part of any project that stores data. We can build that now or we
+> can build that later, but it will need to be built."*
+
+Spec, in his words: a **super-admin panel visible only to
+`jacob.v.wilson@gmail.com`**, listing users, with a triple confirmation
+(*"are you super duper duper sure"*) and an export/backup first.
+
+⚠️ **THREE THINGS A SUCCESSOR MUST GET RIGHT HERE:**
+
+1. **The rules must enforce the super-admin, not the UI.** A panel that hides
+   itself is a panel, not a permission. R1's lesson: Firestore ORs every
+   matching `allow`, so this needs its own clause and the emulator suite
+   needs a negative test that a non-Jake account is refused. **Rules change →
+   `rules-test/` runs BEFORE the console, per 1.2.0/1.2.1's mistake.**
+2. **Export before delete, and verify the export landed.** `moveTier`'s
+   copy → verify → delete, at the scale of a whole person. `deleteAll` still
+   does not roll back (§0f), and this is the operation where that finally
+   matters — a half-deleted user is worse than a whole one.
+3. **On encrypting the export, Jake answered his own question and is right:**
+   *"Ideally that export would be hashed… but I can read it in Firestore so it
+   probably doesn't matter."* It does not. Encrypting a backup against a
+   threat model where the holder already has console access is theatre, and
+   it costs a lost key later. Plain JSON.
 
 ---
 
@@ -1342,7 +1565,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
-| 2026-08-01 | Opus 5 · **Thaumoctopus** (18th, 16th named) | **DASH-FILL SHIPPED, AND THE SCREENSHOT ANSWERED A QUESTION NOBODY ASKED IT.** Opened by checking the handoff against the repo, as three predecessors have, and the finding was the inverse of theirs: **the "NOT uploaded" warnings were stale in the safe direction** — everything through 1.41.0 was live, so TESTS.md's whole 🔴 list became runnable and nothing had to be re-shipped. Then the two real ones: `move.test.mjs` was **announced in the versions row and absent from the repo**, and `version-check.mjs` was **1.1.0 in the repo against 1.3.0 in the row** — and those are one fact, because 1.3.0 would have caught the missing harness and the copy that ran was the one that had never heard of it. **The checker's own drift is what hid the missing file, and it was the single drift the checker could not see.** Fixed by making it check itself and derive `LABELS`/the paste row from `FILES`; the old hand-written `rowOrder` had already diverged badly enough that **pasting its own suggestion would have deleted four entries from the handoff table.** Fifth instance of the second-list bug. **DASH-FILL: Katie runs Timeline, so the 34px ceiling binds and the wall layout's 14px is a red herring** — the surplus goes to the ROWS rather than back into the lane pitch, because filling the pane with 90px lane gaps is a different wrong answer, and the gridlines' `top:0;bottom:0` mean the new space renders as calendar. **The screenshot's most valuable pixel was the version badge: `v1.21.0` — Katie is on 1.x, so DASH-FILL and LABEL-1 are both "fixed for Jake, open for the primary user."** §0g says LABEL-1 is FIXED without saying in which tree, which is E27's exact failure and now the second time it has gone one-sided. **Process note: a string replace of mine silently no-opped while installing the self-check, and the check I had just written is what caught it** — which is the argument for this project's whole mechanical-check habit, made against its author within the hour. |
+| 2026-08-01 | Opus 5 · **Thaumoctopus** (18th, 16th named) | **DASH-FILL SHIPPED, AND THE SCREENSHOT ANSWERED A QUESTION NOBODY ASKED IT.** Opened by checking the handoff against the repo, as three predecessors have, and the finding was the inverse of theirs: **the "NOT uploaded" warnings were stale in the safe direction** — everything through 1.41.0 was live, so TESTS.md's whole 🔴 list became runnable and nothing had to be re-shipped. Then the two real ones: `move.test.mjs` was **announced in the versions row and absent from the repo**, and `version-check.mjs` was **1.1.0 in the repo against 1.3.0 in the row** — and those are one fact, because 1.3.0 would have caught the missing harness and the copy that ran was the one that had never heard of it. **The checker's own drift is what hid the missing file, and it was the single drift the checker could not see.** Fixed by making it check itself and derive `LABELS`/the paste row from `FILES`; the old hand-written `rowOrder` had already diverged badly enough that **pasting its own suggestion would have deleted four entries from the handoff table.** Fifth instance of the second-list bug. **DASH-FILL: Katie runs Timeline, so the 34px ceiling binds and the wall layout's 14px is a red herring** — the surplus goes to the ROWS rather than back into the lane pitch, because filling the pane with 90px lane gaps is a different wrong answer, and the gridlines' `top:0;bottom:0` mean the new space renders as calendar. **The screenshot's most valuable pixel was the version badge: `v1.21.0` — Katie is on 1.x, so DASH-FILL and LABEL-1 are both "fixed for Jake, open for the primary user."** §0g says LABEL-1 is FIXED without saying in which tree, which is E27's exact failure and now the second time it has gone one-sided. **Third act — he ran the tests.** OFFDAY-1, MOVE-1/2/4, DASH-FILL-1/2/3 and LATER-1 passed; two things failed and both were mine. **`moveTask` had stranded every follow-up it ever carried** — the root's tier moved, the children's did not, under a comment reading *"a follow-up inherits its parent's"* which is true of creation and false of storage, since `addFollowUp` writes an explicit tierId. **Sixth comment here found more confident than its code, and the fifth of those is the same move: a narrow true statement restated as a broad one.** Lifted `movedTaskData` out as a pure function (the `mergeStages` precedent) and covered it — 29 assertions, sabotage-verified. ⚠️ **The harness's extractor had a latent hole that a default parameter finally exposed** (`indexOf("{")` from the function NAME finds `{}` inside `patch = {}`); fixed to match the parens first. **And DIRTY-1 failed on projects because 1.41.0 hardened one caller and left two** — `suggestProjectColor` and `refreshTypeSelect`, both on subscriptions, both writing signature fields, and `bestFreeColor()` changes its answer when a project is added, which is exactly the repro Jake found and the original could not. **That is §8c #4 committed by the instance that wrote §8c**; all three writers now go through one helper. **Three decisions recorded rather than built** (§0k): project delete should soft-delete — he is right, and note the tension with 0.28.0, since orphaning a ledger and destroying it are both wrong and neither fixes the other; the hurrah offer belongs in the completion modal *as well as* the pipeline, snooze untouched; and the import dry run is **withdrawn**, because Katie's transfer is the test and 1.x stays live — which trades a rehearsal for a super-admin wipe/export panel that now has to exist. **Second half of the session, on Jake's questions:** he caught that `TESTS.md` had two sections headed "run these first" and MOVE-3 in both, and asked the right diagnostic question — *tests broken, or code broken?* **Tests.** The mover has two entry points, both from store 0.28.0, untouched by 0.29.0's hurrah spawn (which calls `addTask`, not `rehomeFor`) and by queue 0.21.0 (a renderer that has never known Firestore exists). **MOVE-1 and MOVE-2 had passed and nobody wrote it down, because only the MOVE-3 failure produced a conversation** — so the file went on claiming none of them had been run. *A test that passes is a document edit, not just a relief.* Rebuilt the top of `TESTS.md` as one ordered START HERE list. **And he settled §0j's fork by reframing it: no 1.x hotfix, because the flip is this weekend and DASH-FILL/LABEL-1 turn the migration from "features you didn't ask for" into "your own bug reports, closed."** That re-ranks the list — IMPORT-1/2/3 to the top, since the importer has still never written to live Firestore. **Process note: a string replace of mine silently no-opped while installing the self-check, and the check I had just written is what caught it** — which is the argument for this project's whole mechanical-check habit, made against its author within the hour. |
 | 2026-07-29 | Opus 5 · **Hapalochlaena** (17th, 15th named) | **THE MIS-ROUTING FIX, AND A HANDOFF THAT HELD UP.** Jake opened by saying the previous instance had started to hallucinate and the code needed a go-over. **It did not — every claim in §0a checked out against the code, and all fourteen version constants agreed with the banner.** Saying so first was the useful part: the alternative was a session spent hunting phantom defects in a file that was fine. Fixed §0b: both routers refuse, seven creators stamp, one global rejection net, `octodoWhere()` left in the file. **Found that the fallback was in TWO resolvers rather than the one the handoff named, and the unnamed one is worse** — `restoreDoc` routes through it and uses `setDoc`, which creates, which is TIER-10's data-loss case. Three more defects found by reading: a catch that swallowed everything and blamed permissions, a latent `undefined` write that would have landed in that same catch, and a `hidden` flag that skipped `refreshMerge`. **What I did not do is the entry worth reading: §0a named two candidate root causes and told me not to guess between them, and I could not settle it.** I found a third that fits Jake's evidence better and said it was a hypothesis rather than dressing it as a finding — the fix is correct under all three, which is what made it shippable without the answer. **Nothing was pushed and nothing was run in a browser; the fix is code, not a verified fix.** Process note for successors: the previous session's own closing lesson was "state the plan in one line before doing it, put the instruction on its own line" — I read it before starting and it is good advice, so it is repeated here rather than left in a paragraph nobody reaches. |
 | 2026-07-28 | Opus 5 · **Argonauta** (14th, cont.) | **FIRST REAL-WORLD USE, AND THE DOCUMENT'S OWN NUMBERING FAILED IN JAKE'S HANDS.** A colleague shared a tier with him and **TIER-3 passed between two real people** — same document, live, both toggling it. Two defects came from actual use rather than review. (1) **The rank collision:** a shared tier arrives carrying a number chosen by somebody who has never seen your board, and a typed rank cannot express "put this above that." That control was fine for four years because ONE person authored every number; item 5 ended that. Now ▲▼, rank assigned 1..N from position — which answers his "it should kick back an error" by making the state unconstructible instead. (2) **`signInWithPopup` never drew an account chooser** on a device with one Google account, so ⏻ looked broken and **every two-person test was unreachable.** One line. **The bigger lesson belongs to this document:** lettering tests IA…JA made `IS`, `IT` and `IN` English words, ran the list past IZ into JA, and — because item 5's block was inserted where item 5 was *discussed* — made the file physically read IS…JA **then IQ, IR**, doubling back to two already-passed tests. Jake had to hand-decode the mapping before he could report anything, which taxes the one person this document exists to protect. Replaced with `GROUP-n`. **Do not re-letter it.** | Jake read back the visiting rule to confirm agreement and was right about the requirement (zero differences; an honest picture of her load) and wrong that 0.21.0 met it. **Personal tiers were fine and the SHARED tier was not**, because both people write that one document and the last save wins — so visiting Katie could have shown Family at Jake's rank while looking like hers. Fixed in **0.21.1** with per-member ranks on the member row, which the rules already permit exactly (readable by co-holders, writable only by its subject) and which needed no clause. **Also found while fixing it: the person whose order you see is the RESIDENT, not the deed-holder** — E32's `minor` flag already marks that relationship and now does a second job. Version cascade store 0.21.1 → app 1.29.1 → html 0.47.1, bumped rather than reused because the earlier drop may already be pushed and two different files must never wear one number. **Two false positives in my own ship-check this round** (a div-balance regex eaten by a heredoc; a census widened until `const stages` in three scopes read as a redefinition) — §7's rule cuts both ways: a check that flags legal code stops being read, exactly as one that misses stops being worth running. |
 | 2026-07-28 | Opus 5 · **Argonauta** (14th, earlier) | **ITEM 5 — SHARED TIERS, BUILT.** Opened by ship-checking the drop against §0a and finding the one thing that mattered: **`firestore-2.0.rules` in the repo was still 1.1.1 — the version WITH the catch-all hole — while 1.2.1 was live in the console.** Stopped and asked for the published text rather than writing against the file in hand, which would have handed back the hole inside a document that looked authoritative. Everything else green: banners, pins, div balance 148/148, no absolute paths. **No rules change was needed for item 5** and confirming that was most of the value of asking. **Jake corrected the merge rule and the correction is better** — a shared tier follows you into a house where somebody who lives there also holds a key to it, rather than merging only at home. That is the THIRD design fixed by him re-describing it in his own words (E25, E32, now this), which is enough evidence to call it a rule. **Told him one thing he asked for could not be built:** "her priority in her house" needs to read Katie's profile, which the rules correctly forbid; shipped the honest approximation and wrote down what the stronger version would cost. Three defects found in review, **all in failure paths and none in the feature** — empty merge set at first bind (app booted blank), a copy-succeeded-delete-failed message that read like total failure, and an `unshareTier` that would have orphaned an `eventsCache` the poll wrote after the tier left. **The ship-check earned its keep again:** `APP_VERSION` moved to 1.29.0 while the banner above it still said 1.28.0 — §8g's exact complaint, caught mechanically rather than by me. |

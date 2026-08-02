@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — move.test.mjs  (2.0 / OCTODO LINE)
-// Version 1.0.0
+// Version 1.1.0
 //
 // TESTS THE PARTS OF §0d THAT CAN BE TESTED WITHOUT A DATABASE.
 //
@@ -16,6 +16,11 @@
 //     whole app hangs.
 //   · rehomeFor — decides whether an edit is a move at all. Say yes when it
 //     should say no and an ordinary rename becomes a copy-verify-delete.
+//   · movedTaskData (1.1.0) — what one document looks like on the far side.
+//     It stranded every follow-up it carried for a whole release: the child
+//     changed BOARD and kept the OLD board's tierId. Nothing errored; the
+//     document simply became invisible to the person it was for. Lifted out
+//     of moveTask in store 0.29.1 precisely so this could exist.
 //
 // ⚠️ IT READS THE REAL store.js, by brace-matching the source, exactly as
 // stage-merge.test.mjs does. Nothing here is a re-implementation. If the
@@ -32,7 +37,20 @@ function extract(name) {
   const re = new RegExp(String.raw`(?:export\s+)?(?:async\s+)?function\s+${name}\b`);
   const m = re.exec(SRC);
   if (!m) throw new Error(`EXTRACTION FAILED: ${name} not found in store.js — renamed?`);
-  const open = SRC.indexOf("{", m.index);
+  // ⚠️ SKIP THE PARAMETER LIST FIRST. This used to be `indexOf("{", m.index)`,
+  // which finds the body of a function whose parameters contain no braces —
+  // and finds `{}` inside `patch = {}` for one that does. The extraction then
+  // returns a truncated function and the run dies with a SyntaxError several
+  // lines away from the cause. Loud, at least, but not obviously about this.
+  // Match the parens, THEN look for the body.
+  const lp = SRC.indexOf("(", m.index);
+  let par = 0, afterParams = -1;
+  for (let i = lp; i < SRC.length; i++) {
+    if (SRC[i] === "(") par++;
+    else if (SRC[i] === ")" && --par === 0) { afterParams = i; break; }
+  }
+  if (afterParams === -1) throw new Error(`EXTRACTION FAILED: unbalanced parens reading ${name}`);
+  const open = SRC.indexOf("{", afterParams);
   let depth = 0;
   for (let i = open; i < SRC.length; i++) {
     if (SRC[i] === "{") depth++;
@@ -43,10 +61,11 @@ function extract(name) {
 
 // rehomeFor leans on wsOf/wsOfTier, which touch module state we do not want
 // to reconstruct. Inject them instead — the DECISION is what is under test.
-const src = [extract("walkChain"), extract("rehomeFor")].join("\n\n").replace(/export\s+/g, "");
+const src = [extract("walkChain"), extract("rehomeFor"), extract("movedTaskData")]
+  .join("\n\n").replace(/export\s+/g, "");
 let WS_OF = () => null, WS_OF_TIER = () => null;
-const { walkChain, rehomeFor } = new Function("wsOf", "wsOfTier",
-  `${src}\nreturn { walkChain, rehomeFor };`)(
+const { walkChain, rehomeFor, movedTaskData } = new Function("wsOf", "wsOfTier",
+  `${src}\nreturn { walkChain, rehomeFor, movedTaskData };`)(
     (...a) => WS_OF(...a), (...a) => WS_OF_TIER(...a));
 
 let pass = 0, fail = 0;
@@ -117,6 +136,47 @@ section("IS THIS EDIT A MOVE? — rehomeFor");
   eq("a plain reschedule never even resolves a tier", asked, 0);
 }
 
+{
+  section("A MOVED CHAIN LANDS ROUTABLE \u2014 movedTaskData");
+  const patch = { tierId: "tierOnShared", title: "renamed root", dueAt: 999 };
+  const root  = { tierId: "tierAtHome", title: "root", dueAt: 1, notes: "r" };
+  const child = { tierId: "tierAtHome", title: "and then this", dueAt: null,
+                  notes: "c", parentTaskId: "t1", offsetDays: 3 };
+
+  // ⚠️ THE REGRESSION. The child changed board and kept the old board's
+  // tier: mis-routed on arrival, silently, on every chain that ever moved.
+  eq("a follow-up takes the new tier with it",
+    movedTaskData(child, false, patch).tierId, "tierOnShared");
+  eq("the root takes the new tier too",
+    movedTaskData(root, true, patch).tierId, "tierOnShared");
+
+  // ...and ONLY the tier. patch is the whole edit from updateTask.
+  eq("a follow-up keeps its own title", movedTaskData(child, false, patch).title, "and then this");
+  eq("a follow-up keeps its own dueAt", movedTaskData(child, false, patch).dueAt, null);
+  eq("a follow-up keeps its own notes", movedTaskData(child, false, patch).notes, "c");
+  eq("a follow-up keeps its chain link", movedTaskData(child, false, patch).parentTaskId, "t1");
+  eq("the root DOES take the rest of the edit", movedTaskData(root, true, patch).title, "renamed root");
+
+  // A move that is not a tier change must not invent one.
+  eq("no tierId in the patch leaves the child's tier alone",
+    movedTaskData(child, false, { dueAt: 5 }).tierId, "tierAtHome");
+  eq("no patch at all leaves the child's tier alone",
+    movedTaskData(child, false).tierId, "tierAtHome");
+
+  // E40 — a carried mirror id points at an event nothing on the new board owns.
+  eq("the mirror id is dropped on the root",
+    movedTaskData({ ...root, mirroredGcalEventId: "ev1" }, true, patch).mirroredGcalEventId, null);
+  eq("the mirror id is dropped on a follow-up",
+    movedTaskData({ ...child, mirroredGcalEventId: "ev2" }, false, patch).mirroredGcalEventId, null);
+  eq("a task with no mirror id gains no field",
+    "mirroredGcalEventId" in movedTaskData(child, false, patch), false);
+
+  // Purity: the caller's document must not be mutated under it.
+  const frozen = { tierId: "tierAtHome", title: "x" };
+  movedTaskData(frozen, false, patch);
+  eq("the source document is not mutated", frozen.tierId, "tierAtHome");
+}
+
 console.log(`\n${fail === 0 ? "\u2705" : "\u274c"} ${pass} passed, ${fail} failed` +
-  `  (extracted live from store.js: walkChain, rehomeFor)\n`);
+  `  (extracted live from store.js: walkChain, rehomeFor, movedTaskData)\n`);
 process.exit(fail ? 1 : 0);
