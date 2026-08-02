@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.7.0 · current as of 2026-08-01 (Thaumoctopus)**
+**Version 2.8.0 · current as of 2026-08-01 (Thaumoctopus)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -108,29 +108,39 @@ Same phone, Today view. The header should **wrap onto two or three rows** with
 every control reachable — brand, Today/Week/Year/Dashboard, ⚙ ＋ ⏻ — and no
 horizontal scroll or pinch-to-fit on load.
 → *⚠️ Untested in any browser; the ~860px-in-360px figure is an estimate read
-off the CSS. If it is still tight, the next lever is hiding the Dashboard
-button on phones — its own tooltip says "big screens only" — but that is your
-call about Katie's workflow, not mine.*
+off the CSS. If it is still tight, the next lever is NOT the Dashboard
+button — that has been hidden below 1200px since D105 and I was wrong to
+suggest it. Corrected estimate: ~750px in a 360px viewport. FIT-1 beats both
+numbers.*
 
-### 7. IMPORT-3. Calendar permissions do not travel. **Flip day.**
+### 7. TRAY-1. ⏻ is at the bottom on a phone, and it works.
+On a phone: the sign-out button is **not** in the header — it sits at the
+bottom of the page under a divider. **Tap it. It must actually sign you out.**
+Then widen the window on a desktop past 600px and back: it returns to the end
+of the header row and leaves no gap behind.
+→ *⚠️ Tapping it is the point. The node is MOVED, not copied, so a broken
+version here is a sign-out button that does nothing rather than one that is
+missing — the failure you would not notice until you needed it.*
+
+### 8. IMPORT-3. Calendar permissions do not travel. **Flip day.**
 Every calendar re-shared with the 2.0 service account — inbound **and** the
 outbound mirror.
 → *Not a rehearsal, a step. The export holds calendar IDs and cannot hold
 calendar PERMISSIONS. Get it wrong and the tiers import perfectly and stay
 empty forever: no error, no warning, nothing.*
 
-### 8. IMPORT-2. Katie runs it herself, or gets Co-owner.
+### 9. IMPORT-2. Katie runs it herself, or gets Co-owner.
 RULES-6b measured it: an editor cannot write `pollIntervalMinutes` to the
 workspace document, so *"Katie adds Jake as an editor and he imports"* cannot
 execute. She owns her board and needs nothing extra.
 
-### 9. HURRAH-2. Re-ticking does not mint a second task.
+### 10. HURRAH-2. Re-ticking does not mint a second task.
 Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
 the first is not deleted by the un-tick.
 → *`spawnedTaskId` guards this, and it is the same guard the completion-modal
 version in §0k.4 will use. Worth knowing it holds before that is built.*
 
-### 10. HURRAH-3. The field only shows on the hurrah.
+### 11. HURRAH-3. The field only shows on the hurrah.
 Move the 🎆 to a different stage. `↳ +Nd` follows it, and the old row's value
 is dropped rather than riding along on a stage that is no longer the climax.
 

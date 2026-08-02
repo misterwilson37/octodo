@@ -1,11 +1,15 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.42.0
+// Version 1.43.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.43.0 — wirePhoneTray(). On a phone ⏻ moves out of the header and down
+//          to #phone-tray at the bottom of the page, as 1.x did. It MOVES
+//          the node rather than cloning it — a second button means a dead
+//          listener on one of them. 600px, matching the CSS block.
 // 1.42.0 — fitLine(). "Her screen starts too large every time" had no
 //          instrument but a photograph of a phone. The version tooltip and
 //          the Settings versions line now say whether the document is wider
@@ -108,7 +112,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.42.0";
+export const APP_VERSION = "1.43.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -498,6 +502,7 @@ document.addEventListener("DOMContentLoaded", () => {
   reportVersions();
   $("#signin-btn").addEventListener("click", () => signIn().catch(err => alert(err.message)));
   $("#signout-btn").addEventListener("click", () => signOutUser());
+  wirePhoneTray();
   $("#signout-bottom").addEventListener("click", () => signOutUser());  // D78
   $("#blocked-signout").addEventListener("click", () => signOutUser());  // E17
 
@@ -837,6 +842,34 @@ function fitLine() {
     name = worst.id ? `#${worst.id}` : (cls ? `.${cls}` : worst.tagName.toLowerCase());
   }
   return `⚠️ fit: content runs ${over}px past the ${de.clientWidth}px viewport — furthest right is ${name}`;
+}
+
+/** ⚠️ ON A PHONE, ⏻ LEAVES THE HEADER AND LANDS AT THE BOTTOM — as 1.x did.
+ *
+ *  Jake, 2026-08-01: *"the log out can move to the bottom when it's on a
+ *  phone — something we did in 1.x, too."*
+ *
+ *  It MOVES the node; it does not clone it. A second button would mean two
+ *  ids or one live listener and one dead control, and a dead sign-out button
+ *  is a worse bug than the crowding it would be fixing. The click handler is
+ *  bound to the element, so it rides along.
+ *
+ *  ⚠️ `matchMedia` and not a resize listener: this fires on rotation and on a
+ *  desktop window drag, both, and it fires exactly once per crossing rather
+ *  than sixty times a second. 600px matches the phone block in the CSS —
+ *  ⚠️ CHANGE ONE AND YOU MUST CHANGE THE OTHER, which is this project's most
+ *  repeated bug shape, so the number is named in both comments on purpose.
+ */
+function wirePhoneTray() {
+  const mq = window.matchMedia("(max-width: 600px)");
+  const place = () => {
+    const btn = $("#signout-btn"), tray = $("#phone-tray"), bar = $(".header-right");
+    if (!btn || !tray || !bar) return;
+    if (mq.matches) { tray.append(btn); tray.hidden = false; }
+    else { bar.append(btn); tray.hidden = true; }   // back to the END of the row, where it started
+  };
+  place();
+  mq.addEventListener("change", place);
 }
 
 function reportVersions() {

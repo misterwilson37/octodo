@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.59.1 — .st-spawn-wrap, the hurrah follow-up field.
+   Version 0.59.2 — .st-spawn-wrap, the hurrah follow-up field.
    (prev) Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
    there is room; "Later" group in the projects panel.
    (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
@@ -18,7 +18,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.59.1"; }
+:root { --tc-version: "0.59.2"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -569,6 +569,12 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
      says "big screens only" and which is ~6rem of a row that has none to
      spare. That is a judgement about her workflow, so it is Jake's. */
   header { flex-wrap: wrap; gap: .3rem .5rem; padding: .5rem .7rem; }
+  /* ⏻ leaves the header for #phone-tray at this SAME 600px — app.js's
+     wirePhoneTray() reads the identical query. Change one, change both. */
+  #phone-tray {
+    display: flex; justify-content: center;
+    padding: .8rem 1rem 1.4rem; border-top: 1px solid var(--line);
+  }
   .header-right { flex-wrap: wrap; justify-content: flex-end; row-gap: .35rem; }
   .view-switch { flex-wrap: wrap; }
   .brand { font-size: 1rem; }

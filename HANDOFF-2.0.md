@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.42.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.1 · html 0.51.13 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
+| **Versions** | app 1.43.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.2 · html 0.51.14 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
 | **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **THE FLIP IS THIS WEEKEND** (Jake, 2026-08-01) — `TESTS.md` START HERE is re-ordered around it and IMPORT-1 is now item 1. §0h (outriders) comes after. **MOVE-1 and MOVE-2 passed**; MOVE-3 and MOVE-4 are the mover's remaining browser tests, and §0h's migration reuses that same copy→verify→delete mover. |
@@ -914,6 +914,57 @@ the CSS, and `fitLine` has never been read on a real phone. FIT-1 and FIT-2 in
 `TESTS.md`. **The measurement is worth more than my fix** — if it says the
 furthest-right element is something other than `.header-right`, believe it over
 this section.
+
+---
+
+### 0m. THE PHONE HEADER, FINISHED (css 0.59.2 · html 0.51.14 · app 1.43.0)
+
+Jake: *"We don't need the dashboard button on phones (or really anything
+that's not a 2k screen), and the log out can move to the bottom when it's on
+a phone — something we did in 1.x, too."*
+
+#### ⚠️ THE DASHBOARD BUTTON WAS ALREADY DONE, AND §0l SAID OTHERWISE
+
+`@media (max-width: 1199px) { #view-switch button[data-view="dash"] { display: none; } }`
+has been in the stylesheet since D105, `setView` bounces a persisted `"dash"`
+to Today at the same 1200, the resize listener enforces it live, and all three
+carry comments saying they agree. **Nothing to build.**
+
+⚠️ **§0l told Jake the opposite** — *"the next lever is the Dashboard button"* —
+because I reasoned about the header from the markup and never checked the
+media queries for the control I was proposing to hide. **Measure before
+proposing, not only before fixing.** My header arithmetic was wrong by the
+same 104px; the corrected estimate is **~750px of min-content in a 360px
+viewport**, which changes nothing about the conclusion and everything about
+how much to trust the number. `fitLine()` exists precisely so the next person
+does not have to.
+
+⚠️ **On "anything that's not a 2k screen": DO NOT RAISE 1200 TO 2560 WITHOUT
+MOVING ALL THREE.** The CSS hide, `setView`'s bounce and the resize rule are
+one rule written in three places. Raise only the CSS and a 1440px laptop gets
+a hidden button with a persisted `"dash"` that still renders — a view you can
+be in and cannot navigate to. **It would also lock Jake out of the dashboard
+on the machine he tests DASH-FILL from**, which is the practical argument for
+leaving it at 1200.
+
+#### The tray
+
+⏻ moves to `#phone-tray` at the bottom of `#app-screen` at ≤600px, as 1.x did.
+
+⚠️ **`wirePhoneTray()` MOVES the node; it does not clone it.** A second button
+in the markup means two ids, or one live listener and one dead control — and a
+dead sign-out is a worse bug than the crowding it fixes. `matchMedia` rather
+than a resize listener: it fires on rotation and on a desktop drag, once per
+crossing instead of sixty times a second.
+
+⚠️ **600 IS NOW WRITTEN IN TWO PLACES** — the CSS phone block and
+`wirePhoneTray`'s query. Named in both comments on purpose. **This project has
+found the same second-list bug six times; do not make it seven for want of a
+comment.**
+
+⚠️ **Untested in a browser.** FIT-1/FIT-2/TRAY-1 in `TESTS.md`, and the flip
+was starting within the hour, so the honest expectation is that Katie's import
+happens before any of them run.
 
 ---
 

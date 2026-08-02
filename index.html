@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.13
+     Version 0.51.14
 
      The whole UI. One page, no templating.
 
@@ -50,9 +50,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.59.1">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.59.2">
 </head>
-<body data-html-version="0.51.13">
+<body data-html-version="0.51.14">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -410,6 +410,18 @@
         </div>
       </div>
     </section>
+
+    <!-- 0.51.14 — THE PHONE TRAY. On a phone the sign-out button moves out
+         of the header and lands here, at the bottom of everything, as 1.x
+         did. Two reasons, and the second is the real one: the header row's
+         min-content is what pushes the page wider than the glass (FIT-1),
+         and ⏻ is the one control in it nobody wants within a thumb's reach
+         of ✎ and ✕ all day.
+         ⚠️ EMPTY BY DESIGN. app.js MOVES the existing #signout-btn node in
+         and out of here on a matchMedia change — it is not a second copy.
+         A duplicate would mean two ids, or one live listener and one dead
+         button, which is worse than the bug it would be fixing. -->
+    <div id="phone-tray" hidden></div>
 
     <!-- D118: the clock/followup/yv-project modals used to live HERE,
          inside #drift-wrap — whose transform re-roots position:fixed to
@@ -945,6 +957,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.42.0"></script>
+  <script type="module" src="app.js?v=1.43.0"></script>
 </body>
 </html>
