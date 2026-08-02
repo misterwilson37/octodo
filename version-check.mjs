@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
-// Version 1.5.0 — also watches the HEADERS, which regrow.
+// Version 1.6.0 — says out loud that there is no staging.
 //
 // THE THING SIX FILES ALREADY TOLD YOU TO RUN.
 //
@@ -36,7 +36,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const VERSION_CHECK_VERSION = "1.5.0";
+const VERSION_CHECK_VERSION = "1.6.0";
 
 const SEMVER = String.raw`\d+\.\d+\.\d+`;
 
@@ -209,6 +209,17 @@ else {
 // sixteen — so pasting this row SILENTLY DELETED manifest, version-check
 // and both test harnesses from the table. A suggestion that quietly drops
 // rows is worse than no suggestion, because it looks authoritative.
+// ⚠️ PRINTED ON EVERY RUN, PASS OR FAIL, BECAUSE AN INSTANCE CANNOT OBSERVE A
+// DEPLOY AND WILL OTHERWISE ASSUME ONE HAS NOT HAPPENED. Jake uploads each
+// drop on receipt and Pages serves main, so handing a file over IS shipping
+// it. A whole session of advice was written on the opposite assumption —
+// "untested in a browser" used as if it meant "not live yet" — about changes
+// that were already rewriting a real person's task documents.
+console.log("\n\u26a0\ufe0f  THERE IS NO STAGING. Handing these files over deploys them.");
+console.log("   SHIPPED and EXERCISED are different questions. The versions below");
+console.log("   are what a real user is running RIGHT NOW; TESTS.md is the only");
+console.log("   record of what anybody has deliberately walked through.\n");
+
 console.log("\nCURRENT STATE, ready to paste into the handoff table:\n");
 const cells = FILES.filter((f) => actual.has(f.file)).map((f) => `${f.label} ${actual.get(f.file)}`);
 for (const label of UNVERIFIABLE_LABELS) {

@@ -1,6 +1,12 @@
 # TESTS — what still needs running
 
-**Version 2.11.0 · current as of 2026-08-02 (Thaumoctopus)**
+**Version 2.12.0 · current as of 2026-08-02 (Thaumoctopus)**
+
+> ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
+> uploads each drop on receipt and GitHub Pages serves it immediately, so a
+> test here is never a gate before release — it is a check on software Katie
+> is already using. **Unrun does not mean unshipped.** Nothing on this list is
+> waiting for permission; it is waiting for someone to look.
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -97,7 +103,7 @@ shrinkable. `0 1 auto` is the difference.*
 Phone. Row 1: 🐙 Tentacalendar + version + the board chip. Row 2:
 Today/Week/Year + ⚙ + ＋. ⏻ still at the bottom of the page, and **never**
 in front of the app name even for a flash on load.
-→ *⚠️ Untested in a browser. If it looks worse than 1.43.0 did, say so and it
+→ *⚠️ Live and unverified — she is using this now. If it looks worse than 1.43.0 did, say so and it
 reverts cleanly — the whole change is one ordered block in the 600px media
 query.*
 
@@ -166,7 +172,7 @@ another photograph.
 Same phone, Today view. The header should **wrap onto two or three rows** with
 every control reachable — brand, Today/Week/Year/Dashboard, ⚙ ＋ ⏻ — and no
 horizontal scroll or pinch-to-fit on load.
-→ *⚠️ Untested in any browser; the ~860px-in-360px figure is an estimate read
+→ *⚠️ Live and unverified; the ~860px-in-360px figure is an estimate read
 off the CSS. If it is still tight, the next lever is NOT the Dashboard
 button — that has been hidden below 1200px since D105 and I was wrong to
 suggest it. Corrected estimate: ~750px in a 360px viewport. FIT-1 beats both

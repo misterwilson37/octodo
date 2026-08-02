@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.46.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.4 · html 0.51.17 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.5.0 · manifest 0.2.0 |
-| **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
+| **Versions** | app 1.46.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.4 · html 0.51.17 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.6.0 · manifest 0.2.0 |
+| ⚠️ **THERE IS NO STAGING** | **Handing Jake a file IS deploying it.** He uploads each drop to the GitHub web portal as it arrives; Pages serves `main`; the app is live at that moment. There is no review branch, no soak, no staging URL. **Anything in this repo is what Katie is running right now.** See the box below — this cost a whole session of wrong advice.
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
-| **Next** | ⚠️ **NOTHING IS TESTED.** Katie is live on 2.0 and `TESTS.md` START HERE holds 18 unrun items, one of them (**SAVE-1**) an unexplained crash that is now merely *visible*. **Get the toast text before building anything else.** Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
-| ⚠️ **Katie is on 1.x until the flip** | Her 2026-08-01 screenshot reads **v1.21.0**. Every fix in this repo reaches her **at the flip and not before** — which Jake has now made the plan rather than a problem. See §0j. |
+| **Next** | ⚠️ **DEPLOYED ≠ EXERCISED, AND BOTH ARE TRUE OF EVERYTHING HERE.** Every file is live and Katie used the app all day; `TESTS.md` START HERE still holds 20 items nobody has deliberately walked. **SAVE-1 first** — an unexplained crash that is now merely *visible*. Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
+| ✅ **Katie is on 2.0** | Migrated 2026-08-02, 245 documents, one run, no rehearsal. She has used it all day and filed four reports (§0n). 1.x remains live and untouched as the fallback. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 
 ### ⚠️ Three things to do before you write a line
@@ -524,6 +524,48 @@ not `startDate`. That matters: a stage anchored BEFORE the start pulls its
 project out of Later on its own, so nothing with real work in view can be
 folded away. Undated projects are never folded. **The full 4a — removing
 inactive projects from the agenda outright — is still not built, on purpose.**
+
+---
+
+### 0i-bis. ⚠️ READ THIS BEFORE YOU WRITE THE WORD "UNTESTED"
+
+**Jake, 2026-08-02, correcting me at the end of a long session:**
+
+> *"You said none of these have been launched. They all have. And my wife has
+> been using the software all day. This is a hole I need to figure out how to
+> plug… but here we are."*
+
+**He is right and it was my error, repeated all session.** I wrote "untested in
+a browser" about drop after drop and let it stand in for "not live yet" —
+including a `moveTask` change that rewrites task documents, and a wrapped
+`onSaveSettings`. Those went onto a board a real person was working from
+within minutes of my handing them over. **I characterised live changes to
+someone's working data as safe-to-iterate.**
+
+⚠️ **TWO AXES, AND THEY ARE INDEPENDENT. NEVER COLLAPSE THEM INTO ONE WORD.**
+
+| | question | how you know |
+|---|---|---|
+| **SHIPPED** | is it on the server? | **Always yes.** Jake uploads on receipt; Pages serves `main`. There is no staging. |
+| **EXERCISED** | has a human walked this path on purpose? | **Only `TESTS.md`.** A passing test is a document edit. |
+
+"Untested" answers the second and says **nothing** about the first. Written
+without that distinction it reads as *not deployed*, which makes every risk
+assessment in this document wrong in the same direction — toward "we can fix
+that later."
+
+⚠️ **WHY THIS WAS EASY TO GET WRONG, so the next instance does not repeat it:**
+an instance cannot observe a deploy. It hands over files and the conversation
+moves on. The temptation is to default to "presumably not live yet," which is
+**an assumption dressed as caution** — and the caution runs backwards, because
+it under-states the risk instead of over-stating it.
+
+> **The rule: assume everything you hand over is in production within the
+> minute. If a change should not go live untested, say so BEFORE handing it
+> over — not in the test note afterwards.**
+
+`node version-check.mjs` now prints this on every run, because a rule in a
+document is a rule this project has repeatedly watched fail.
 
 ---
 
@@ -1155,7 +1197,7 @@ The questions, and why each one cannot be answered from the data:
 
 **RULES-6b settles who runs it:** a non-owner cannot write the board document, so §11's *"Katie adds Jake as an editor and he imports"* **cannot execute**. Katie signs in and runs it herself, or grants Co-owner. IMPORT-6a asserts the denial in the migration's own shape.
 
-**Not done:** never run for real. **The next session's opening task is a dry run on a throwaway Google account** — export a scratch 1.x board, import it, and walk the checklist. Everything above is emulator-true and browser-untested.
+✅ **DONE FOR REAL, 2026-08-02.** Katie's board migrated in one run — 245 documents, no dry rehearsal, because there was never a throwaway account to rehearse on and 1.x staying live made that an acceptable bet. Jake: *"It imported her stuff like a dream."* ⚠️ IMPORT-3 (calendar permissions do not travel) remains the live risk and is not a rehearsal — it is a step.
 
 ---
 
@@ -1214,7 +1256,7 @@ There is a cheap standing check, and it should be run on every session that touc
 
 ✅ **BUILT in app 1.45.0** — Settings ▸ foot ▸ "Show me around", three buttons calling `replayTour(id)`. It was described here as *obvious next work* for several sessions while `firstTier` and `sharing` sat unreachable for anyone already signed in. See §0o.1.
 
-**Untested against a live Firestore.** Everything above is verified by parse, selector resolution, div balance and reading the rules — not by a browser. TEST-E41 below is unrun.
+⚠️ **LIVE, AND EXERCISED BY A REAL USER.** Katie met the splash and the tour on 2026-08-02 and both produced defect reports (§0n.2, §0n.3) — which is what a browser gets you that a parse check does not. The mechanical checks below still run; they are necessary and were never sufficient.
 
 | id | test |
 |---|---|
