@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.14
+     Version 0.51.15
 
      The whole UI. One page, no templating.
 
@@ -52,7 +52,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.59.2">
 </head>
-<body data-html-version="0.51.14">
+<body data-html-version="0.51.15">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -622,11 +622,22 @@
       <div class="tab-pane" data-pane="timing" hidden>
         <p class="hint locked-note">Timing settings belong to the board rather than to you, so changing them needs <b>Can edit</b>. What you see here is what the board is doing.</p>
         <h3>Timing</h3>
+        <!-- ⚠️ 0.51.15 — THE <p> USED TO BE INSIDE THE .form-row, AND THAT WAS
+             THE WHOLE BUG. `.form-row` is `display: flex` and
+             `.form-row label` is `flex: 1; min-width: 0` — that min-width is
+             load-bearing elsewhere (D66: two date inputs out-minimum a 340px
+             panel), and it means a label will happily shrink to nothing. Add
+             a paragraph of prose as a THIRD flex child and it takes the
+             width, both labels starve into narrow columns, and their text
+             word-stacks one word per line into what Jake photographed as
+             overlapping. The paragraph was never meant to be in the row.
+             ⚠️ A HINT IS A SIBLING OF ITS ROW, NEVER A CHILD OF IT — every
+             other hint in this pane already sits outside. -->
         <div class="form-row">
           <label>Computed stage deadlines count as due by <input id="cfg-deadline-hour" type="number" min="0" max="23"> :00 <span class="hint-inline">(24-hr)</span></label>
           <label>Fold projects into <b>Later</b> until <input id="cfg-later-days" type="number" min="0" max="3650"> days before their window opens <span class="hint-inline">(0 = never fold)</span></label>
-          <p class="hint">Duplicating a finished project for next year is supposed to clear your plate, not refill it. Anything starting past this horizon collapses into a <b>Later</b> group in the projects panel — still there, still editable, just not in the way. Undated projects are never folded; undated means someday, which is what the Want-tos tab is for.</p>
         </div>
+        <p class="hint">Duplicating a finished project for next year is supposed to clear your plate, not refill it. Anything starting past this horizon collapses into a <b>Later</b> group in the projects panel — still there, still editable, just not in the way. Undated projects are never folded; undated means someday, which is what the Want-tos tab is for.</p>
         <p class="hint">Stages dated by pipeline math (not hard ⏰ dues) are "due by this hour" on their day — so a 9 AM task outranks them, and midnight doesn't flip them red.</p>
         <div class="form-row">
           <label>🐙 Decision time opens after <input id="cfg-decision-days" type="number" min="1" max="30"> day(s) overdue</label>
@@ -917,9 +928,17 @@
         <h2>🐙 Welcome to Tentacalendar</h2>
       </div>
       <div class="onboarding-body">
-        <p>A planning board that decides <b>what you should do next</b> — instead of letting you.</p>
-        <p class="hint">It reads your deadlines and builds your day from them. If something is late, it climbs; late enough, it speaks.</p>
-        <p class="hint">This is a 60-second tour. Click <b>Let's go</b> below, or skip if you like to tinker.</p>
+        <!-- ⚠️ 0.51.15 — TONE. This read "a planning board that decides what
+             you should do next — INSTEAD OF LETTING YOU." Jake and Katie,
+             first run after the flip: *"help you pick the next thing because
+             you're incapable isn't really the vibe we're going for. Help you
+             pick the next thing so you don't have to is better."* They are
+             right, and the difference is the whole product: this app takes
+             over the SORTING, not the deciding. Keep it that way. -->
+        <p>A planning board that works out <b>what's next</b>, so you don't have to.</p>
+        <p class="hint">It reads your deadlines and builds your day from them, so the order is one less thing to hold in your head. If something is late it climbs; late enough, it speaks up.</p>
+        <p class="hint">Tasks are the small stuff. <b>Projects</b> are the real work — they break into stages and feed the same day you're already looking at.</p>
+        <p class="hint">Two minutes, and you can leave any time. Click <b>Let's go</b>, or skip if you would rather poke at it.</p>
       </div>
       <div class="onboarding-buttons">
         <button id="splash-skip" class="mini">Skip</button>
@@ -957,6 +976,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.43.0"></script>
+  <script type="module" src="app.js?v=1.44.0"></script>
 </body>
 </html>

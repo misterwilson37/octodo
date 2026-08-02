@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.43.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.2 · html 0.51.14 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
+| **Versions** | app 1.44.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.2 · html 0.51.15 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
 | **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **THE FLIP IS THIS WEEKEND** (Jake, 2026-08-01) — `TESTS.md` START HERE is re-ordered around it and IMPORT-1 is now item 1. §0h (outriders) comes after. **MOVE-1 and MOVE-2 passed**; MOVE-3 and MOVE-4 are the mover's remaining browser tests, and §0h's migration reuses that same copy→verify→delete mover. |
@@ -965,6 +965,100 @@ comment.**
 ⚠️ **Untested in a browser.** FIT-1/FIT-2/TRAY-1 in `TESTS.md`, and the flip
 was starting within the hour, so the honest expectation is that Katie's import
 happens before any of them run.
+
+---
+
+### 0n. ⚠️ KATIE IS ON 2.0. HER FIRST HOUR. (app 1.44.0 · html 0.51.15)
+
+**The import worked.** Jake: *"Katie is in! It imported her stuff like a
+dream."* IMPORT-1's withdrawn dry run cost nothing. Four things came back.
+
+#### 1. ⚠️ SAVE SETTINGS "DID NOTHING" — AND JAKE DIAGNOSED IT IN THE REPORT
+
+> *"Clicking save settings didn't do anything… changing the days of a tier
+> didn't close on save settings either. Maybe it's saving, but it's not
+> closing the window. Hitting the X gave us an unsaved progress warning."*
+
+**That symptom pair is one fact, and his guess was right.** `onSaveSettings`
+ends with `delete dirtySnapshots["settings"]` and then `closeSettings()`. If
+anything above throws, **both are skipped** — modal stays open (looks like a
+dead button) and the old snapshot survives (so ✕ still warns). Everything
+above the throw had already been written. **It was saving. It could not admit
+it.**
+
+⚠️ **I DO NOT KNOW WHICH LINE THREW AND I DID NOT SHIP A GUESS.** Four
+candidates were checked against the source and eliminated: a missing `#cfg-*`
+element (every id resolves); `saveTierSkin` with an empty board id (it guards
+`!wsId` and catches); a null `pipelineDraft` (openSettings sets it before
+`markClean`, **and the ✕ warning proves `markClean` ran**, which kills the
+theory); a missing `.t-*` field on some row (every row carries all of them,
+merely hidden). **After four files with no clean explanation the rule says
+stop, so the fix makes the failure name itself instead.**
+
+The body is wrapped. A throw now shows the user a toast with the message and
+logs a stack. **The modal is deliberately LEFT OPEN and the snapshot LEFT
+INTACT on failure** — closing would discard edits whose fate is unknown, and
+the ✕ warning in that state is the guard working, not the bug.
+
+⚠️ **THIS IS STILL OPEN.** The wrap makes it visible, not fixed. **Ask Jake
+for the toast text or the console line; it names the file and line in one
+step.** Two proven hazards in the same function were fixed on the way past:
+the bare `.tier-row` query is now scoped to `#tier-editor` like the other four
+in the file (**the D52 comment forty lines above describes this exact bug
+happening to `.tab-btn`**), and the lone unguarded `pipelineDraft` reader among
+four guarded ones now checks.
+
+#### 2. ⚠️ THE SPLASH TOLD KATIE SHE WAS THE PROBLEM
+
+It read: *"A planning board that decides **what you should do next** — instead
+of letting you."*
+
+> Jake: *"Help you pick the next thing because you're incapable isn't really
+> the vibe we're going for. Help you pick the next thing so you don't have to
+> is better."*
+
+**He is right and the distinction is the entire product.** This app takes over
+the **sorting**, not the deciding. Now: *"works out what's next, so you don't
+have to."* ⚠️ **Do not let this drift back.** Copy that brags about overriding
+the user reads as contempt to everyone except the person who wrote it.
+
+#### 3. THE TOUR STOPPED AT "ADD A TASK"
+
+> *"Katie was very disappointed that it stopped at adding tasks. The projects
+> is the moneymaker, and she thinks it deserves a fair shake. Probably a
+> walkthrough how the projects and tasks play together on the agenda is also
+> helpful. The tour should be a legit tour, not a how to add a task."*
+> *"(If I told you differently before, I was very definitely wrong.)"*
+
+**She is describing the actual product.** `firstTask` went 5 steps → **11**:
+task → project → pipeline/stages → working-day arithmetic → **the two meeting
+in one queue** → want-tos. The penultimate step is the thesis rather than a
+field: *stages arrive in the same list as your tasks, on the day they need
+you.*
+
+⚠️ **EVERY SELECTOR MUST RESOLVE.** A step whose element is missing is a tour
+that dies silently in front of a brand-new user — the worst audience there is.
+All 16 across all three tours verified mechanically against `index.html`;
+**re-run that check if you add a step.**
+
+⚠️ **Katie has already completed the tour**, so `markTourCompleted` means she
+will not see the new one without a replay button — **which is TOUR-REPLAY,
+still unbuilt, and it just stopped being cosmetic.** It is the only way the
+rewrite reaches the person who asked for it.
+
+#### 4. THE TIMING PANE WAS A PILE OF OVERLAPPING TEXT
+
+A `<p class="hint">` was a **third flex child of a `.form-row`**. `.form-row`
+is `display: flex` and `.form-row label` is `flex: 1; min-width: 0` — that
+min-width is load-bearing elsewhere (D66: two date inputs out-minimum a 340px
+panel) and it means a label will shrink to nothing. The paragraph took the
+width, both labels starved into one-word-per-line columns, and their text
+interleaved into what Jake photographed.
+
+> ⚠️ **A HINT IS A SIBLING OF ITS ROW, NEVER A CHILD OF IT.** Every other hint
+> in that pane already sat outside; this one row had it inside. **Checked
+> mechanically: no `.form-row` in `index.html` now contains a `<p>`, and that
+> check is worth re-running.**
 
 ---
 

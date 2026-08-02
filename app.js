@@ -1,11 +1,20 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.43.0
+// Version 1.44.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.44.0 — KATIE'S FIRST HOUR ON 2.0. (1) Save settings threw partway and
+//          therefore never closed the modal nor cleared the dirty snapshot,
+//          which is why ✕ still warned; the body is now wrapped so a throw
+//          NAMES itself instead of looking like a dead button. (2) The tour
+//          stopped at "add a task" — it now runs task → project → stages →
+//          the two meeting in one day. (3) Splash copy: it told the user the
+//          app decides "instead of letting you." It sorts; it does not
+//          decide. (4) Scoped the bare .tier-row query and guarded the lone
+//          unguarded pipelineDraft reader.
 // 1.43.0 — wirePhoneTray(). On a phone ⏻ moves out of the header and down
 //          to #phone-tray at the bottom of the page, as 1.x did. It MOVES
 //          the node rather than cloning it — a second button means a dead
@@ -112,7 +121,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.43.0";
+export const APP_VERSION = "1.44.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -173,7 +182,42 @@ const TOURS = {
     { selector: "#task-tier",  title: "Which part of your life?",
       text: "Tiers colour the queue and can be hidden on days you do not want to see them. Home, Work and Personal come with the board; rename them freely." },
     { selector: "#task-esc-n", title: "Optional, and the best thing here",
-      text: "\u201cIf ignored, nag again every \u2026\u201d. A task set to nag hourly is genuinely hard to ignore by lunchtime. Reach for this when you catch yourself thinking \u201cI\u2019ll remember.\u201d" }
+      text: "\u201cIf ignored, nag again every \u2026\u201d. A task set to nag hourly is genuinely hard to ignore by lunchtime. Reach for this when you catch yourself thinking \u201cI\u2019ll remember.\u201d" },
+
+    // ⚠️ THE TOUR USED TO END ON THE LINE ABOVE, AND THAT WAS THE COMPLAINT.
+    // Katie, first run after the flip (via Jake): *"very disappointed that it
+    // stopped at adding tasks. The projects is the moneymaker, and she thinks
+    // it deserves a fair shake. Probably a walkthrough how the projects and
+    // tasks play together on the agenda is also helpful. The tour should be a
+    // legit tour, not a how to add a task."*
+    //
+    // She is describing the actual product. A to-do list is not what this is;
+    // the pipeline is. So the tour now runs task \u2192 project \u2192 stages
+    // \u2192 the two meeting in one day, and the last step is the thesis
+    // rather than a field.
+    //
+    // \u26a0\ufe0f EVERY SELECTOR HERE MUST RESOLVE IN index.html. A step whose
+    // element is missing is a tour that dies silently in front of a brand-new
+    // user \u2014 the worst audience available. Checked mechanically before
+    // shipping; check again if you add one.
+    { selector: "#projects-panel", title: "Now the part that earns its keep",
+      text: "Tasks are the small stuff. A PROJECT is a piece of real work with a beginning and an end \u2014 and it lives here, next to the day it is feeding.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#project-name", title: "A project is just a name and a window",
+      text: "Name it, say when it starts and when it is due. That is the whole commitment \u2014 everything after this is the app doing the arithmetic.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#project-type", title: "Stages come from a pipeline",
+      text: "A pipeline is the steps you always take for a kind of work \u2014 draft, review, send. Pick one and the project arrives with its stages already in it. Settings \u25b8 Pipeline is where you shape them.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#project-tier", title: "Stages land on working days",
+      text: "Stage dates are counted in the tier\u2019s working days, not raw calendar days \u2014 so a Mon\u2013Fri project never quietly schedules itself onto your Sunday.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#queue-panel", title: "And here is the whole point",
+      text: "Stages do not sit in a separate projects world. The one that is ready NOW appears in this list, in among your tasks, sorted by the same deadlines. You never have to remember to go and look at a project \u2014 it comes to you on the day it needs you.",
+      before: () => { if (S.view !== "day") setView("day"); } },
+    { selector: "#mode-want", title: "One last thing: not everything is a have-to",
+      text: "Want-tos hold the someday pile \u2014 undated, out of the way, still there when you have room. Nothing in here nags you.",
+      before: () => { if (S.view !== "day") setView("day"); } }
   ],
   firstTier: [
     { selector: "#settings-btn", title: "Tiers live in Settings",
@@ -1598,7 +1642,12 @@ function wireBurnInCare() {
 const ALERT_LEVELS = {
   due:  { tones: [[880, 0, 0.20], [1174.7, 0.17, 0.26]], vol: 0.9, label: "Due now" },
   nag:  { tones: [[622.3, 0, 0.22], [622.3, 0.26, 0.30]], vol: 0.8, label: "Still waiting" },
-  soon: { tones: [[1318.5, 0, 0.07], [1318.5, 0.11, 0.07], [1318.5, 0.22, 0.10]], vol: 0.55, label: "Starting soon" }
+  soon: { tones: [[1318.5, 0, 0.07], [1318.5, 0.11, 0.07], [1318.5, 0.22, 0.10]], vol: 0.55, label: "Starting soon" },
+  // Not a due-date level — it is how a thrown error reaches a human. Carries
+  // tones for shape only; showToast never sounds, alertTick does, and nothing
+  // routes this level to alertTick. Without it a crash notice would inherit
+  // ALERT_LEVELS.due and announce itself as "Due now", which is a lie.
+  error: { tones: [[311.1, 0, 0.30]], vol: 0.7, label: "Something went wrong" }
 };
 const ANNOUNCED_KEY = "tc-announced";
 const ANNOUNCE_TTL = 36 * 60 * 60 * 1000;   // long enough to survive a night, short enough not to grow
@@ -6688,7 +6737,47 @@ function stageTemplateRow(st, isNew) {
   if (isNew) row.querySelector(".st-name").focus();
 }
 
+/** ⚠️ SAVE MUST NEVER FAIL SILENTLY, AND IT DID.
+ *
+ *  Katie, an hour after the flip: *"clicking save settings didn't do
+ *  anything… changing the days of a tier didn't close on save settings
+ *  either. Maybe it's saving, but it's not closing the window. Hitting the X
+ *  gave us an unsaved progress warning."*
+ *
+ *  That symptom PAIR is one fact. The body below ends with
+ *  `delete dirtySnapshots["settings"]` and then `closeSettings()`. If
+ *  anything in it THROWS, both are skipped — so the modal stays open (looks
+ *  like nothing happened) AND the old snapshot survives (so ✕ still finds
+ *  the form dirty). Jake's read was right: **the writes above the throw had
+ *  already gone out. It was saving. It just could not admit it.**
+ *
+ *  ⚠️ I DO NOT KNOW WHICH LINE THREW, AND I AM NOT GUESSING. Four candidates
+ *  were checked and eliminated against the source: a missing `#cfg-*`
+ *  element (every id resolves), `saveTierSkin` with an empty board id (it
+ *  guards `!wsId` and catches), a null `pipelineDraft` (openSettings sets it
+ *  before markClean, and the ✕ warning proves markClean ran), and a missing
+ *  `.t-*` field on some row (every row carries all of them, merely hidden).
+ *  **After four files with no clean explanation, the honest move is to make
+ *  the failure name itself rather than to ship a fifth theory.**
+ *
+ *  So: the throw is caught, shown to the user, and logged with a stack. The
+ *  modal is deliberately LEFT OPEN on failure — closing it would discard
+ *  edits whose fate is unknown — and the snapshot is deliberately LEFT
+ *  INTACT, so ✕ still warns. That is not the bug; that is the guard working
+ *  on the one occasion it should.
+ */
 function onSaveSettings() {
+  try {
+    saveSettingsBody();
+  } catch (err) {
+    console.error("[settings] save failed partway through:", err);
+    showToast("error", "Settings didn't finish saving",
+      `${err && err.message ? err.message : err} — some of it may have gone through. ` +
+      `Nothing has been closed or discarded. Send Jake this message.`);
+  }
+}
+
+function saveSettingsBody() {
   // D107 — the two screen-care toggles are PER-DEVICE (the TV is a device):
   // localStorage, not workspace config, and they apply immediately.
   localStorage.setItem("tc-rest", $("#cfg-rest").checked ? "1" : "0");
@@ -6714,7 +6803,13 @@ function onSaveSettings() {
     clearDeckThreshold: clampInt($("#cfg-cleardeck").value, 0, 100, 60) / 100 // D85
   });
   let tierPos = 0;
-  for (const row of document.querySelectorAll(".tier-row")) {
+  // ⚠️ SCOPED to #tier-editor, as the other four .tier-row queries in this
+  // file already are. This one was bare — and the D52 comment forty lines up
+  // in this same file describes exactly what a bare selector did to
+  // `.tab-btn`. Reading a row from outside the editor would take a
+  // querySelector on a field it does not have, and `.value` on null throws:
+  // the precise shape of the failure being reported.
+  for (const row of document.querySelectorAll("#tier-editor .tier-row")) {
     tierPos += 1;
     const kind = row.querySelector(".t-kind").value;
     // D60: gather the day toggles; an accidental zero-day tier falls
@@ -6761,8 +6856,16 @@ function onSaveSettings() {
   // D124 — persist the whole pipeline library. Capture the visible editor
   // into its target first, then write Default and the named types.
   capturePipelineEditor();
-  saveStageTemplate(pipelineDraft.default);
-  saveProjectTypes(pipelineDraft.types);
+  // ⚠️ GUARDED, because every other reader of pipelineDraft already is —
+  // capturePipelineEditor, refreshPipelineTarget and settingsSignature all
+  // check it and these two did not. openSettings sets it, so today this is
+  // unreachable; the day a second path opens Settings it stops being. A lone
+  // unguarded reader among four guarded ones is a bug that has not happened
+  // yet, not a bug that cannot.
+  if (pipelineDraft) {
+    saveStageTemplate(pipelineDraft.default);
+    saveProjectTypes(pipelineDraft.types);
+  }
   delete dirtySnapshots["settings"];   // D129 — saved; the close below must not re-prompt
   closeSettings();
 }
