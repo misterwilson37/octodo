@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 1.44.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.2 · html 0.51.15 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
+| **Versions** | app 1.45.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.3 · html 0.51.16 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.4.0 · manifest 0.2.0 |
 | **Deployed** | ✅ **EVERYTHING THROUGH app 1.41.0 IS PUSHED AND LIVE** — verified 2026-08-01 against a GitHub main-branch download, not asserted. Every "NOT uploaded" warning this row carried for four sessions was stale; §0d, §0g and §0i are all on the server. **app 1.41.1 · html 0.51.11 (DASH-FILL) are the only files newer than the repo.** |
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **THE FLIP IS THIS WEEKEND** (Jake, 2026-08-01) — `TESTS.md` START HERE is re-ordered around it and IMPORT-1 is now item 1. §0h (outriders) comes after. **MOVE-1 and MOVE-2 passed**; MOVE-3 and MOVE-4 are the mover's remaining browser tests, and §0h's migration reuses that same copy→verify→delete mover. |
@@ -1059,6 +1059,76 @@ interleaved into what Jake photographed.
 > in that pane already sat outside; this one row had it inside. **Checked
 > mechanically: no `.form-row` in `index.html` now contains a `<p>`, and that
 > check is worth re-running.**
+
+---
+
+### 0o. TOUR REPLAY · THE DATE LABEL · THE PHONE HEADER (app 1.45.0 · css 0.59.3 · html 0.51.16)
+
+#### 1. TOUR-REPLAY built — Settings ▸ foot ▸ "Show me around"
+
+Three buttons, one per tour. **It was filed as cosmetic in the first roadmap
+of this session and it never was**: `markTourCompleted` is permanent and
+per-person, so the 11-step rewrite in §0n reached **nobody who had used the
+app before** — which is precisely the set of people who could tell you the old
+one was wrong. Katie asked for the change and could not have seen it.
+
+⚠️ **It closes Settings THROUGH `closeSettings()`, not around it**, and starts
+nothing if the user cancels the discard prompt. A tour that threw away a
+half-typed tier to show somebody a popover would be a worse bug than the one
+it fixes. In the modal **foot** rather than a tab because all four tabs can
+reach it and none of them owns it.
+
+#### 2. ⚠️ THE DATE LABEL — D138 FIXED HALF AND CAUSED THE OTHER HALF
+
+Still stacking as `Today / — Sun, / Aug 2` at 1.43.0, two releases after the
+fix meant to stop exactly that.
+
+D138 needed the nav slots to **shrink** and wrote `flex: 1 1 0`. That does
+permit shrinking — and also sets `grow: 1` with a zero basis, which makes both
+slots **greedy**. Three equal shares to `[◀]`, `[label]`, `[▶ ⛶]`, so the
+label got a third of a 360px phone and word-stacked anyway. **The same
+three-line symptom D138 set out to kill, reached from the opposite direction —
+which is why it read as unfixed rather than as re-broken.**
+
+> `0 1 auto` is what *"may shrink, must not grow"* actually spells. `1 1 0` is
+> *"must grow, may shrink."* They are one character apart and opposite.
+
+#### 3. The phone header, in two deliberate rows
+
+0.59.1 stopped the overflow and left the wrapping to chance — brand, then
+board chip + views, then ⚙ ＋ stranded on a line of their own. Jake's layout:
+
+```
+row 1   🐙 Tentacalendar v1.45.0        ● Board ▾
+row 2   📋 Today  🗓️ Week  📅 Year        ⚙  ＋
+```
+
+⚠️ **`display: contents` on `.header-right` is load-bearing.** The board chip
+cannot join the brand's row while nested a box deeper — a wrapper is one flex
+item and everything in it wraps as a unit. Dissolving the box makes them all
+children of `header`, and only then can `order` interleave them with `.brand`.
+
+⚠️ **`header::after` IS THE ROW BREAK, not decoration.** A 100%-basis,
+zero-height flex item at order 3 eats the rest of line one. Delete it and the
+two rows collapse back into one wrapped mess.
+
+⚠️ **EVERY HEADER CHILD NOW CARRIES AN EXPLICIT `order`, INCLUDING ⏻.**
+`order` defaults to 0, which sorts *before* `order: 1` — so for the beat
+before `wirePhoneTray()` moves ⏻ out, and forever if it ever fails, an
+unordered child would jump ahead of the app's own name.
+
+⚠️ **None of this ran in a browser.** Contained to ≤600px, so the blast radius
+is phone cosmetics, and it reverts cleanly by deleting the ordered block.
+
+#### 4. ⚠️ OPEN — "year on the phone is absurd"
+
+Jake said it in parentheses and it reads two ways: *the Year VIEW is absurd on
+a phone* (hide the button) or *hiding Year would be absurd*. **Not guessed at,
+because the change is not one line.** Hiding it means the CSS rule **and** a
+`setView` bounce **and** the resize rule — all three, exactly as the dashboard
+does at 1200 — or a phone that persisted `"year"` renders a view with no way
+back to Today. §0m's warning, one control over. **One word from Jake and it is
+fifteen minutes.**
 
 ---
 

@@ -1,6 +1,6 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.59.2 — .st-spawn-wrap, the hurrah follow-up field.
+   Version 0.59.3 — .st-spawn-wrap, the hurrah follow-up field.
    (prev) Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
    there is room; "Later" group in the projects panel.
    (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
@@ -18,7 +18,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.59.2"; }
+:root { --tc-version: "0.59.3"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -542,8 +542,20 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
      One line, both symptoms. On phones the slots may shrink — the jump
      they prevent is a non-issue on a screen this narrow, where "back to
      today" wraps to its own line regardless. The wall keeps its 7.5rem. */
-  .day-nav .nav-slot, .wanttos-nav .nav-slot { min-width: 0; flex: 1 1 0; }
+  /* ⚠️ 0.59.3 — D138 SOLVED HALF OF THIS AND CAUSED THE OTHER HALF.
+     It needed the slots to SHRINK, and wrote `flex: 1 1 0` — which does
+     allow shrinking, and also sets grow:1 with a zero basis, making both
+     slots GREEDY. Three equal shares to [◀][label][▶ ⛶], so the label got a
+     third of a 360px phone and word-stacked into "Today / — Sun, / Aug 2"
+     anyway. Same three-line symptom D138 set out to kill, arrived at from
+     the opposite direction, which is why it looked unfixed.
+     `0 1 auto` is what "may shrink, must not grow" actually spells: the
+     slots take what their buttons need, and the label gets the rest. */
+  .day-nav .nav-slot, .wanttos-nav .nav-slot { min-width: 0; flex: 0 1 auto; }
   .day-nav .nav-slot .mini { white-space: normal; }
+  /* Two lines of date is fine; three was the complaint. A little less type
+     and a tighter line buys the second one back. */
+  .day-nav h2, .wanttos-nav h2 { font-size: 1.05rem; line-height: 1.25; }
 
   /* ⚠️ 0.59.1 — THE HEADER OVERFLOWS THE GLASS, AND IT IS D138 AGAIN IN A
      DIFFERENT ROW. `header` and `.header-right` are both plain
@@ -568,7 +580,39 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
      still tight, the next lever is the Dashboard button, whose own tooltip
      says "big screens only" and which is ~6rem of a row that has none to
      spare. That is a judgement about her workflow, so it is Jake's. */
-  header { flex-wrap: wrap; gap: .3rem .5rem; padding: .5rem .7rem; }
+  /* ⚠️ 0.59.3 — THE PHONE HEADER IN TWO DELIBERATE ROWS.
+     0.59.1 stopped the overflow and left the wrapping to chance: brand,
+     then board chip + views, then ⚙ ＋ stranded on a third line by
+     themselves. Jake: *"move the tentacalendar user view dropdown to the
+     same row as the title and version, and move settings and plus to next
+     to the today/week/year view."* So:
+
+         row 1   🐙 Tentacalendar v1.44.0        ● Board ▾
+         row 2   📋 Today  🗓️ Week  📅 Year        ⚙  ＋
+
+     ⚠️ `display: contents` ON .header-right IS LOAD-BEARING. The board chip
+     cannot join the brand's row while it is nested one box deeper — the
+     wrapper is a single flex item, so everything inside it wraps as a unit.
+     Dissolving the box makes all of them children of `header` itself, and
+     only then can `order` interleave them with .brand.
+     ⚠️ THE ::after IS A REAL FLEX ITEM AND IS THE ROW BREAK. A 100%-basis,
+     zero-height item at order 3 consumes the rest of line one, forcing
+     everything after it onto line two. Deleting it does not tidy anything
+     up; it collapses the two rows back into one wrapped mess. */
+  .header-right { display: contents; }
+  .brand { order: 1; flex: 1 1 auto; font-size: 1rem; }
+  #board-switch { order: 2; }
+  header::after { content: ""; flex: 0 0 100%; height: 0; order: 3; }
+  .view-switch { order: 4; flex: 1 1 auto; }
+  #hdr-fullscreen { order: 5; }
+  #settings-btn { order: 6; }
+  #jump-add { order: 7; }
+  /* ⚠️ ORDER DEFAULTS TO 0, WHICH SORTS BEFORE order:1. wirePhoneTray moves
+     ⏻ out to #phone-tray, but for the beat before that runs — and forever if
+     it ever fails — an unordered child would jump to the FRONT of the header,
+     ahead of the app's own name. Explicit last. */
+  #signout-btn { order: 8; }
+  header { flex-wrap: wrap; gap: .3rem .5rem; padding: .5rem .7rem; align-items: center; }
   /* ⏻ leaves the header for #phone-tray at this SAME 600px — app.js's
      wirePhoneTray() reads the identical query. Change one, change both. */
   #phone-tray {
@@ -577,10 +621,15 @@ body.kiosk-idle #alert-toast { opacity: 1 !important; }
   }
   .header-right { flex-wrap: wrap; justify-content: flex-end; row-gap: .35rem; }
   .view-switch { flex-wrap: wrap; }
-  .brand { font-size: 1rem; }
   /* The version badge NEVER shrinks away — it is how a stale cache gets
      caught, and Katie has run one before (D130). */
   .version { white-space: nowrap; }
+}
+
+/* Tour replay row in the Settings foot. */
+.settings-tours {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
+  padding: .7rem 0 0; margin-top: .5rem; border-top: 1px solid var(--line);
 }
 
 /* ---------- Projects panel ---------- */

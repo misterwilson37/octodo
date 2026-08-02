@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.9.0 · current as of 2026-08-02 (Thaumoctopus)**
+**Version 2.10.0 · current as of 2026-08-02 (Thaumoctopus)**
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -66,7 +66,28 @@ super-admin wipe/export panel the plan now depends on.
 
 ---
 
-### 1. ⚠️ SAVE-1. What does Save settings actually say now?
+### 1. TOUR-REPLAY-1. Katie can finally see the new tour.
+Settings → bottom → **Show me around: 📋 Tasks & projects**. Settings closes
+and the 11-step tour runs. Try the other two as well.
+→ *Then: change a tier name, DON'T save, and hit a replay button. It must warn
+about unsaved changes, and cancelling must leave Settings open with your edit
+intact.*
+
+### 2. DATE-1. The day label stops stacking three deep.
+Phone, Today view. **`Today — Sun, Aug 2` on one or two lines, not three.**
+Check Want-tos too — same nav, same fix.
+→ *D138's `flex: 1 1 0` made the arrow slots greedy rather than merely
+shrinkable. `0 1 auto` is the difference.*
+
+### 3. HEADER-1. Two rows, in the right order.
+Phone. Row 1: 🐙 Tentacalendar + version + the board chip. Row 2:
+Today/Week/Year + ⚙ + ＋. ⏻ still at the bottom of the page, and **never**
+in front of the app name even for a flash on load.
+→ *⚠️ Untested in a browser. If it looks worse than 1.43.0 did, say so and it
+reverts cleanly — the whole change is one ordered block in the 600px media
+query.*
+
+### 4. ⚠️ SAVE-1. What does Save settings actually say now?
 Settings → change a tier's days → **Save settings**. Either it closes (fixed
 by the scoping change) **or a toast appears naming the error**.
 → *⚠️ **If a toast appears, send me its text — that is the whole ask.** The
@@ -74,29 +95,29 @@ wrap makes the failure visible, not fixed; four theories were checked and
 eliminated against the source and I will not ship a fifth blind. The console
 line (F12 → Console, red) is even better.*
 
-### 2. SAVE-2. The guard still guards.
+### 5. SAVE-2. The guard still guards.
 Change something, hit **✕** instead of Save. It must still warn. Then Save,
 reopen, and ✕ immediately — **no** warning that time.
 → *A save that clears the dirty flag without saving is worse than the bug.*
 
-### 3. TIMING-1. The Timing pane is readable.
+### 6. TIMING-1. The Timing pane is readable.
 Settings → Timing. Two labels side by side on one row, the "Duplicating a
 finished project…" paragraph on its own line **below** them, nothing
 overlapping.
 
-### 4. TOUR-1. The tour reaches the moneymaker.
+### 7. TOUR-1. The tour reaches the moneymaker.
 ⚠️ **Katie cannot see this without a replay button** — she has already
 completed the tour, so this needs TOUR-REPLAY built first, or a fresh account.
 It should run 11 steps: task → project → pipeline → working days → **the two
 meeting in one queue** → want-tos, with no step landing on a missing element.
 
-### 5. RETIER-1. The stranded follow-up walks home.
+### 8. RETIER-1. The stranded follow-up walks home.
 Open **`and then this`**, re-pick tier **Work**, save. Re-scan `whereis` — the
 ✗ must be gone and the task must sit in `Jake (personal)` with its parent.
 → *store 0.29.1. `rehomeFor` fires on any edit naming a tier on another board,
 so the repair is an ordinary save — MOVE-1's specimen fix in a new costume.*
 
-### 6. RETIER-2. A whole chain moves and lands routable.
+### 9. RETIER-2. A whole chain moves and lands routable.
 Make a task with a chained follow-up on a personal tier. Change the **parent's**
 tier to the shared one. `whereis` from **both** accounts: parent *and* child on
 the shared board, **no ✗**, and the child still has its own title and dates.
@@ -105,7 +126,7 @@ Then undo. Both come home together.
 used to arrive on the new board still pointing at the old board's tier. Covered
 by `move.test.mjs` too, but only the browser proves the chain walk.*
 
-### 7. DIRTY-2. The project form after a NEW project.
+### 10. DIRTY-2. The project form after a NEW project.
 Add a project. Hard refresh. Click ✎ on a project as your **first** action —
 no "unsaved changes". Then type in the name, click ✎ on a **different**
 project — the prompt **should** appear.
@@ -113,21 +134,21 @@ project — the prompt **should** appear.
 suggestion when the colour set changes, which is what made this fail when
 1.41.0's version of the fix passed. Both halves matter.*
 
-### 8. MOVE-4b. Deleting a project still warns honestly.
+### 11. MOVE-4b. Deleting a project still warns honestly.
 Unchanged behaviour — re-run only to confirm 0.29.1 did not disturb it. The
 confirm names the hours and no orphaned session is left.
 → *⚠️ **You do not like this behaviour and you are right** — see handoff
 §0k.3. The soft delete is not built. This test asserts today's truth, not the
 one you want.*
 
-### 9. FIT-1. Katie's phone, in one tap.
+### 12. FIT-1. Katie's phone, in one tap.
 On a phone: Settings → the versions line at the bottom. It should end with
 **`fit: ok (viewport NNNpx)`**. If it instead reads `⚠️ fit: content runs Npx
 past…`, **send that line** — it names the element and settles this without
 another photograph.
 → *app 1.42.0. Check it on the desktop too: `fit: ok` there is the control.*
 
-### 10. FIT-2. The header stops running off the edge.
+### 13. FIT-2. The header stops running off the edge.
 Same phone, Today view. The header should **wrap onto two or three rows** with
 every control reachable — brand, Today/Week/Year/Dashboard, ⚙ ＋ ⏻ — and no
 horizontal scroll or pinch-to-fit on load.
@@ -137,7 +158,7 @@ button — that has been hidden below 1200px since D105 and I was wrong to
 suggest it. Corrected estimate: ~750px in a 360px viewport. FIT-1 beats both
 numbers.*
 
-### 11. TRAY-1. ⏻ is at the bottom on a phone, and it works.
+### 14. TRAY-1. ⏻ is at the bottom on a phone, and it works.
 On a phone: the sign-out button is **not** in the header — it sits at the
 bottom of the page under a divider. **Tap it. It must actually sign you out.**
 Then widen the window on a desktop past 600px and back: it returns to the end
@@ -146,25 +167,25 @@ of the header row and leaves no gap behind.
 version here is a sign-out button that does nothing rather than one that is
 missing — the failure you would not notice until you needed it.*
 
-### 12. IMPORT-3. Calendar permissions do not travel. **Flip day.**
+### 15. IMPORT-3. Calendar permissions do not travel. **Flip day.**
 Every calendar re-shared with the 2.0 service account — inbound **and** the
 outbound mirror.
 → *Not a rehearsal, a step. The export holds calendar IDs and cannot hold
 calendar PERMISSIONS. Get it wrong and the tiers import perfectly and stay
 empty forever: no error, no warning, nothing.*
 
-### 13. IMPORT-2. Katie runs it herself, or gets Co-owner.
+### 16. IMPORT-2. Katie runs it herself, or gets Co-owner.
 RULES-6b measured it: an editor cannot write `pollIntervalMinutes` to the
 workspace document, so *"Katie adds Jake as an editor and he imports"* cannot
 execute. She owns her board and needs nothing extra.
 
-### 14. HURRAH-2. Re-ticking does not mint a second task.
+### 17. HURRAH-2. Re-ticking does not mint a second task.
 Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
 the first is not deleted by the un-tick.
 → *`spawnedTaskId` guards this, and it is the same guard the completion-modal
 version in §0k.4 will use. Worth knowing it holds before that is built.*
 
-### 15. HURRAH-3. The field only shows on the hurrah.
+### 18. HURRAH-3. The field only shows on the hurrah.
 Move the 🎆 to a different stage. `↳ +Nd` follows it, and the old row's value
 is dropped rather than riding along on a stage that is no longer the climax.
 

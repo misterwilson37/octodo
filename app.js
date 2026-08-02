@@ -1,11 +1,17 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.44.0
+// Version 1.45.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
 // RECENT:
+// 1.45.0 — TOUR REPLAY, at last. Settings ▸ foot ▸ "Show me around". It was
+//          filed as cosmetic from the first roadmap and stopped being so the
+//          moment Katie finished the old tour: markTourCompleted is
+//          permanent, so a rewritten tour reaches nobody who has used the
+//          app before. Closes Settings THROUGH the guard — a tour that
+//          discarded a half-typed tier would be worse than the bug it fixes.
 // 1.44.0 — KATIE'S FIRST HOUR ON 2.0. (1) Save settings threw partway and
 //          therefore never closed the modal nor cleared the dirty snapshot,
 //          which is why ✕ still warned; the body is now wrapped so a throw
@@ -121,7 +127,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.44.0";
+export const APP_VERSION = "1.45.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -294,6 +300,23 @@ function wireOnboarding() {
     if (p?.dataset.hintId) dismissHint(p.dataset.hintId);
   });
   window.addEventListener("resize", () => { if (currentTour) showTourStep(); });
+}
+
+/** ⚠️ REPLAY A TOUR FROM SETTINGS — the only route to a rewritten tour for
+ *  anyone who already finished the old one. `markTourCompleted` is permanent
+ *  and per-person, so without this the 11-step rewrite reaches nobody who has
+ *  used the app before, which is everybody who could tell you it was wrong.
+ *
+ *  ⚠️ It closes Settings THROUGH the guard, not around it. A tour that
+ *  discarded a half-typed tier to show you a popover would be a worse bug
+ *  than the one it is fixing — so if the user cancels the discard prompt,
+ *  the tour does not start and the modal stays exactly as they left it.
+ *  (firstTier and sharing re-open Settings themselves via their `before`
+ *  hooks; that is idempotent by construction and safe to re-run.) */
+function replayTour(tourId) {
+  closeSettings();
+  if (!$("#settings-modal").hidden) return;   // they cancelled — leave everything alone
+  startTour(tourId);
 }
 
 /** Start a tour by ID. */
@@ -677,7 +700,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#stage-add").addEventListener("click", () => stageTemplateRow({ name: "", direction: "none", anchor: "start", offsetDays: 0 }, true));
   wirePipelineManager();   // D124 — the project-type library controls (once)
-  $("#settings-save").addEventListener("click", onSaveSettings);  $("#cfg-poll").addEventListener("input", updatePollCostHint);
+  $("#settings-save").addEventListener("click", onSaveSettings);
+  document.querySelectorAll(".tour-replay").forEach(b =>
+    b.addEventListener("click", () => replayTour(b.dataset.tour)));  $("#cfg-poll").addEventListener("input", updatePollCostHint);
   $("#task-date-today").addEventListener("click", onDateToday);       // D140
   $("#task-time-now").addEventListener("click", onTimeNow);           // D141
   // E41 — onboarding hints for task form

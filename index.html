@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.15
+     Version 0.51.16
 
      The whole UI. One page, no templating.
 
@@ -50,9 +50,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.59.2">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.59.3">
 </head>
-<body data-html-version="0.51.15">
+<body data-html-version="0.51.16">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -698,6 +698,19 @@
         <p class="hint" id="poll-cost-hint"></p>
       </div>
 
+      <!-- ⚠️ 0.51.16 — TOUR REPLAY. It lives in the modal FOOT, not in a tab,
+           because it is reachable from all four and none of them owns it.
+           Filed as cosmetic since the first roadmap; it stopped being
+           cosmetic the moment Katie finished the old tour, because
+           markTourCompleted is permanent and a rewritten tour reaches
+           nobody who already saw the old one. -->
+      <div class="settings-tours">
+        <span class="hint-inline">Show me around:</span>
+        <button type="button" class="mini tour-replay" data-tour="firstTask">📋 Tasks &amp; projects</button>
+        <button type="button" class="mini tour-replay" data-tour="firstTier">🎨 Tiers</button>
+        <button type="button" class="mini tour-replay" data-tour="sharing">🤝 Sharing</button>
+      </div>
+
       <div class="modal-foot">
         <span id="versions-line" class="hint-inline"></span>
         <button id="settings-save" class="primary">Save settings</button>
@@ -976,6 +989,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.44.0"></script>
+  <script type="module" src="app.js?v=1.45.0"></script>
 </body>
 </html>
