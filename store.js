@@ -1,11 +1,17 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.29.0
+// Version 0.29.1
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
 // RECENT:
+// 0.29.1 — moveTask STRANDED EVERY FOLLOW-UP IT CARRIED. The chain moved
+//          board; only the root's tierId was rewritten, so each child landed
+//          on the new board still pointing at a tier on the old one. The
+//          comment claimed "a follow-up inherits its parent's" tier — true
+//          of creation, false of storage: addFollowUp writes an explicit
+//          tierId onto the child. Found by Jake in whereis running MOVE-3.
 // 0.29.0 — THE HURRAH SPAWNS A TASK. A client follow-up at +14 days had to
 //          be a pipeline STAGE, so a finished project sat at the top of the
 //          to-do list for a fortnight with nothing to do. Ticking a hurrah
@@ -68,7 +74,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "0.29.0";
+export const STORE_VERSION = "0.29.1";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -1221,21 +1227,50 @@ async function moveProject(fromWs, toWs, projectId, patch = {}) {
   return { moved: expected };
 }
 
+/**
+ * PURE — what ONE task document looks like on the far side of a move.
+ * Lifted out of moveTask in 0.29.1 for the same reason mergeStages was
+ * lifted out of setProjectStages in 0.26.1: the rule decides whether a
+ * document lands routable or stranded, and it was born un-runnable, buried
+ * three awaits deep inside a batched write. `move.test.mjs` extracts it.
+ *
+ * ⚠️ THE CHILD'S TIER MOVES TOO. This used to be "only the root's tier
+ * changes; a follow-up inherits its parent's." A follow-up inherits nothing
+ * at read time — `addFollowUp` writes an explicit `tierId` onto the child
+ * document, and both of its callers pass the ROOT's tier. So that sentence
+ * was true about CREATION and false about STORAGE, and the code believed the
+ * false half: every child arrived on the new board still pointing at a tier
+ * on the old one. Mis-routed the instant the move committed, on every chain
+ * that has ever moved. Found by Jake in `whereis` running MOVE-3 — the task
+ * `and then this` sitting in the shared board under a tier that lives in his
+ * personal one. **Sixth comment in this project found more confident than
+ * its code.**
+ *
+ * ⚠️ Only `tierId` propagates to a child. `patch` is the whole edit handed
+ * to updateTask, so spreading it would rename every follow-up, re-date it,
+ * and overwrite its notes with the parent's.
+ *
+ * ⚠️ E40 scopes mirror tags PER WORKSPACE, so a carried `mirroredGcalEventId`
+ * points at an event on the OLD board's calendar that nothing on the new one
+ * owns, and the poll would never reconcile it. Dropped; the poll re-mirrors.
+ */
+function movedTaskData(data, isRoot, patch = {}) {
+  const out = { ...data };
+  if (out.mirroredGcalEventId) out.mirroredGcalEventId = null;
+  if (isRoot) return { ...out, ...patch };
+  if (patch.tierId != null) out.tierId = patch.tierId;
+  return out;
+}
+
 /** Move ONE task and every follow-up hanging off it. */
 async function moveTask(fromWs, toWs, taskId, patch = {}) {
   const got = await collectTaskChain(fromWs, taskId);
   if (!got.tasks.length) throw new Error("that task no longer exists");
 
-  await writeAll(got.tasks.map(d => {
-    const data = { ...d.data() };
-    // ⚠️ E40 scopes mirror tags PER WORKSPACE, so this id points at an event
-    // on the OLD board's mirror calendar. Carrying it across would leave a
-    // task pointing at an event nothing on the new board owns, and the poll
-    // would never reconcile it. Drop it and let the poll re-mirror.
-    if (data.mirroredGcalEventId) data.mirroredGcalEventId = null;
-    // Only the root's tier changes; a follow-up inherits its parent's.
-    return { ref: doc(db, "workspaces", toWs, "tasks", d.id), data: d.id === taskId ? { ...data, ...patch } : data };
-  }));
+  await writeAll(got.tasks.map(d => ({
+    ref: doc(db, "workspaces", toWs, "tasks", d.id),
+    data: movedTaskData(d.data(), d.id === taskId, patch)
+  })));
 
   const landed = await collectTaskChain(toWs, taskId);
   if (landed.tasks.length < got.tasks.length) {
