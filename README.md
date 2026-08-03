@@ -126,6 +126,8 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 
 **Testing the rules.** `firestore-2.0.rules` is the one file where a mistake is silent and expensive, and the Firebase console no longer carries an inline simulator — its "Develop & Test" button now just points at the Emulator Suite docs. There is a suite for this: `cd rules-test && npm install && npm test`. It tests a **copy**, so `cp ../firestore-2.0.rules ./firestore.rules` before every run, and check that file's declared version against what is actually published in the console. A rules file that lives in two places will disagree with itself, and the stale copy is the one a newcomer reads and believes. The two rules bugs this project has shipped were both of a kind a three-line test would have caught.
 
+⚠️ **`rules-test/import.test.mjs` is not currently wired up, and its 18 assertions have plausibly never run.** It imports `./import-transform.js` from inside `rules-test/`, where no such file exists — the README above tells you to copy the *rules* file in and never mentions the transform — and `npm test` runs `rules.test.mjs` only. This is worth knowing precisely because the importer's own header cites that suite as evidence it works. What actually happened is that a real 245-document migration succeeded on the day, which is good evidence and is not the same thing as a test. Fix is small: copy the module in alongside the rules file and add a script. Do not mark it done without a green run.
+
 ⚠️ **Every path in this project must be relative** (`./store.js`, never `/store.js`). It is served from a subpath during development and a domain root in production; an absolute path works in one and 404s in the other, which makes it broken only *in between* — the worst possible timing for a bug.
 
 ---
@@ -140,7 +142,9 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 
 **Per-user tier colours and names** shipped: on a shared tier the name and colour you type are yours alone, so renaming *ELA 8* to *ELA* on your screen does not rename it on anybody else's.
 
-Version 2.0.0 arrives when two people can sign in separately, see separate boards, and visit each other's. Until then the app carries 1.x's continuing version numbers, and the badge in the header reports exactly what is running.
+**Version 2.0.0 shipped on 2026-08-02.** The bar was set a fortnight earlier — *two people sign in separately, see separate boards, and visit each other's* — and it was cleared before Katie migrated; the number was held back until the code had been read file by file rather than merely used. `store.js` and `queue.js` went to **1.0.0** in the same drop, which is the same statement one floor down: `0.y.z` means *the shape may still change*, and it does not.
+
+⚠️ **2.0.0 means audited, not finished.** It was cut after a full source read that removed six dead functions and found one header 191 lines long — not after the test list emptied. `TESTS.md` still holds around twenty items nobody has deliberately walked. The badge in the header reports exactly what is running.
 
 ---
 

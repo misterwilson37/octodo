@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.17
+     Version 0.51.18
 
      The whole UI. One page, no templating.
 
      RECENT:
+     0.51.18 — no markup change; pin moves to app.js 2.0.0. ⚠️ THIS FILE
+        DELIBERATELY STAYED 0.y.z while app went to 2.0.0 and store/queue to
+        1.0.0 (2026-08-02 audit). The only change here is a repoint, and a
+        major bump is Jake's to sign off, not an instance's to infer. If you
+        want the shell to carry 1.0.0 too, that is a one-line decision — see
+        HANDOFF §0r.
+     0.51.11–0.51.17 — see CHANGELOG.md. ⚠️ They were never written into this
+        RECENT block; it jumped 0.51.10 → the banner for seven versions.
      0.51.10 — no markup change; pin moves to app.js 1.41.0.
      0.51.9 — Later wording follows app 1.40.0: the horizon is measured from
         the pipeline window, not the start date.
@@ -52,7 +60,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="tentacalendar.css?v=0.59.4">
 </head>
-<body data-html-version="0.51.17">
+<body data-html-version="0.51.18">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -1017,6 +1025,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=1.46.0"></script>
+  <script type="module" src="app.js?v=2.0.0"></script>
 </body>
 </html>

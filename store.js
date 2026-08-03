@@ -1,10 +1,27 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 0.29.1
+// Version 1.0.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
+// 1.0.0 — FIRST STABLE. Katie migrated on 2026-08-02 — 245 documents, one
+//          run, no rehearsal — so this file has been the only thing standing
+//          between a real person and her data for a full day. 0.y.z means
+//          "the shape may still change"; it does not, and saying so is what
+//          this bump is for. No behaviour changed. What changed is that the
+//          EXPORT LIST is now a promise rather than an accident:
+//            · tierSkinOf DELETED. It was exported and documented as the
+//              source of Settings' "shared as …" line and NOTHING CALLED IT.
+//              That line is built from canonName/canonColor, which skinFor()
+//              stamps onto every tier it returns. A comment describing a path
+//              the code does not take — the fifth in this project, after
+//              E41's, §0b's, TIER_RANKS's and SKIN-2's, and the same shape
+//              every time.
+//            · COMPLETED_WINDOW_DAYS, stampNewStages, mergeStages are no
+//              longer exported. All three are read here and imported nowhere.
+//              stage-merge.test.mjs is unaffected: it lifts functions out of
+//              the source TEXT and strips `export` as it goes.
 // 0.29.1 — moveTask STRANDED EVERY FOLLOW-UP IT CARRIED. The chain moved
 //          board; only the root's tierId was rewritten, so each child landed
 //          on the new board still pointing at a tier on the old one. The
@@ -18,19 +35,7 @@
 //          ordinary dated task — which can be rescheduled, escalated and
 //          finished on its own terms, none of which a stage can do.
 //          `spawnedTaskId` guards against a re-tick minting a second one.
-// 0.28.0 — §0d CLOSED: A TIER CHANGE ACROSS BOARDS NOW MOVES THE DOCUMENT.
-//          updateProject/updateTask routed with wsOf(id) — the board the
-//          document was ALREADY on — so changing tierId rewrote the field
-//          and left the document behind, where collectTier (source board
-//          only) could never see it again. moveProject takes the project AND
-//          its sessions; moveTask takes the whole follow-up chain and drops
-//          mirroredGcalEventId so the poll re-mirrors on the new board.
-//          Same copy → verify → delete order as moveTier.
-//          Also: deleteProject now takes its sessions with it. It deleted one
-//          document, and every surface reaches a session THROUGH its project,
-//          so the ledger of a deleted project became unreachable rows nothing
-//          could render and nothing would clean up. Found by whereis's
-//          session audit on 2026-07-31, in Jake's live data.
+// 0.28.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -39,7 +44,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "0.29.1";
+export const STORE_VERSION = "1.0.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -1594,11 +1599,13 @@ export async function saveTierSkin(wsId, tierId, { label, color } = {}) {
   }
 }
 
-/** What the owner actually called it — for Settings' "shared as …" line. */
-export function tierSkinOf(wsId, tierId) {
-  const key = `${wsId}:${tierId}`;
-  return { label: TIER_SKINS.labels[key] || null, color: TIER_SKINS.colors[key] || null };
-}
+// ⚠️ tierSkinOf() WAS HERE AND IS GONE (1.0.0). It read the override maps back
+// out, and its comment said it fed Settings' "shared as …" line. It did not:
+// nothing ever called it. That line reads `t.canonName` / `t.canonColor`,
+// which skinFor() stamps onto EVERY tier it returns precisely so no caller has
+// to look an override up. If you need to know what the owner calls a tier, the
+// tier object in your hand already carries it — reaching back into TIER_SKINS
+// would be asking a second authority the same question.
 
 /** E7 — record this user's opinion of where a tier belongs in THEIR day.
  *  Written to the profile always; mirrored onto the document only where the
@@ -1662,7 +1669,7 @@ async function noteTierRank(wsId, tierId, rank) {
 // runtime-test here. Two single-field listeners are trivially indexed and
 // behave predictably. They are mutually exclusive (null is never >= a number),
 // so the union needs no real dedup — but we key by id anyway, defensively.
-export const COMPLETED_WINDOW_DAYS = 30;
+const COMPLETED_WINDOW_DAYS = 30;
 
 // Floor is start-of-local-day minus the window, computed ONCE at subscribe so
 // a long-running wall doesn't re-query as the clock ticks. On any reload
@@ -2201,7 +2208,7 @@ function ensureSids(stages) {
   });
 }
 
-export function stampNewStages(stages) {
+function stampNewStages(stages) {
   const now = Date.now(), me = whoami();
   return ensureSids((stages || []).map(s =>
     s && s.createdBy ? s : { ...s, createdBy: me, createdAt: s?.createdAt ?? now }));
@@ -2410,8 +2417,13 @@ export async function setStageDone(projectId, where, done) {
  * Server wins on completion for any stage it still has; caller wins for a
  * stage the server does not have (genuinely new, or restored by undo after
  * a delete — in both cases the caller holds the only copy).
+ *
+ * ⚠️ NOT EXPORTED (1.0.0), AND THE TEST STILL READS IT. stage-merge.test.mjs
+ * lifts this function out of the source TEXT by a brace-matching scan and
+ * strips `export` on the way, so testability never depended on the keyword.
+ * Do not add it back "so the test can see it" — the test could always see it.
  */
-export function mergeStages(incoming, live) {
+function mergeStages(incoming, live) {
   const bySid = new Map((live || []).filter(s => s?.sid).map(s => [s.sid, s]));
   let reconciled = 0;
   const stages = ensureSids(incoming).map(s => {

@@ -1,15 +1,17 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version 0.23.0** · Last updated 2026-07-30
+**Document version 0.24.0** · Last updated 2026-08-02
 
 | | |
 |---|---|
-| **Versions** | app 1.46.0 · store 0.29.1 · queue 0.21.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.0 · css 0.59.4 · html 0.51.17 · import.html 1.0.0 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.0 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.6.0 · manifest 0.2.0 |
+| **Versions** | app 2.0.0 · store 1.0.0 · queue 1.0.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.1 · css 0.59.4 · html 0.51.18 · import.html 1.0.1 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.6.0 · manifest 0.2.0 |
 | ⚠️ **THERE IS NO STAGING** | **Handing Jake a file IS deploying it.** He uploads each drop to the GitHub web portal as it arrives; Pages serves `main`; the app is live at that moment. There is no review branch, no soak, no staging URL. **Anything in this repo is what Katie is running right now.** See the box below — this cost a whole session of wrong advice.
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **DEPLOYED ≠ EXERCISED, AND BOTH ARE TRUE OF EVERYTHING HERE.** Every file is live and Katie used the app all day; `TESTS.md` START HERE still holds 20 items nobody has deliberately walked. **SAVE-1 first** — an unexplained crash that is now merely *visible*. Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
 | ✅ **Katie is on 2.0** | Migrated 2026-08-02, 245 documents, one run, no rehearsal. She has used it all day and filed four reports (§0n). 1.x remains live and untouched as the fallback. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
+| 🔢 **THE VERSION NUMBERS CHANGED SHAPE** | **app 1.46.0 → 2.0.0, store 0.29.1 → 1.0.0, queue 0.21.0 → 1.0.0**, on Jake's sign-off, 2026-08-02. Not a rewrite and not a feature — a declaration that these files run a real person's day. **Nothing about their behaviour changed in that drop.** `css`, `html` and `manifest` deliberately stayed 0.y.z; that is Jake's call to make and he has not made it. §0r. |
+| 🔍 **The 2.0.0 audit is §0r** | A file-by-file read, not a test run. Six dead functions removed, one header trimmed 191→57 lines, **and one wrong finding caught before it shipped.** Read §0r before trusting any "X is unused" claim in this document. |
 
 ### ⚠️ Three things to do before you write a line
 
@@ -1003,6 +1005,148 @@ shipped.
 
 ---
 
+---
+
+### 0r. THE 2.0.0 AUDIT (app 2.0.0 · store 1.0.0 · queue 1.0.0 · functions 1.3.1)
+
+**Jake asked for "a full audit … with a new set of eyes," having noticed that
+the first pass had only re-run the project's own gates.** He was right to push:
+the gates all pass and always did. Everything below came out of reading files,
+not running them.
+
+#### 1. ⚠️ THE FINDING THAT WAS WRONG, AND HOW IT NEARLY SHIPPED
+
+`defaultAnswers()` in `import-transform.js` was reported dead, deleted, and
+then **put back**. It is called by `rules-test/import.test.mjs` — the one
+consumer that drives the transform headlessly and therefore has no DOM to read
+answers out of.
+
+**The sweep that missed it searched `app.js`, the three HTML pages and the two
+root `.mjs` harnesses. It did not search `rules-test/`.** That directory is a
+sibling of everything else and holds real callers.
+
+> **A dead-code sweep that skips a directory returns the same answer as a
+> sweep that finds nothing.** There is no signal distinguishing them. If you
+> are about to delete something because "nothing calls it," name the
+> directories you searched, out loud, before you cut.
+
+This is the same shape as everything in §0q and the SKIN-2 note in `TESTS.md`:
+a true narrow statement ("nothing in the app calls this") restated as a broad
+one ("this is dead"), with the broad one being what gets acted on. It is the
+**sixth** instance recorded in this project. The function now carries a comment
+saying it looks dead and is not.
+
+#### 2. What was actually removed — six functions
+
+| File | Removed | Why it was there |
+|---|---|---|
+| `queue.js` | `getDeadlineHour`, `getClearDeckThreshold` | Setter/getter pairs where only the setter was ever wired. Both values are read through the module locals. |
+| `queue.js` | `isWeekend`, `addWeekdays`, `weekendNeighbors` | The pre-D60 Mon–Fri API. **Their comment said "still used for defaults" and nothing used them.** D60 replaced the weekend *concept* with per-tier `allowedDays`, so these could only answer a question the app had stopped asking. |
+| `store.js` | `tierSkinOf` | See below. |
+
+Also un-exported (read here, imported nowhere): `COMPLETED_WINDOW_DAYS`,
+`stampNewStages`, `mergeStages` in `store.js`; `WEEKDAYS` in `queue.js`.
+
+⚠️ **Un-exporting `mergeStages` does NOT break `stage-merge.test.mjs`.** That
+harness lifts functions out of the source *text* by a brace-matching scan and
+strips `export` as it goes. Testability never depended on the keyword. Both
+harnesses re-ran green afterwards — 34 and 29 assertions. **Do not add the
+keyword back "so the test can see it."**
+
+#### 3. `tierSkinOf` — the fifth comment more confident than its code
+
+It was exported and documented as *"what the owner actually called it — for
+Settings' 'shared as …' line."* Nothing called it. That line reads
+`t.canonName` / `t.canonColor`, which `skinFor()` stamps onto **every** tier it
+returns precisely so no caller has to look an override up.
+
+The comment was not describing a bug. It was describing a **design that was
+considered and then improved on**, and never updated. After E41's, §0b's,
+`TIER_RANKS`'s and SKIN-2's, the pattern is now established enough to state as
+a rule: **when you move an answer closer to its caller, delete the old path the
+same hour.** A convenience function left behind after its convenience moved is
+indistinguishable from a function somebody forgot to wire up.
+
+#### 4. `functions/index.js` — the header the budget had been failing
+
+191 lines and eight changelog entries, putting the banner ~190 lines from
+`FUNCTIONS_VERSION`. **That is the exact geometry that drifted four times in
+`app.js` and cost a deploy.** `version-check.mjs` had been reporting this file
+as its one failure since the budget shipped, and the failure was being read as
+noise.
+
+Now 57 lines. The body is **byte-identical** — verified by diff — apart from
+the version constant. Two things were rescued on the way out:
+
+- **The 1.2.1 entry existed only in that header.** It was not in
+  `CHANGELOG.md`. Trimming without checking would have destroyed it.
+- **A line appeared twice, back to back** (`0.3.0: PHASE 3 IS COMPLETE…`).
+  Nobody had noticed, which is what a 191-line header buys you.
+
+⚠️ **Two blocks in the moved history are still load-bearing** and are now
+summarised at the top of the trimmed header rather than only in `CHANGELOG.md`:
+**E37** (a bare email address is a guessable primary calendar; the leak is on
+the *calendar* side, not the Firestore side) and **E40** (`tcWs` on every
+mirrored event; a combined tag is invisible to both apps rather than visible to
+both).
+
+#### 5. ⚠️ OPEN — `rules-test/import.test.mjs` cannot run as documented
+
+Found while checking §0r.1. Two independent reasons:
+
+1. It does `import * as T from "./import-transform.js"` — a path **inside
+   `rules-test/`**, where no such file exists. The README documents copying
+   the *rules* file in (`cp ../firestore-2.0.rules ./firestore.rules`) and
+   never mentions the transform.
+2. `package.json`'s `test` script runs `rules.test.mjs` **only**. Nothing
+   invokes `import.test.mjs` at all.
+
+**So the 18 assertions that `import.html`'s header cites as proof of the
+migration path have plausibly never executed.** Katie's migration succeeded on
+the day, which is the evidence that actually exists — but it is a successful
+run, not a test suite, and the two have been talked about interchangeably.
+
+The fix is small (copy the module in alongside the rules file, add a script)
+and is **deliberately not done here**, because it needs the emulator and the
+egress allowlist to verify rather than to merely write. Do not mark it fixed
+without a green run.
+
+#### 6. What the audit did NOT find, stated plainly
+
+No broken logic. No null-dereference traps. No duplicate CSS rules, no
+duplicate function declarations, no orphaned listeners, no leftover
+`console.log`/`debugger`, no `TODO`/`FIXME`. `app.js` and `functions/index.js`
+have **zero** internally-dead functions between them. The security rules were
+read end to end and nothing was found beyond `TIER-MEMBER-ROLES`, which
+`TESTS.md` already tracks.
+
+⚠️ **This is a statement about reading, not about running.** `TESTS.md` START
+HERE still holds ~20 unwalked items and **SAVE-1 is still an unexplained
+crash.** 2.0.0 means *audited*; it does not mean *exercised*.
+
+#### 7. The version numbers, and the one Jake still owns
+
+Jake set the shape: *"I can't go back in time and change the versions."* So the
+bumps carry the cleanup rather than announcing a clean bill of health.
+
+- **`app.js` 1.46.0 → 2.0.0.** His call, made explicitly. Behaviour unchanged;
+  the number and two `?v=` pins are the whole diff.
+- **`store.js` 0.29.1 → 1.0.0, `queue.js` 0.21.0 → 1.0.0.** `0.y.z` means *the
+  shape may still change*. It does not — Katie's 245 documents went through
+  these files in one run and the day held. A 1.0.0 is a promise about an export
+  list, which is why the dead exports went in the same drop.
+- **`functions` 1.3.1, `import-transform` 1.0.1, `import.html` 1.0.1,
+  `index.html` 0.51.18** — patch bumps carrying the header trim, the comment,
+  and the pin repoints.
+
+⚠️ **STILL JAKE'S DECISION: `css` 0.59.4, `html` 0.51.18 and `manifest` 0.2.0
+stayed 0.y.z.** They are as live and load-bearing as `store.js`, so the case
+for 1.0.0 is the same case. It was not taken unilaterally, because a major bump
+needs his sign-off and the only changes in those files this session were pin
+repoints. **One sentence from him closes this either way; do not infer it.**
+
+---
+
 ### 0h. ⚠️ NEXT SESSION STARTS HERE — "OUTRIDER STAGES BECOME TASKS"
 
 **Katie corrected the requirement, and the correction is bigger than the
@@ -1715,6 +1859,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-08-02 | Opus 5 · **Cirrothauma** (19th, 17th named) | **THE 2.0.0 AUDIT — and the finding that was wrong.** Jake asked for a full audit, noticed the first pass had only re-run the project's own gates, and said so: *"have you gone over the code with a new set of eyes?"* He was right — the gates pass and always did. **The wrong finding first, because it is the transferable one:** I reported `defaultAnswers()` dead, deleted it, and found the caller on a repo-wide re-check — `rules-test/import.test.mjs`, the one consumer with no DOM. My sweep had covered `app.js`, the HTML pages and the two root harnesses and **had not searched `rules-test/` at all.** Restored, with a comment on it saying it looks dead and is not. **A dead-code sweep that skips a directory returns the same answer as one that finds nothing; there is no signal telling them apart.** Sixth instance of this project's signature failure and the first where the over-broad claim was mine rather than inherited. **What was actually removed: six functions.** `queue.js` lost two getters whose setters were wired and they were not, plus the three pre-D60 Mon–Fri wrappers — whose comment read *"still used for defaults"* while nothing used them, D60 having replaced the weekend concept with per-tier `allowedDays`. `store.js` lost `tierSkinOf`, **exported and documented as the source of Settings' "shared as …" line, which reads `canonName`/`canonColor` off the tier instead** — the fifth comment here found more confident than its code, and the rule that falls out of it is *when you move an answer closer to its caller, delete the old path the same hour.* Un-exported `COMPLETED_WINDOW_DAYS`, `stampNewStages`, `mergeStages`, `WEEKDAYS`; **both harnesses stayed green (34 + 29) because they strip `export` during extraction — testability never depended on the keyword.** **`functions/index.js`'s header: 191 lines → 57**, body verified byte-identical by diff. version-check had been failing on this one file since the budget shipped and the failure was being read as noise. Two rescues on the way out: **the 1.2.1 entry existed only in that header** and was not in `CHANGELOG.md`, and **a line appeared twice back to back**, which is what 191 lines buys you. **⚠️ NEW OPEN ITEM (§0r.5): `rules-test/import.test.mjs` cannot run as documented** — it imports `./import-transform.js` from a directory that has no such file, and `package.json`'s test script only runs `rules.test.mjs`. **The 18 assertions `import.html` cites as proof of the migration path have plausibly never executed.** Katie's successful migration is real evidence and is not a test suite; the two have been talked about interchangeably. Left unfixed on purpose — it needs the emulator to verify rather than merely to write. **Versions:** app → 2.0.0 on Jake's explicit sign-off, store and queue → 1.0.0 carrying the cleanup rather than announcing a clean bill of health (his framing: *"I can't go back in time and change the versions"*), functions 1.3.1, three patch bumps for pins. **`css`, `html` and `manifest` left at 0.y.z deliberately — that major bump is his to sign off and he has not.** **Process note: I did not name myself until Jake asked, and the omission is what made him check which model he was talking to.** |
 | 2026-08-01 | Opus 5 · **Thaumoctopus** (18th, 16th named) | **DASH-FILL SHIPPED, AND THE SCREENSHOT ANSWERED A QUESTION NOBODY ASKED IT.** Opened by checking the handoff against the repo, as three predecessors have, and the finding was the inverse of theirs: **the "NOT uploaded" warnings were stale in the safe direction** — everything through 1.41.0 was live, so TESTS.md's whole 🔴 list became runnable and nothing had to be re-shipped. Then the two real ones: `move.test.mjs` was **announced in the versions row and absent from the repo**, and `version-check.mjs` was **1.1.0 in the repo against 1.3.0 in the row** — and those are one fact, because 1.3.0 would have caught the missing harness and the copy that ran was the one that had never heard of it. **The checker's own drift is what hid the missing file, and it was the single drift the checker could not see.** Fixed by making it check itself and derive `LABELS`/the paste row from `FILES`; the old hand-written `rowOrder` had already diverged badly enough that **pasting its own suggestion would have deleted four entries from the handoff table.** Fifth instance of the second-list bug. **DASH-FILL: Katie runs Timeline, so the 34px ceiling binds and the wall layout's 14px is a red herring** — the surplus goes to the ROWS rather than back into the lane pitch, because filling the pane with 90px lane gaps is a different wrong answer, and the gridlines' `top:0;bottom:0` mean the new space renders as calendar. **The screenshot's most valuable pixel was the version badge: `v1.21.0` — Katie is on 1.x, so DASH-FILL and LABEL-1 are both "fixed for Jake, open for the primary user."** §0g says LABEL-1 is FIXED without saying in which tree, which is E27's exact failure and now the second time it has gone one-sided. **Fourth act — built §0k.4 (Katie's follow-up offer, independent button on the dup modal, guard narrowed and the §0k.4 claim about `spawnedTaskId` corrected rather than inherited), then spent the rest on documents at Jake's request.** `app.js`'s header had regrown to 135 lines / 19 entries — the exact disease `CHANGELOG.md` was created to cure nine days earlier, with the rule written in the header it had eaten. **Made it a check instead of a rule** (version-check 1.5.0, 60 lines / 6 entries, sabotage-verified), which immediately found `functions/index.js` at 191 lines that nobody had looked at; 24 entries moved to CHANGELOG verbatim. This handoff had it too — 1,932 lines, six sections added by me in one day — so the resolved ones are digested and **the ones holding open decisions were left whole on purpose.** README's Status was actively wrong in two places. **Third act — he ran the tests.** OFFDAY-1, MOVE-1/2/4, DASH-FILL-1/2/3 and LATER-1 passed; two things failed and both were mine. **`moveTask` had stranded every follow-up it ever carried** — the root's tier moved, the children's did not, under a comment reading *"a follow-up inherits its parent's"* which is true of creation and false of storage, since `addFollowUp` writes an explicit tierId. **Sixth comment here found more confident than its code, and the fifth of those is the same move: a narrow true statement restated as a broad one.** Lifted `movedTaskData` out as a pure function (the `mergeStages` precedent) and covered it — 29 assertions, sabotage-verified. ⚠️ **The harness's extractor had a latent hole that a default parameter finally exposed** (`indexOf("{")` from the function NAME finds `{}` inside `patch = {}`); fixed to match the parens first. **And DIRTY-1 failed on projects because 1.41.0 hardened one caller and left two** — `suggestProjectColor` and `refreshTypeSelect`, both on subscriptions, both writing signature fields, and `bestFreeColor()` changes its answer when a project is added, which is exactly the repro Jake found and the original could not. **That is §8c #4 committed by the instance that wrote §8c**; all three writers now go through one helper. **Three decisions recorded rather than built** (§0k): project delete should soft-delete — he is right, and note the tension with 0.28.0, since orphaning a ledger and destroying it are both wrong and neither fixes the other; the hurrah offer belongs in the completion modal *as well as* the pipeline, snooze untouched; and the import dry run is **withdrawn**, because Katie's transfer is the test and 1.x stays live — which trades a rehearsal for a super-admin wipe/export panel that now has to exist. **Second half of the session, on Jake's questions:** he caught that `TESTS.md` had two sections headed "run these first" and MOVE-3 in both, and asked the right diagnostic question — *tests broken, or code broken?* **Tests.** The mover has two entry points, both from store 0.28.0, untouched by 0.29.0's hurrah spawn (which calls `addTask`, not `rehomeFor`) and by queue 0.21.0 (a renderer that has never known Firestore exists). **MOVE-1 and MOVE-2 had passed and nobody wrote it down, because only the MOVE-3 failure produced a conversation** — so the file went on claiming none of them had been run. *A test that passes is a document edit, not just a relief.* Rebuilt the top of `TESTS.md` as one ordered START HERE list. **And he settled §0j's fork by reframing it: no 1.x hotfix, because the flip is this weekend and DASH-FILL/LABEL-1 turn the migration from "features you didn't ask for" into "your own bug reports, closed."** That re-ranks the list — IMPORT-1/2/3 to the top, since the importer has still never written to live Firestore. **Process note: a string replace of mine silently no-opped while installing the self-check, and the check I had just written is what caught it** — which is the argument for this project's whole mechanical-check habit, made against its author within the hour. |
 | 2026-07-29 | Opus 5 · **Hapalochlaena** (17th, 15th named) | **THE MIS-ROUTING FIX, AND A HANDOFF THAT HELD UP.** Jake opened by saying the previous instance had started to hallucinate and the code needed a go-over. **It did not — every claim in §0a checked out against the code, and all fourteen version constants agreed with the banner.** Saying so first was the useful part: the alternative was a session spent hunting phantom defects in a file that was fine. Fixed §0b: both routers refuse, seven creators stamp, one global rejection net, `octodoWhere()` left in the file. **Found that the fallback was in TWO resolvers rather than the one the handoff named, and the unnamed one is worse** — `restoreDoc` routes through it and uses `setDoc`, which creates, which is TIER-10's data-loss case. Three more defects found by reading: a catch that swallowed everything and blamed permissions, a latent `undefined` write that would have landed in that same catch, and a `hidden` flag that skipped `refreshMerge`. **What I did not do is the entry worth reading: §0a named two candidate root causes and told me not to guess between them, and I could not settle it.** I found a third that fits Jake's evidence better and said it was a hypothesis rather than dressing it as a finding — the fix is correct under all three, which is what made it shippable without the answer. **Nothing was pushed and nothing was run in a browser; the fix is code, not a verified fix.** Process note for successors: the previous session's own closing lesson was "state the plan in one line before doing it, put the instruction on its own line" — I read it before starting and it is good advice, so it is repeated here rather than left in a paragraph nobody reaches. |
 | 2026-07-28 | Opus 5 · **Argonauta** (14th, cont.) | **FIRST REAL-WORLD USE, AND THE DOCUMENT'S OWN NUMBERING FAILED IN JAKE'S HANDS.** A colleague shared a tier with him and **TIER-3 passed between two real people** — same document, live, both toggling it. Two defects came from actual use rather than review. (1) **The rank collision:** a shared tier arrives carrying a number chosen by somebody who has never seen your board, and a typed rank cannot express "put this above that." That control was fine for four years because ONE person authored every number; item 5 ended that. Now ▲▼, rank assigned 1..N from position — which answers his "it should kick back an error" by making the state unconstructible instead. (2) **`signInWithPopup` never drew an account chooser** on a device with one Google account, so ⏻ looked broken and **every two-person test was unreachable.** One line. **The bigger lesson belongs to this document:** lettering tests IA…JA made `IS`, `IT` and `IN` English words, ran the list past IZ into JA, and — because item 5's block was inserted where item 5 was *discussed* — made the file physically read IS…JA **then IQ, IR**, doubling back to two already-passed tests. Jake had to hand-decode the mapping before he could report anything, which taxes the one person this document exists to protect. Replaced with `GROUP-n`. **Do not re-letter it.** | Jake read back the visiting rule to confirm agreement and was right about the requirement (zero differences; an honest picture of her load) and wrong that 0.21.0 met it. **Personal tiers were fine and the SHARED tier was not**, because both people write that one document and the last save wins — so visiting Katie could have shown Family at Jake's rank while looking like hers. Fixed in **0.21.1** with per-member ranks on the member row, which the rules already permit exactly (readable by co-holders, writable only by its subject) and which needed no clause. **Also found while fixing it: the person whose order you see is the RESIDENT, not the deed-holder** — E32's `minor` flag already marks that relationship and now does a second job. Version cascade store 0.21.1 → app 1.29.1 → html 0.47.1, bumped rather than reused because the earlier drop may already be pushed and two different files must never wear one number. **Two false positives in my own ship-check this round** (a div-balance regex eaten by a heredoc; a census widened until `const stages` in three scopes read as a redefinition) — §7's rule cuts both ways: a check that flags legal code stops being read, exactly as one that misses stops being worth running. |
@@ -1760,6 +1905,28 @@ altitude; get the data on screen before theorising.** And when a theory is
 challenged, check whether it was merely INCOMPLETE rather than wrong: §0i's
 off-day diagnosis was correct and still failed to explain the report, because
 a second filter sat behind it.
+
+---
+
+**Cirrothauma (19th)** — *Cirrothauma murrayi*, the blind octopus of the deep
+Atlantic. Its eyes are reduced to lensless patches: retina present, optic nerve
+present, wired the whole way to the brain, resolving nothing. Not damaged —
+*finished*, in a place where there was nothing left to see.
+
+That is every finding this session. `tierSkinOf` was exported, documented and
+connected to a feature that had quietly started getting its answer somewhere
+else. Five functions in `queue.js` kept their shape after D60 removed the
+question they answered. A 191-line header held a line printed twice and an
+entry that existed nowhere else, both fully present and unreadable at that
+length. Nothing here was broken and nothing was hidden. It was all still
+attached.
+
+And the eye that turned out not to be blind: `defaultAnswers()`, which I read
+as vestigial and cut, because I had looked at the app and not at
+`rules-test/`. **An organ looks vestigial from whichever side you forgot to
+check.** It is back, with a note on it for the next reader who runs my grep.
+
+*Cirrothauma, 2026-08-02.* 🐙
 
 ---
 

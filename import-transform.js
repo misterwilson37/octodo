@@ -1,6 +1,13 @@
 // ============================================================
 // Tentacalendar — import-transform.js
-// Version 1.0.0 — the 1.x → 2.0 (Octodo) migration transform.
+// Version 1.0.1 — the 1.x → 2.0 (Octodo) migration transform.
+//
+// 1.0.1 — COMMENT ONLY; NO CODE CHANGED. The 2026-08-02 audit read
+//         defaultAnswers() as dead and had deleted it before a repo-wide
+//         re-check found the caller: rules-test/import.test.mjs, which drives
+//         this module headlessly and is the one consumer with no DOM. It is
+//         restored with a warning on it, because the next reader will run the
+//         same grep and reach the same wrong answer. See HANDOFF §0r.
 //
 // WHY THIS IS A SEPARATE FILE. import.html cannot be tested. It needs a
 // browser, a signed-in Google account, and a live Firestore, which means the
@@ -47,7 +54,7 @@
 //     forgotten, because the tiers will import perfectly and stay empty.
 // ============================================================
 
-export const TRANSFORM_VERSION = "1.0.0";
+export const TRANSFORM_VERSION = "1.0.1";
 
 export const ROLES = ["owner", "editor", "helper", "viewer"];
 
@@ -262,7 +269,16 @@ export function buildInterview(data, signedInEmail, v = null) {
   return q;
 }
 
-/** Fill in every default, so a caller can preview without answering anything. */
+/**
+ * Fill in every default, so a caller can preview without answering anything.
+ *
+ * ⚠️ NOT DEAD, AND IT LOOKS DEAD. `import.html` never calls this — it renders
+ * each question with its default pre-selected and reads the live form back
+ * through its own `readAnswers()`. The caller is `rules-test/import.test.mjs`,
+ * which drives the whole transform headlessly against the emulator and has no
+ * DOM to read. A grep across the app files alone reports zero callers; the
+ * 2026-08-02 audit made exactly that mistake and nearly deleted it.
+ */
 export function defaultAnswers(questions) {
   const a = {};
   for (const q of questions) a[q.id] = q.default;

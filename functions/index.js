@@ -1,199 +1,65 @@
 // ============================================================
 // Tentacalendar 2.0 (Octodo) — Cloud Functions
-// functions/index.js — Version 1.3.0 (E14 queue · E37 guard · E40 ws tags · fixtags)
+// functions/index.js — Version 1.3.1 (E14 queue · E37 guard · E40 ws tags · fixtags)
 //
+// 1.3.1 — HEADER ONLY; NO CODE CHANGED. This header was 191 lines and held
+//         eight changelog entries, which put the version banner ~190 lines
+//         from the FUNCTIONS_VERSION constant it must agree with. That is the
+//         exact geometry that drifted four times in app.js and cost a deploy.
+//         Every entry below 1.3.0 moved to CHANGELOG.md verbatim. It also
+//         carried a line duplicated back to back ("0.3.0: PHASE 3 IS
+//         COMPLETE…"), which is what a header nobody can read in one screen
+//         does. Found by `node version-check.mjs`, which had been failing on
+//         this file alone since the budget shipped.
 // 1.3.0 — ?job=fixtags: THE REPAIR FOR MY OWN SEQUENCING FAILURE.
-// E40 (1.2.0) scoped mirror tags per workspace and I asserted it was free
-// "because nothing is deployed yet" — an assumption I never checked with the
-// person who does the deploying. It wasn't true: 1.1.0 was live and ran with
-// a mirror calendar set, so events exist carrying tcApp/tcTaskId and NO tcWs.
-// The new filter cannot see them, so 1.2.x would recreate every task as a
-// duplicate and never prune the originals.
+//         E40 (1.2.0) scoped mirror tags per workspace and I asserted it was
+//         free "because nothing is deployed yet" — an assumption I never
+//         checked with the person who does the deploying. It wasn't true:
+//         1.1.0 was live with a mirror calendar set, so events exist carrying
+//         tcApp/tcTaskId and NO tcWs. The new filter cannot see them, so 1.2.x
+//         would recreate every task as a duplicate and never prune the
+//         originals. fixtags adopts them instead of deleting anything: per
+//         workspace it lists its OWN mirror calendar by tcApp alone (the old,
+//         unscoped filter) and stamps tcWs onto any event missing it. The next
+//         ordinary mirror run then reconciles normally.
+//         RUN ONCE: curl -H "x-poll-secret: …" "https://…/?job=fixtags"
+//         Idempotent — a second run reports alreadyTagged and changes nothing.
 //
-// fixtags adopts them instead of deleting anything: for each workspace, it
-// lists its OWN mirror calendar by tcApp alone (the old, unscoped filter) and
-// stamps tcWs onto any event missing it, preserving tcTaskId/tcCarryKey. The
-// next ordinary mirror run then reconciles normally — anything whose task is
-// gone gets pruned by the logic that already exists.
+// ⚠️ Full version history (1.2.1, 1.2.0, 1.1.0, 1.0.0, 0.4.0 … 0.1.1) is in
+//    CHANGELOG.md. Keep this header SHORT — the constant sits a few lines
+//    below on purpose: you cannot edit one without seeing the other. Verify
+//    with `node version-check.mjs` before handing anything over.
 //
-// RUN ONCE:  curl -H "x-poll-secret: …" "https://…/?job=fixtags"
-// It is idempotent and safe to run repeatedly; a second run reports
-// everything as alreadyTagged and changes nothing.
+// ⚠️ TWO THINGS IN THE HISTORY ARE STILL LOAD-BEARING. Read them in
+//    CHANGELOG.md before touching the mirror or the calendar guard:
+//    · E37 (1.1.0) — a BARE email address is a guessable primary calendar and
+//      may only be polled by a workspace that person is a member of. Without
+//      it, any signed-up user could type someone's address into their own
+//      tier and pull that calendar into their queue. Firestore isolation is
+//      airtight and beside the point; the leak is on the CALENDAR side.
+//    · E40 (1.2.0) — every mirrored event carries `tcWs`, and a combined tag
+//      CANNOT work: the list filter is exact-match, so a two-app tag is
+//      invisible to both rather than visible to both.
 //
-// (prev) Version 1.2.1 (E14 queue · E37 guard · E40 ws tags)
-//
-// 1.2.1 — the mirror's "not configured" message pointed at "⚙️ Settings →
-// Calendar". THERE IS NO CALENDAR TAB; it is Timing, and the carryover's
-// message twelve lines below already said so. This is D84's error, which was
-// corrected in the docs in July and never in the string a user actually sees.
-// Caught in Jake's first live curl. Both messages now name the tab that
-// exists AND the walkthrough that explains it.
-//
-// (prev) Version 1.2.0 (E14 queue · E37 guard · E40 ws-scoped tags)
-//
-// 1.2.0 — E40: THE MIRROR TAG IS NOW SCOPED PER WORKSPACE (`tcWs`).
-// 1.1.0 tagged every mirrored event `tcApp=octodo` and nothing else, then
-// listed by that tag and DELETED any event whose task it could not find. One
-// app, many workspaces — so if two workspaces ever pointed at the SAME mirror
-// calendar, each run would see the other's events as orphans and delete them.
-// Every hour. This is the identical failure the 1.x/2.0 tag split was written
-// to prevent (E36), one level further down, and it was still open.
-//
-// Fixed by adding `tcWs: <workspaceId>` to every written event and to the
-// list filter (privateExtendedProperty repeats and ANDs). Each workspace now
-// sees and prunes only its own events, which turns "two people share one
-// mirror calendar" from a mutual-deletion machine into something that simply
-// works — a household might well want exactly that.
-//
-// ⚠️ FREE ONLY BECAUSE NOTHING IS DEPLOYED YET. An event written by 1.0.0 or
-// 1.1.0 carries no tcWs, so it would fall outside the new filter, become
-// invisible, and never be pruned. There are no such events today. If this
-// ever changes after a real deploy, the migration is a one-off pass that
-// lists by tcApp alone and stamps tcWs onto anything missing it.
-//
-// (prev) Version 1.1.0 (E14 work queue + E37 calendar guard)
-//
-// 1.1.0 — ⚠️ CLOSES A REAL HOLE THAT 1.0.0 SHIPPED WITH, found by Jake
-// asking whether a colleague could end up with HIS calendar. He could have
-// ended up with worse: a colleague could have TAKEN it.
-//
-//   THE HOLE. The service account is PROJECT-WIDE. When Jake shares his
-//   calendar with the robot so his own poll works, he grants that robot
-//   access for EVERY workspace in the project — the grant lives on Google's
-//   side and knows nothing about workspaces. 1.0.0 then read whatever
-//   calendar id a tier happened to name, with no check that the workspace
-//   was entitled to it. So any signed-up user could type
-//   jacob.v.wilson@gmail.com into their own Home tier and pull his entire
-//   calendar into their queue. Firestore isolation (E1) is airtight and
-//   completely beside the point here: the leak is on the CALENDAR side.
-//
-//   THE GUARD (E37). A bare email address is somebody's primary calendar,
-//   and it is guessable — so it may only be polled by a workspace that
-//   person is a MEMBER of. Everything else (…@group.calendar.google.com and
-//   friends) is an opaque random id nobody can guess, so it passes; those
-//   are secondary calendars whose id is itself the secret.
-//
-//   WHAT THIS IS AND IS NOT. It is a real fix for the guessable case, which
-//   is the one that matters, and it is defence in depth rather than a proof
-//   of ownership — path A cannot prove ownership, because sharing a calendar
-//   with a robot leaves no record of WHO shared it. **The complete answer is
-//   path B (E13): per-user OAuth, where each person authorises their own
-//   calendar and no shared robot exists.** Until then this guard plus a
-//   trusted user base is the honest position, and it is written down here so
-//   nobody has to rediscover it.
-//
-// (prev) Version 1.0.0 (E14, the multi-tenant work queue)
-//
-// 1.0.0 — WHAT CHANGED FROM 1.x's 0.4.0, AND WHAT DELIBERATELY DID NOT.
-//
-// DID NOT CHANGE, and re-deriving any of it by accident would be, in the
-// design doc's own words, "a catastrophe wearing a rewrite's clothes":
-//   · D135's poll reconcile — deterministic {tierId}_{gcalEventId} doc ids,
-//     write-only-what-changed, syncedAt deliberately absent. This took
-//     writes from 1,500/day to 116/day. It is carried across verbatim.
-//   · D81's mirror ledger — the CALENDAR is the ledger, keyed by tcTaskId;
-//     no task-doc writes, honest dueAt only, and the loop guard that refuses
-//     to mirror into a calendar some tier polls.
-//   · D87's carryover — no hour trigger, because "due before today began" is
-//     true whenever it runs, so no cron hiccup can silently skip a morning.
-//   · The separate tag namespace between mirror and carryover, so two jobs
-//     can write to ONE calendar and stay mutually invisible.
-//
-// CHANGED:
-//   1. THE WORK QUEUE (E14). 0.4.0 hardcoded `WS = "primary"`. A serial loop
-//      over every workspace would eventually exceed the request timeout, and
-//      its failure mode is silent — the last user in the loop never gets
-//      polled and nobody finds out. Instead: claim a bounded batch of
-//      workspaces whose nextPollAt is due, oldest first, process each with
-//      its own try/catch, and re-stamp. Timeout-safe by construction,
-//      self-healing after an outage (the overdue are simply the oldest), and
-//      load spreads itself because stamps land at staggered times.
-//   2. THE TAG NAMESPACE IS `octodo`, NOT `tentacalendar`. This is the whole
-//      answer to "can both apps share a calendar during the migration."
-//      The mirror LISTS by exact-match on tcApp, then DELETES any tagged
-//      event whose task it cannot find — so two apps sharing one tag would
-//      take turns deleting each other's work, every hour. Distinct tags make
-//      them mutually invisible, exactly as D87 already made the carryover
-//      invisible to the mirror. 1.x keeps its tag and is not touched.
-//      ⚠️ A COMBINED TAG ("octodo tentacalendar") CANNOT WORK: the list
-//      filter is exact-match, so such an event is invisible to BOTH apps
-//      rather than visible to both. The tag records OWNERSHIP, and ownership
-//      has to be binary for the prune step to be safe.
-//   3. pollIntervalMinutes is read from the WORKSPACE document (E14 needs it
-//      queryable), falling back to settings/config and then 60.
-//   4. ?ws=<id> runs one workspace only — the testing door 0.4.0 never
-//      needed, and the first thing anyone will want when a poll misbehaves.
-//
-// Deploy: Google Cloud Console inline editor (no CLI). See SETUP-PHASE3-2.0.md.
-//
-// (prev) Version 0.4.0 (D135, the poll reconcile)
-// 0.4.0: pollCalendars RECONCILES instead of replacing. It used to delete
-// every cached event and re-write all of them under new auto-ids every
-// hour regardless of change — ~180 document changes pushed to every open
-// tab per run, ~2,900 billed reads per tab per day, scaling with users.
-// Now: docs are keyed {tierId}_{gcalEventId} (what HANDOFF §3 always
-// specified; the code had drifted to auto-ids, which is WHY nothing could
-// be compared), only genuinely-changed events are written, and only
-// vanished ones deleted. syncedAt was REMOVED from the payload — it was
-// never read anywhere, and being Date.now() it would have made every doc
-// differ every run and defeated the whole fix. Legacy auto-id docs delete
-// themselves on the first run (they're not in the wanted set). Same
-// discipline mirrorTasks has used since 0.2.0. No client change needed:
-// nothing keys off an event's doc id, and eventsCache is read-only display.
-// 0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
-// 0.3.0: PHASE 3 IS COMPLETE. Third job, ?job=carryover (and in "all"):
-// a task in a ❗ midnightCarryover tier that was due before today began
-// and still isn't checked gets "❗ <task>" on today's calendar at
-// config.carryoverWriteHour (default 9), tomato colorId 11 — D14, the
-// "nothing silently disappears" promise. Deliberately NOT hour-triggered:
-// "due before today started" is true whenever it runs, so the first
-// waking tick (~06:07, past the 22–6 sleep gate) writes the 9 AM landing
-// and no cron hiccup can skip a morning. Its own tag namespace
-// (tcApp=octodo-carryover) so the mirror — same calendar, keyed by
-// tcTaskId — can't see these and patch the ❗ back to the due time.
-// Reconciles TODAY only: create / re-time / delete-when-done; history stands.
-// 0.2.0: one service, two jobs, routed by ?job= — "poll" (default),
-// "mirror", or "all" (what the Scheduler should call). The mirror
-// reconciles dated, incomplete tasks onto a DEDICATED write-shared
-// calendar (cfg.mirrorCalendarId): create missing, patch drifted
-// (title/time), delete completed/deleted/undated. Events are tagged
-// with extendedProperties.private.tcTaskId, so the CALENDAR is the
-// sync ledger — no task-doc writes, no schema changes. Honest due
-// times only (escalation theater stays in the app). 30-min blocks.
-// LOOP GUARD: refuses to mirror into any calendar attached to a tier.
-// Scope widened readonly → calendar (rw).
-// 0.1.1: an UNSET POLL_SECRET now refuses everything with a distinct
-// message (previously undefined === undefined let header-less requests
-// through an unset lock — Jake's "did I miss the variables?" question
-// exposed it). The JSON report now includes tz + localHour, so one
-// curl verifies BOTH env vars.
-//
-// pollCalendars: reads Google Calendar events for every anchor tier
-// with a gcalCalendarId and mirrors them into eventsCache. The web
-// client has subscribed to eventsCache since v0.1.0 — no client
-// changes needed; events appear in the queue the moment this runs.
-//
-// Deploy: Google Cloud Console inline editor (no CLI — Jake's school
-// Mac has no admin rights). See SETUP-PHASE3.md. Plain
-// functions-framework style on purpose: it's what the console's
-// Cloud Run functions editor expects.
+// Deploy: Google Cloud Console inline editor (no CLI — Jake's school Mac has
+// no admin rights). See SETUP-PHASE3-2.0.md. Plain functions-framework style
+// on purpose: it is what the console's Cloud Run functions editor expects.
 //
 // Env vars (set in the console):
 //   POLL_SECRET  — shared secret; requests must send x-poll-secret
 //   TZ           — America/Chicago (makes all Date math Nashville-local,
 //                  including all-day event midnights and sleep hours)
 //
-// Auth to Calendar: the function's runtime service account, using
-// Application Default Credentials. Jake & Katie SHARE their calendars
-// with that service account's email ("See all event details") — no
-// OAuth dance, no token storage.
+// Auth to Calendar: the function's runtime service account, using Application
+// Default Credentials. Jake & Katie SHARE their calendars with that service
+// account's email ("See all event details") — no OAuth dance, no token storage.
 // ============================================================
 
 const functions = require("@google-cloud/functions-framework");
 const admin = require("firebase-admin");
 const { google } = require("googleapis");
 
-const FUNCTIONS_VERSION = "1.3.0";
+const FUNCTIONS_VERSION = "1.3.1";
 
 // ---- E14: the work queue's dials ----
 const BATCH = 5;               // workspaces claimed per run. Raise as users grow.

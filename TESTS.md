@@ -1,12 +1,23 @@
 # TESTS — what still needs running
 
-**Version 2.12.0 · current as of 2026-08-02 (Thaumoctopus)**
+**Version 2.13.0 · current as of 2026-08-02 (Cirrothauma)**
 
 > ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
 > uploads each drop on receipt and GitHub Pages serves it immediately, so a
 > test here is never a gate before release — it is a check on software Katie
 > is already using. **Unrun does not mean unshipped.** Nothing on this list is
 > waiting for permission; it is waiting for someone to look.
+
+> 🔢 **THE 2.0.0 AUDIT DID NOT CHANGE THIS LIST, AND THAT IS THE POINT.**
+> app 2.0.0 · store 1.0.0 · queue 1.0.0 shipped on 2026-08-02 after a
+> file-by-file source read (handoff §0r). It removed six dead functions and
+> trimmed one 191-line header; **no behaviour changed and nothing below got
+> any closer to passing.** A major version number is a statement about code
+> that has been *read*. Every item here is still a statement about code that
+> has not been *run*. Do not let the first be mistaken for the second.
+>
+> One item was added by the audit and it is not a browser test — see
+> **RULESTEST-1** under 🔴 Still open.
 
 This is the only list Jake needs. `HANDOFF-2.0.md` keeps the reasoning, the
 history and the failure modes; **this file keeps the to-do**. When a test
@@ -240,6 +251,20 @@ Handoff §0j has the decision that follows from that; it is Jake's to make.
 ---
 
 ## 🔴 Still open — known, not yet fixed
+
+**RULESTEST-1. ⚠️ `rules-test/import.test.mjs` cannot run as documented.**
+*Claude's job, not Jake's — it needs Node, the emulator and the egress
+allowlist.* Two independent breaks: it imports `./import-transform.js` from
+inside `rules-test/`, where no such file exists (the README documents copying
+the **rules** file in and never mentions the transform), and `package.json`'s
+`test` script invokes `rules.test.mjs` **only**. So the 18 assertions that
+`import.html`'s own header cites as proof of the migration path have plausibly
+never executed.
+→ *⚠️ **Katie's 245-document migration succeeding is not this test passing.**
+Both facts are real and they have been talked about interchangeably. The fix
+is small — copy the module in alongside the rules file, add a script — and it
+was deliberately left undone by the audit that found it, because it needs a
+green run to verify rather than merely a correct-looking edit. Handoff §0r.5.*
 
 **DELETEALL-ROLLBACK.** `deleteAll` commits in batches; each is atomic, the
 sequence is not. store 0.27.0 made it *report* a partial delete honestly

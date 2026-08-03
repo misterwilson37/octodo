@@ -1,11 +1,26 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 0.21.0
+// Version 1.0.0
 //
 // Pure scheduling logic: priority, pipelines, week and clock geometry,
 // holidays. Has never known Firestore exists — that is why it is testable.
 //
 // RECENT:
+// 1.0.0 — FIRST STABLE. Not a rewrite: a declaration. This file has run a
+//          real person's day since Katie migrated on 2026-08-02, and 0.y.z
+//          means "the shape may still change," which stopped being true.
+//          Five DEAD functions removed in the same breath, because a 1.0
+//          promises an API and these were never part of one:
+//            · getDeadlineHour, getClearDeckThreshold — setters got wired,
+//              getters never did. Both values are read through the module
+//              locals by the functions that need them.
+//            · isWeekend, addWeekdays, weekendNeighbors — pre-D60 Mon–Fri
+//              wrappers. D60 replaced the weekend CONCEPT with per-tier
+//              allowedDays (isDayAllowed / addAllowedDays / allowedNeighbors)
+//              and these three were left behind describing a rule the app no
+//              longer has. Nothing called them, here or anywhere.
+//          WEEKDAYS is no longer exported — it survives as the Mon–Fri
+//          default inside allowedSet, which is its only remaining reader.
 // 0.21.0 — A DATED TASK NO LONGER VANISHES ON ITS TIER'S OFF DAY. D61's
 //          `continue` dropped it from active AND waiting AND everything —
 //          a Work task dated to a Saturday existed in Firestore and appeared
@@ -22,7 +37,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const QUEUE_VERSION = "0.21.0";
+export const QUEUE_VERSION = "1.0.0";
 
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -34,7 +49,6 @@ export function setDeadlineHour(h) {
   const n = parseInt(h, 10);
   DEADLINE_HOUR = (!isNaN(n) && n >= 0 && n <= 23) ? n : 16;
 }
-export function getDeadlineHour() { return DEADLINE_HOUR; }
 
 // D85: completion point (0–1) where a project flips from "keep abreast"
 // to "clear the deck" in the level-3 queue tiebreaker. Settings-driven,
@@ -44,7 +58,6 @@ export function setClearDeckThreshold(frac) {
   const n = Number(frac);
   CLEAR_DECK_THRESHOLD = (isFinite(n) && n >= 0 && n <= 1) ? n : 0.6;
 }
-export function getClearDeckThreshold() { return CLEAR_DECK_THRESHOLD; }
 
 const UNIT_MS = {
   minutes: 60 * 1000,
@@ -65,8 +78,11 @@ export function addMonths(ts, n) {
 
 // ---------- Working-day math (D45 weekdays → D60 per-tier days) ----------
 
-/** Default working days: Mon–Fri (JS getDay: 0=Sun … 6=Sat). */
-export const WEEKDAYS = [1, 2, 3, 4, 5];
+/** Default working days: Mon–Fri (JS getDay: 0=Sun … 6=Sat).
+ *  Module-local as of 1.0.0 — allowedSet is its only reader. It was exported
+ *  for the three Mon–Fri wrappers that 1.0.0 deleted; nothing outside this
+ *  file ever imported it. */
+const WEEKDAYS = [1, 2, 3, 4, 5];
 
 /** Normalize a tier's allowedDays into a usable Set. Missing/empty →
  *  Mon–Fri, which keeps every pre-D60 tier behaving exactly as before. */
@@ -105,23 +121,14 @@ export function allowedNeighbors(ts, allowedDays) {
   return { prev, next };
 }
 
-// Mon–Fri wrappers (pre-D60 API, still used for defaults).
-
-export function isWeekend(ts) {
-  const dow = new Date(ts).getDay();
-  return dow === 0 || dow === 6;
-}
-
-/** Move n WEEKDAYS from ts (n<0 = backward). Weekends don't count. */
-export function addWeekdays(ts, n) {
-  return addAllowedDays(ts, n, WEEKDAYS);
-}
-
-/** Nearest Friday before / Monday after a weekend date. */
-export function weekendNeighbors(ts) {
-  const { prev, next } = allowedNeighbors(ts, WEEKDAYS);
-  return { fri: prev, mon: next };
-}
+// ⚠️ THE MON–FRI WRAPPERS ARE GONE (1.0.0). isWeekend, addWeekdays and
+// weekendNeighbors lived here until the 2026-08-02 audit. They were the
+// pre-D60 API, when "not a working day" meant "Saturday or Sunday" for
+// everybody. D60 made working days a PER-TIER set, so a wrapper hard-coding
+// Mon–Fri could only ever answer a question the app had stopped asking — and
+// nothing had called them since. If you want weekday math, pass the tier's
+// allowedDays to the three functions above; if a caller genuinely has no
+// tier, allowedSet already defaults to Mon–Fri on its own.
 
 // ---------- US federal holidays (D123) ----------
 // Client-computed, per Jake's call and the 5b-bis roadmap: a pure function

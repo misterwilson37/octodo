@@ -1,7 +1,17 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — import.html
-     Version 1.0.0 — item 9. Migrates a 1.x export into a fresh 2.0 board.
+     Version 1.0.1 — item 9. Migrates a 1.x export into a fresh 2.0 board.
+
+     1.0.1 — no markup change; pin moves to import-transform.js 1.0.1.
+
+     ⚠️ THE CLAIM BELOW ABOUT rules-test/import.test.mjs IS ASPIRATIONAL.
+     That file imports `./import-transform.js` — a path inside rules-test/,
+     where no such file exists — and `npm test` there only runs
+     rules.test.mjs. So the suite this header cites as proof cannot execute as
+     documented and may never have run. The transform is still the right
+     place for the logic; what is not true is that something is currently
+     testing it. Found in the 2026-08-02 audit; see HANDOFF §0r.
 
      WHY THIS FILE IS THIN. Everything that DECIDES anything lives in
      import-transform.js, which is a pure module with no Firestore and no DOM,
@@ -148,7 +158,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
 import { getFirestore, doc, setDoc, writeBatch, collection }
   from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
-import * as T from "./import-transform.js?v=1.0.0";
+import * as T from "./import-transform.js?v=1.0.1";
 
 const $ = s => document.querySelector(s);
 $("#tv").textContent = T.TRANSFORM_VERSION;

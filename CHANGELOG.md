@@ -21,6 +21,79 @@ Nothing has been deleted. The entries below are verbatim, including the
 reasoning essays folded into them — several are cited by `// D…` and `// E…`
 references in the code, so treat this as a dictionary rather than a history.
 
+---
+
+## 🗑 Code removed in the 2.0.0 audit (2026-08-02, Cirrothauma)
+
+**Kept verbatim, because "nothing has been deleted" has to stay true of code
+as well as of prose.** Six functions were removed as dead. Each was checked
+against every `.js`, `.html` and `.mjs` in the repo — **including
+`rules-test/`, which the first sweep missed** — before it was cut.
+
+### `queue.js` 1.0.0 — five functions
+
+```js
+export function getDeadlineHour() { return DEADLINE_HOUR; }
+
+export function getClearDeckThreshold() { return CLEAR_DECK_THRESHOLD; }
+
+// Mon–Fri wrappers (pre-D60 API, still used for defaults).
+
+export function isWeekend(ts) {
+  const dow = new Date(ts).getDay();
+  return dow === 0 || dow === 6;
+}
+
+/** Move n WEEKDAYS from ts (n<0 = backward). Weekends don't count. */
+export function addWeekdays(ts, n) {
+  return addAllowedDays(ts, n, WEEKDAYS);
+}
+
+/** Nearest Friday before / Monday after a weekend date. */
+export function weekendNeighbors(ts) {
+  const { prev, next } = allowedNeighbors(ts, WEEKDAYS);
+  return { fri: prev, mon: next };
+}
+```
+
+The two getters: their setters were wired and they never were. The three
+wrappers: the comment called them "still used for defaults" and they were used
+by nothing. D60 replaced the weekend CONCEPT with per-tier `allowedDays`, so a
+wrapper hard-coding Mon–Fri could only answer a question the app had stopped
+asking. `WEEKDAYS` survives as a module-local default inside `allowedSet`.
+
+### `store.js` 1.0.0 — one function
+
+```js
+/** What the owner actually called it — for Settings' "shared as …" line. */
+export function tierSkinOf(wsId, tierId) {
+  const key = `${wsId}:${tierId}`;
+  return { label: TIER_SKINS.labels[key] || null, color: TIER_SKINS.colors[key] || null };
+}
+```
+
+⚠️ **Its comment named a caller that did not exist.** Settings' "shared as …"
+line reads `t.canonName` / `t.canonColor`, which `skinFor()` stamps onto every
+tier it returns precisely so nobody has to look an override up. This is the
+**fifth** comment in this project found more confident than its code, after
+E41's, §0b's, `TIER_RANKS`'s and SKIN-2's. Same shape every time: a true narrow
+statement ("these maps hold the overrides") restated as a broad one ("and this
+is how the UI reads them"), and the broad one is what the next reader believes.
+
+Also un-exported, same version, all three read here and imported nowhere:
+`COMPLETED_WINDOW_DAYS`, `stampNewStages`, `mergeStages`.
+
+### ⚠️ `import-transform.js` — `defaultAnswers()` was NOT removed
+
+It was cut and then **put back**. It looks dead from the app files and is not:
+`rules-test/import.test.mjs` calls it, being the one consumer with no DOM to
+read answers out of. The first sweep searched `app.js`, the HTML pages and the
+two root test harnesses, and did not search `rules-test/`. **A dead-code sweep
+that skips a directory reports the same thing as a sweep that finds nothing.**
+The function now carries a comment saying so, because the next reader will run
+the same grep.
+
+
 
 ---
 
@@ -29,6 +102,27 @@ references in the code, so treat this as a dictionary rather than a history.
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
      had regrown to 19 entries / 135 lines — the exact shape this file was
      created to prevent. version-check 1.5.0 now fails when it happens. -->
+
+### 0.28.0
+
+<!-- Retired from the header 2026-08-02 (Cirrothauma) to make room for the
+     1.0.0 entry inside the 60-line budget. Verbatim. -->
+
+```
+0.28.0 — §0d CLOSED: A TIER CHANGE ACROSS BOARDS NOW MOVES THE DOCUMENT.
+         updateProject/updateTask routed with wsOf(id) — the board the
+         document was ALREADY on — so changing tierId rewrote the field
+         and left the document behind, where collectTier (source board
+         only) could never see it again. moveProject takes the project AND
+         its sessions; moveTask takes the whole follow-up chain and drops
+         mirroredGcalEventId so the poll re-mirrors on the new board.
+         Same copy → verify → delete order as moveTier.
+         Also: deleteProject now takes its sessions with it. It deleted one
+         document, and every surface reaches a session THROUGH its project,
+         so the ledger of a deleted project became unreachable rows nothing
+         could render and nothing would clean up. Found by whereis's
+         session audit on 2026-07-31, in Jake's live data.
+```
 
 ### 0.27.0
 
@@ -442,6 +536,18 @@ references in the code, so treat this as a dictionary rather than a history.
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
      had regrown to 19 entries / 135 lines — the exact shape this file was
      created to prevent. version-check 1.5.0 now fails when it happens. -->
+
+### 1.43.0
+
+<!-- Retired from the header 2026-08-02 (Cirrothauma) to make room for the
+     2.0.0 entry inside the 60-line budget. Verbatim. -->
+
+```
+1.43.0 — wirePhoneTray(). On a phone ⏻ moves out of the header and down
+         to #phone-tray at the bottom of the page, as 1.x did. It MOVES
+         the node rather than cloning it — a second button means a dead
+         listener on one of them. 600px, matching the CSS block.
+```
 
 ### 1.42.0
 
@@ -1616,6 +1722,29 @@ references in the code, so treat this as a dictionary rather than a history.
 
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus), verbatim.
      The header was 191 lines; version-check 1.5.0 now enforces the budget. -->
+
+<!-- 2026-08-02 (Cirrothauma): the budget was still being FAILED — the trim
+     above had recorded the intent and left the header at 191 lines. Finished
+     it: 191 -> 57 lines, and 1.3.1 is the bump that carries it. The 1.2.1
+     block below existed ONLY in that header and was nearly lost with it;
+     everything else was already here. Also removed a line that appeared
+     twice in a row ("0.3.0: PHASE 3 IS COMPLETE..."), which is what a header
+     nobody can see in one screen produces. -->
+
+### 1.2.1
+
+```
+(prev) Version 1.2.1 (E14 queue · E37 guard · E40 ws tags)
+
+1.2.1 — the mirror's "not configured" message pointed at "⚙️ Settings →
+Calendar". THERE IS NO CALENDAR TAB; it is Timing, and the carryover's
+message twelve lines below already said so. This is D84's error, which was
+corrected in the docs in July and never in the string a user actually sees.
+Caught in Jake's first live curl. Both messages now name the tab that
+exists AND the walkthrough that explains it.
+```
+
+### 1.2.0
 
 ```
 1.1.0 tagged every mirrored event `tcApp=octodo` and nothing else, then

@@ -1,10 +1,23 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 1.46.0
+// Version 2.0.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
+// 2.0.0 — TENTACALENDAR 2.0. Jake's own definition of what earns the number
+//          was set on 2026-07-27 and it was the board switcher (E24); what
+//          actually earns it is that on 2026-08-02 Katie migrated 245
+//          documents in one run with no rehearsal and used the app all day.
+//          1.x remains live and untouched as the fallback.
+//          NO BEHAVIOUR CHANGED IN THIS FILE. The number and two `?v=` pins
+//          are the whole diff — store.js and queue.js went to 1.0.0 in the
+//          same drop and a stale pin would serve Katie the old modules.
+//          ⚠️ 2.0.0 MEANS AUDITED, NOT FINISHED. It was cut after a
+//          file-by-file read (HANDOFF §0r), not after the test list emptied:
+//          TESTS.md still holds ~20 items nobody has deliberately walked, and
+//          SAVE-1 is an unexplained crash that is merely visible rather than
+//          fixed. Do not read the major bump as a claim about TESTS.md.
 // 1.46.0 — THE FOLLOW-UP OFFER ON PROJECT COMPLETION, which Katie asked for
 //          an hour into 2.0. Its own button beside "same time next year?",
 //          independent of it: a follow-up on a project that does NOT repeat
@@ -25,10 +38,7 @@
 //          app decides "instead of letting you." It sorts; it does not
 //          decide. (4) Scoped the bare .tier-row query and guarded the lone
 //          unguarded pipelineDraft reader.
-// 1.43.0 — wirePhoneTray(). On a phone ⏻ moves out of the header and down
-//          to #phone-tray at the bottom of the page, as 1.x did. It MOVES
-//          the node rather than cloning it — a second button means a dead
-//          listener on one of them. 600px, matching the CSS block.
+// 1.43.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -37,7 +47,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "1.46.0";
+export const APP_VERSION = "2.0.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -61,7 +71,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=0.29.1";
+} from "./store.js?v=1.0.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline, projectPipelineWindow,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -69,7 +79,7 @@ import {
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
   rollupSessions, rollupToCSV, sessionsToCSV
-} from "./queue.js?v=0.21.0";
+} from "./queue.js?v=1.0.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
 const $ = sel => document.querySelector(sel);
