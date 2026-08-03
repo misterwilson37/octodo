@@ -23,6 +23,20 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ---
 
+## ✅ SAVE-1 — app 2.1.1 · import-transform 1.0.2 (2026-08-03, Cirrothauma)
+
+`import-transform.js` synthesised a project type with **no `id`**;
+`openSettings` copied `id: undefined` into the document it writes on every
+settings save, and `setDoc` refuses undefined field values. It presented as a
+tier-tab failure because the pipeline draft is built on OPEN and saved
+unconditionally. Full account in handoff §0t.
+
+Fixed in both app.js (mints an id, healing already-imported boards on the next
+save) and the importer (so future imports never carry it). The same missing id
+also made that pipeline unselectable in New Project, silently.
+
+---
+
 ## 🆕 Outriders — app 2.1.0 · store 1.1.0 · queue 1.1.0 (2026-08-03, Cirrothauma)
 
 Handoff §0h's requirement, built; full notes in §0s. In one sentence: **a stage
@@ -590,6 +604,36 @@ the same grep.
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
      had regrown to 19 entries / 135 lines — the exact shape this file was
      created to prevent. version-check 1.5.0 now fails when it happens. -->
+
+### 1.45.0
+
+<!-- Retired from the header 2026-08-03 (Cirrothauma). Verbatim. -->
+
+```
+1.45.0 — TOUR REPLAY, at last. Settings ▸ foot ▸ "Show me around". It was
+         filed as cosmetic from the first roadmap and stopped being so the
+         moment Katie finished the old tour: markTourCompleted is
+         permanent, so a rewritten tour reaches nobody who has used the
+         app before. Closes Settings THROUGH the guard — a tour that
+         discarded a half-typed tier would be worse than the bug it fixes.
+```
+
+### 1.44.0
+
+<!-- Retired from the header 2026-08-03 (Cirrothauma) to make room for the
+     2.1.1 entry inside the 60-line budget. Verbatim. -->
+
+```
+1.44.0 — KATIE'S FIRST HOUR ON 2.0. (1) Save settings threw partway and
+         therefore never closed the modal nor cleared the dirty snapshot,
+         which is why ✕ still warned; the body is now wrapped so a throw
+         NAMES itself instead of looking like a dead button. (2) The tour
+         stopped at "add a task" — it now runs task → project → stages →
+         the two meeting in one day. (3) Splash copy: it told the user the
+         app decides "instead of letting you." It sorts; it does not
+         decide. (4) Scoped the bare .tier-row query and guarded the lone
+         unguarded pipelineDraft reader.
+```
 
 ### 1.43.0
 

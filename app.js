@@ -1,10 +1,16 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 2.1.0
+// Version 2.1.1
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
+// 2.1.1 — ⚠️ SAVE-1 IS SOLVED, AND IT WAS NEVER ABOUT TIER DAYS. The
+//          importer synthesised a project type with no `id`; the Settings
+//          draft copied `id: undefined` and setDoc refuses undefined. It
+//          fired on every Settings save because the draft is built on OPEN
+//          and written unconditionally. Repaired here so the stored document
+//          heals on the next save; the importer is fixed at 1.0.2.
 // 2.1.0 — OUTRIDER STAGES BECOME TASKS (§0h). A stage anchored outside
 //          [startDate, endDate] leaves the pipeline and becomes a dated task.
 //          isLater MEASURES startDate AGAIN and the pipeline-window branch is
@@ -32,22 +38,7 @@
 //          independent of it: a follow-up on a project that does NOT repeat
 //          is the commonest case and hanging it off Create would have made
 //          that unreachable. Does not replace the pipeline's ↳ +Nd.
-// 1.45.0 — TOUR REPLAY, at last. Settings ▸ foot ▸ "Show me around". It was
-//          filed as cosmetic from the first roadmap and stopped being so the
-//          moment Katie finished the old tour: markTourCompleted is
-//          permanent, so a rewritten tour reaches nobody who has used the
-//          app before. Closes Settings THROUGH the guard — a tour that
-//          discarded a half-typed tier would be worse than the bug it fixes.
-// 1.44.0 — KATIE'S FIRST HOUR ON 2.0. (1) Save settings threw partway and
-//          therefore never closed the modal nor cleared the dirty snapshot,
-//          which is why ✕ still warned; the body is now wrapped so a throw
-//          NAMES itself instead of looking like a dead button. (2) The tour
-//          stopped at "add a task" — it now runs task → project → stages →
-//          the two meeting in one day. (3) Splash copy: it told the user the
-//          app decides "instead of letting you." It sorts; it does not
-//          decide. (4) Scoped the bare .tier-row query and guarded the lone
-//          unguarded pipelineDraft reader.
-// 1.43.0 — see CHANGELOG.md.
+// 1.45.0, 1.44.0, 1.43.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -56,7 +47,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "2.1.0";
+export const APP_VERSION = "2.1.1";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -6435,9 +6426,37 @@ function openSettings() {
   renumberTierRows();
   checkTierColors();
   // D124 — the pipeline library draft: Default (stageTemplate) + named types.
+  // ⚠️ 2.1.1 — SAVE-1, AND THE `|| newTypeId()` IS THE WHOLE FIX.
+  //
+  // `import-transform.js` synthesised one project type out of the 1.x
+  // anonymous stage template — `{ name, stages, isDefault }` — and gave it NO
+  // `id`. Every type made in this tab gets a `pt_…` id; the imported one had
+  // none. So this line built `{ id: undefined, … }`, and `saveProjectTypes`
+  // handed that straight to `setDoc`, which refuses an undefined field value.
+  //
+  // That is SAVE-1. It fired on EVERY Settings save regardless of which tab
+  // was touched, because this draft is assembled when Settings OPENS and is
+  // written unconditionally on save — which is why changing a tier's days
+  // looked like the trigger and was only the occasion. It also explains
+  // "some of it may have gone through": `saveStageTemplate` runs first and
+  // succeeds, then this throws.
+  //
+  // Minting the id HERE heals the stored document on the next successful
+  // save, which a fix to the importer alone cannot do — Katie's board is
+  // already imported. The importer is fixed too (1.0.2), for boards that
+  // have not been.
+  //
+  // ⚠️ An id-less type was also unusable, silently: the New Project selector
+  // renders `value="undefined"`, and picking it looks up `t.id === "undefined"`
+  // against a real `undefined` and matches nothing, so it fell through to the
+  // default template with no error. Fixing the id fixes that too.
   pipelineDraft = {
     default: (S.stageTemplate || []).map(x => ({ ...x })),
-    types: (S.projectTypes || []).map(t => ({ id: t.id, name: t.name, stages: (t.stages || []).map(x => ({ ...x })) }))
+    types: (S.projectTypes || []).map(t => ({
+      id: t.id || newTypeId(),
+      name: t.name || "Untitled pipeline",
+      stages: (t.stages || []).map(x => ({ ...x }))
+    }))
   };
   pipelineCurrent = "default";
   refreshPipelineTarget();
@@ -6761,6 +6780,16 @@ function wireTmplRow(row, box) {
 // settings is open; switching targets syncs the editor into the draft first,
 // so unsaved edits survive a hop. Save persists Default -> saveStageTemplate
 // and the rest -> saveProjectTypes.
+/** The one place a project-type id is minted. 2.1.1 — SAVE-1 needed a
+ *  second caller (repairing an imported type that never had one), and two
+ *  copies of an id format is how they drift apart. */
+function newTypeId() {
+  // A declaration, not a const: openSettings() reads this ~300 lines ABOVE
+  // where it sits, and a const would be a temporal-dead-zone bet on nobody
+  // ever calling that path during module evaluation.
+  return "pt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 let pipelineDraft = null;        // { default:[stages], types:[{id,name,stages}] }
 let pipelineCurrent = "default"; // "default" | type id
 
@@ -6815,8 +6844,7 @@ function wirePipelineManager() {
     const name = (prompt("Name this project type (e.g. Holiday Card):") || "").trim();
     if (!name) return;
     capturePipelineEditor();
-    const id = "pt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    pipelineDraft.types.push({ id, name, stages: [] });
+    pipelineDraft.types.push({ id: newTypeId(), name, stages: [] });
     pipelineCurrent = id;
     refreshPipelineTarget();
     loadPipelineEditor();

@@ -1,6 +1,9 @@
 // ============================================================
 // Tentacalendar — import-transform.js
-// Version 1.0.1 — the 1.x → 2.0 (Octodo) migration transform.
+// Version 1.0.2 — the 1.x → 2.0 (Octodo) migration transform.
+//
+// 1.0.2 — the synthesised project type now carries an `id`. Without one it
+//         produced a document app.js could not save at all: SAVE-1.
 //
 // 1.0.1 — COMMENT ONLY; NO CODE CHANGED. The 2026-08-02 audit read
 //         defaultAnswers() as dead and had deleted it before a repo-wide
@@ -54,7 +57,7 @@
 //     forgotten, because the tiers will import perfectly and stay empty.
 // ============================================================
 
-export const TRANSFORM_VERSION = "1.0.1";
+export const TRANSFORM_VERSION = "1.0.2";
 
 export const ROLES = ["owner", "editor", "helper", "viewer"];
 
@@ -444,7 +447,19 @@ export function buildPlan(data, answers, ctx) {
   const types = [...existingTypes];
   const name = (answers.pipelineName || "").trim();
   if (name && tmpl?.stages?.length && !types.some(t => t.name === name)) {
-    types.push({ name, stages: tmpl.stages, isDefault: true });
+    // ⚠️ 1.0.2 — THE `id` IS NOT OPTIONAL AND ITS ABSENCE WAS SAVE-1.
+    // Every project type the app mints carries a `pt_…` id. This one did not,
+    // and app.js's Settings draft copied `id: undefined` into the document it
+    // writes on EVERY settings save — which setDoc refuses outright. Katie hit
+    // it on her first hour on 2.0 and it took two days to find, because the
+    // failure surfaced in the tier tab and originated here.
+    // It was also silently unusable: the New Project selector renders
+    // `value="undefined"` and matches nothing when picked.
+    // ⚠️ Same format as app.js's newTypeId(). If that changes, change this.
+    // (`isDefault` is written for provenance and read by nobody today; app.js
+    // drops it on the first save. Left in deliberately as a breadcrumb.)
+    const id = "pt_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    types.push({ id, name, stages: tmpl.stages, isDefault: true });
   }
   writes.push({ path: [wsId, "settings", "projectTypes"], doc: { types } });
 

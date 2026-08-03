@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — import.html
-     Version 1.0.1 — item 9. Migrates a 1.x export into a fresh 2.0 board.
+     Version 1.0.2 — item 9. Migrates a 1.x export into a fresh 2.0 board.
 
+     1.0.2 — no markup change; pin moves to import-transform.js 1.0.2 (SAVE-1).
      1.0.1 — no markup change; pin moves to import-transform.js 1.0.1.
 
      ⚠️ THE CLAIM BELOW ABOUT rules-test/import.test.mjs IS ASPIRATIONAL.
@@ -158,7 +159,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
 import { getFirestore, doc, setDoc, writeBatch, collection }
   from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
-import * as T from "./import-transform.js?v=1.0.1";
+import * as T from "./import-transform.js?v=1.0.2";
 
 const $ = s => document.querySelector(s);
 $("#tv").textContent = T.TRANSFORM_VERSION;

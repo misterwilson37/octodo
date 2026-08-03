@@ -4,11 +4,12 @@
 
 | | |
 |---|---|
-| **Versions** | app 2.1.0 · store 1.2.0 · queue 1.1.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.1 · css 0.59.4 · html 0.51.19 · import.html 1.0.1 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.0.0 · version-check 1.7.0 · manifest 0.2.0 |
+| **Versions** | app 2.1.1 · store 1.2.0 · queue 1.1.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.2 · css 0.59.4 · html 0.51.20 · import.html 1.0.2 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.0.0 · version-check 1.7.0 · manifest 0.2.0 |
 | ⚠️ **THERE IS NO STAGING** | **Handing Jake a file IS deploying it.** He uploads each drop to the GitHub web portal as it arrives; Pages serves `main`; the app is live at that moment. There is no review branch, no soak, no staging URL. **Anything in this repo is what Katie is running right now.** See the box below — this cost a whole session of wrong advice.
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **DEPLOYED ≠ EXERCISED, AND BOTH ARE TRUE OF EVERYTHING HERE.** Every file is live and Katie used the app all day; `TESTS.md` START HERE still holds 20 items nobody has deliberately walked. **SAVE-1 first** — an unexplained crash that is now merely *visible*. Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
 | ✅ **Katie is on 2.0** | Migrated 2026-08-02, 245 documents, one run, no rehearsal. She has used it all day and filed four reports (§0n). 1.x remains live and untouched as the fallback. |
+| ✅ **SAVE-1 IS SOLVED** | app 2.1.1 / import-transform 1.0.2. The importer made a project type with **no `id`**; the Settings draft copied `id: undefined` and setDoc refuses it. **Never about tier days** — the draft is built on OPEN and written on every save. §0t. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 | 🔢 **THE VERSION NUMBERS CHANGED SHAPE** | **app 1.46.0 → 2.0.0, store 0.29.1 → 1.0.0, queue 0.21.0 → 1.0.0**, on Jake's sign-off, 2026-08-02. Not a rewrite and not a feature — a declaration that these files run a real person's day. **Nothing about their behaviour changed in that drop.** `css`, `html` and `manifest` deliberately stayed 0.y.z; that is Jake's call to make and he has not made it. §0r. |
 | ⚠️ **OUTRIDERS ARE BUILT; THE SWEEP IS NOT RUN** | app 2.1.0 / store 1.1.0 / queue 1.1.0 shipped §0h. **Katie's existing projects still hold their outrider stages until somebody runs `octodoOutriders({go:1})` from the console, once per board.** Dry run first — it writes nothing. §0s. |
@@ -1150,6 +1151,67 @@ repoints. **One sentence from him closes this either way; do not infer it.**
 
 ---
 
+---
+
+### 0t. ✅ SAVE-1, SOLVED — and why four correct analyses missed it
+
+**app 2.1.1 · import-transform 1.0.2 · 2026-08-03**
+
+Jake typed the toast out by hand because he could not screenshot it:
+
+> *"Function setDoc() called with invalid data. Unsupported field value:
+> undefined (found in document workspaces/…/settings/projectTypes) — some of
+> it may have gone through. Nothing has been closed or discarded."*
+
+**The cause, in one line.** `import-transform.js` turned the 1.x anonymous
+stage template into a library entry — `{ name, stages, isDefault }` — and gave
+it **no `id`**. Every project type minted in the Pipeline tab carries a `pt_…`
+id. `openSettings` copies the library into its draft as `{ id: t.id, … }`, so
+that one became `id: undefined`, and `setDoc` refuses an undefined field.
+
+#### ⚠️ WHY IT PRESENTED AS A TIER BUG, AND WHY THAT MATTERED
+
+`pipelineDraft` is assembled when Settings **opens** and written on **every**
+save, whatever tab was touched. So a corrupt project type made *changing a
+tier's days* fail — and changing a tier's days was simply what Katie was doing.
+
+> **Four earlier sessions read the tier-save path, found it correct, and were
+> right every time.** The code they read was not the code that threw. This is
+> the strongest case yet for the standing rule: *when a bug report doesn't
+> match what the code shows, stop and ask for the readout.* Two days of
+> theories died to one line of text that Jake typed out by hand.
+
+"Some of it may have gone through" was **accurate, not hedging**:
+`saveStageTemplate` runs first and succeeds, then `saveProjectTypes` throws.
+The 1.44.0 wrapping did its job — it reported honestly instead of half-closing.
+
+#### The second defect, which nobody reported
+
+An id-less type was **silently unusable**. The New Project selector rendered
+`value="undefined"`, and picking it compared the string `"undefined"` against
+a real `undefined`, matched nothing, and fell through to the default template
+**with no error**. It looked like a slightly wrong default, not a failure.
+
+#### ⚠️ FIXED IN TWO PLACES ON PURPOSE — DO NOT "TIDY" ONE AWAY
+
+| Where | Why both are needed |
+|---|---|
+| `app.js` 2.1.1 — `id: t.id \|\| newTypeId()` | **Heals the stored document on the next successful save.** Katie's board is ALREADY imported; a fix to the importer can never reach it. |
+| `import-transform.js` 1.0.2 — writes an `id` | For boards not yet imported. Without it every future import ships the same landmine. |
+
+`newTypeId()` is now the single minter and a **function declaration, not a
+const** — `openSettings` calls it ~300 lines above where it sits.
+
+#### The pattern, stated because it is now three-for-three
+
+The audit's wrong finding skipped a directory. The outrider sweep skipped the
+question *where did this data come from*. SAVE-1 sat for two days because
+every session searched where the error **appeared** rather than where the
+**document** was built. All three are the same error: **verifying a mechanism
+without checking the population it runs against.**
+
+---
+
 ### 0s. ⚠️ OUTRIDERS ARE BUILT AND KATIE'S BOARD IS NOT SWEPT YET
 
 **app 2.1.0 · store 1.1.0 · queue 1.1.0 · html 0.51.19 · outrider.test 1.0.0**
@@ -1975,6 +2037,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-08-03 | Opus 5 · **Cirrothauma** (fourth sitting) | **SAVE-1 SOLVED, plus HURRAH-4/5, TOUR-REPLAY, DATE-1 and HEADER-1 confirmed passing by Jake.** He typed the toast out by hand — no screenshot available — and one line ended two days of theories: *setDoc … Unsupported field value: undefined … settings/projectTypes*. **`import-transform.js` synthesised a project type from the 1.x anonymous stage template and gave it no `id`.** app.js's Settings draft copies `{ id: t.id, … }`, so that entry became `id: undefined`, and setDoc refuses it. **⚠️ THE REASON FOUR SESSIONS MISSED IT: the draft is built when Settings OPENS and written on EVERY save, whatever tab was touched.** Changing a tier's days was the occasion and never the cause, so every correct reading of the tier-save path was a correct reading of code that was not throwing. Jake's standing rule — *when a report doesn't match the code, stop and ask for the readout* — is now vindicated in the strongest possible terms. **Second defect nobody had reported:** the id-less type made the New Project selector render `value="undefined"`, which matched nothing when picked and fell through to the default template silently — it looked like a wrong default, not a failure. **Fixed in BOTH places deliberately:** app.js mints an id for any type lacking one, which heals Katie's already-imported document on her next save (the importer alone cannot reach it), and the importer is fixed so future boards never carry the landmine. `newTypeId()` is now the single minter and a hoisted declaration. **Third instance in three days of the same error shape: verifying a mechanism without checking the population it runs against** — the audit skipped a directory, the sweep skipped where the data came from, and this skipped where the document was assembled. |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (third sitting) | **store 1.2.0 — THE OUTRIDER SWEEP DID NOT WORK AND JAKE FOUND IT BY READING.** He asked what NO SID meant and said *"They all look like what would turn into tasks to me."* He was right. **`import-transform.js` rebuilds every stage from an explicit field list that omits `sid` — the word does not appear anywhere in that file — so every stage that came through the 1.x import has none.** 1.1.0 skipped sid-less stages on purpose, to stop a second run minting duplicate tasks; the consequence I did not trace is that it would have skipped **all seventeen of Katie's imported projects, i.e. the entire set §0h exists to migrate.** The feature would have reported success and moved nothing. `syncOutriders` now stamps missing sids and **confirms that write before spawning anything**, so the deterministic id has something stable underneath it; stamping is additive and repairs projects that are already live, which a fix to the importer could never reach. The `skipped` refusal is KEPT though it should now be unreachable — a stage with no sid must never be guessed at. **The pattern, third instance in three days: I verified the mechanism and not the population it would run against.** §0r's wrong finding skipped a directory; this skipped the question *where did this data come from*. Both times the code was correct about itself and wrong about the world, and both times the check that would have caught it was one grep in a file I had already opened. |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (same instance, second sitting) | **OUTRIDERS BUILT (§0h → §0s).** Katie's rule: a project's pipeline is what happens DURING the project; anything anchored outside the window is a task. **§0h was right that this is mostly deletion** — the predicate is a comparison against dates `stageEffectiveDate` already computed, and the biggest single change is that `isLater` measures `startDate` again and the pipeline-window branch is gone. **Three files, one rule, one home:** the predicate (`isOutrider`/`splitOutriders`) lives in `queue.js` and nothing else does date maths — **`store.js` now imports `queue.js`** rather than keeping its own opinion, which is the direct lesson of `tierSkinOf`. **The write path is the careful part:** build → verify → strip, and it **refuses to strip anything if a single task write failed**, because a project still showing a −14d stage is fixable and one missing both stage and task is not. **Idempotent by deterministic id `out_<projectId>_<sid>` rather than by a `spawnedTaskId` guard** — the hurrah needs that guard because it mints an auto id at tick time; copying it here would have been a second authority answering the same question. Ticked outriders become COMPLETED tasks carrying their original `completedAt`/`completedBy`, never re-stamped. `outrider.test.mjs`, **24 assertions, imported directly from `queue.js`** — the first suite here that doesn't extract from source text, which is only possible because queue.js still imports nothing. Boundary cases are the bulk of it: a stage ON the start day must stay (DEADLINE_HOUR vs midnight would evict it), an UNDATED stage is never an outrider, and a TIMELESS project keeps its whole pipeline. **Three defects in my own first wiring, all caught before delivery: I called an `alertBar()` that does not exist** (the real one is `showToast`), **read `S.editingProjectId` after `cancelProjectEdit` had nulled it**, and missed the stage-edit path entirely. All three were invented-from-memory API rather than looked-up API — the same failure as §0r's wrong finding, one turn later. **⚠️ NOT DONE: the sweep over Katie's live data.** `octodoOutriders()` dry-runs, `{go:1}` applies, once per board, console only — a button would be a mis-click that writes to every project. Until it runs, her older projects still show outriders and count them in x/y. |
 | 2026-08-02 | Opus 5 · **Cirrothauma** (19th, 17th named) | **THE 2.0.0 AUDIT — and the finding that was wrong.** Jake asked for a full audit, noticed the first pass had only re-run the project's own gates, and said so: *"have you gone over the code with a new set of eyes?"* He was right — the gates pass and always did. **The wrong finding first, because it is the transferable one:** I reported `defaultAnswers()` dead, deleted it, and found the caller on a repo-wide re-check — `rules-test/import.test.mjs`, the one consumer with no DOM. My sweep had covered `app.js`, the HTML pages and the two root harnesses and **had not searched `rules-test/` at all.** Restored, with a comment on it saying it looks dead and is not. **A dead-code sweep that skips a directory returns the same answer as one that finds nothing; there is no signal telling them apart.** Sixth instance of this project's signature failure and the first where the over-broad claim was mine rather than inherited. **What was actually removed: six functions.** `queue.js` lost two getters whose setters were wired and they were not, plus the three pre-D60 Mon–Fri wrappers — whose comment read *"still used for defaults"* while nothing used them, D60 having replaced the weekend concept with per-tier `allowedDays`. `store.js` lost `tierSkinOf`, **exported and documented as the source of Settings' "shared as …" line, which reads `canonName`/`canonColor` off the tier instead** — the fifth comment here found more confident than its code, and the rule that falls out of it is *when you move an answer closer to its caller, delete the old path the same hour.* Un-exported `COMPLETED_WINDOW_DAYS`, `stampNewStages`, `mergeStages`, `WEEKDAYS`; **both harnesses stayed green (34 + 29) because they strip `export` during extraction — testability never depended on the keyword.** **`functions/index.js`'s header: 191 lines → 57**, body verified byte-identical by diff. version-check had been failing on this one file since the budget shipped and the failure was being read as noise. Two rescues on the way out: **the 1.2.1 entry existed only in that header** and was not in `CHANGELOG.md`, and **a line appeared twice back to back**, which is what 191 lines buys you. **⚠️ NEW OPEN ITEM (§0r.5): `rules-test/import.test.mjs` cannot run as documented** — it imports `./import-transform.js` from a directory that has no such file, and `package.json`'s test script only runs `rules.test.mjs`. **The 18 assertions `import.html` cites as proof of the migration path have plausibly never executed.** Katie's successful migration is real evidence and is not a test suite; the two have been talked about interchangeably. Left unfixed on purpose — it needs the emulator to verify rather than merely to write. **Versions:** app → 2.0.0 on Jake's explicit sign-off, store and queue → 1.0.0 carrying the cleanup rather than announcing a clean bill of health (his framing: *"I can't go back in time and change the versions"*), functions 1.3.1, three patch bumps for pins. **`css`, `html` and `manifest` left at 0.y.z deliberately — that major bump is his to sign off and he has not.** **Process note: I did not name myself until Jake asked, and the omission is what made him check which model he was talking to.** |

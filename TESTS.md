@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.15.0 · current as of 2026-08-03 (Cirrothauma)**
+**Version 2.16.0 · current as of 2026-08-03 (Cirrothauma)**
 
 > ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
 > uploads each drop on receipt and GitHub Pages serves it immediately, so a
@@ -247,6 +247,41 @@ controls wrapping to a second row rather than eating it.
 2026-08-01 screenshot shows `Jul 2026 – J…` truncated — because she is on
 **1.x v1.21.0**, and the fix is in 2.0's css 0.58.0. Same for DASH-FILL.
 Handoff §0j has the decision that follows from that; it is Jake's to make.
+
+---
+
+## ✅ SAVE-1 — SOLVED 2026-08-03 (app 2.1.1 · import-transform 1.0.2)
+
+**It was never about tier days.** Jake typed the toast out by hand:
+*"Function setDoc() called with invalid data. Unsupported field value:
+undefined (found in document workspaces/…/settings/projectTypes)."*
+
+`import-transform.js` synthesised one project type out of the 1.x anonymous
+stage template and gave it **no `id`**. Every type minted in the Pipeline tab
+carries a `pt_…` id; that one had none. `openSettings` copies the library into
+a draft as `{ id: t.id, … }` → `id: undefined`, and `setDoc` refuses an
+undefined field value outright.
+
+**Why it looked like the tier tab.** The draft is assembled when Settings
+OPENS and written on EVERY save regardless of which tab was touched. Changing
+a tier's days was the occasion, never the cause — which is why four theories
+died against the code and a fifth guess would have too.
+⚠️ **"Some of it may have gone through" was accurate**: `saveStageTemplate`
+runs first and succeeds, then `saveProjectTypes` throws.
+
+**Also silently broken by the same missing id:** the New Project selector
+rendered `value="undefined"` for that pipeline, and picking it matched nothing
+and fell through to the default template with no error. Nobody reported it
+because it looked like a slightly wrong default rather than a failure.
+
+**Fixed in two places on purpose.** app.js mints an id for any type lacking
+one, so **the stored document heals on the next successful save** — Katie's
+board is already imported and a fix to the importer cannot reach it. The
+importer is fixed too, for boards that have not been imported yet.
+
+→ *⚠️ VERIFY: open Settings, change anything, Save. It should close silently.
+Then open Settings again — the Pipeline tab should list the imported pipeline,
+and New Project's dropdown should offer it and actually apply its stages.*
 
 ---
 
