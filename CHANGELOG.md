@@ -44,6 +44,13 @@ task**, which is the −N twin of the hurrah's +N `spawnDays`.
   branch and its 1.40.0 rationale are deleted, per §0h's explicit instruction
   not to preserve them. `projectPipelineWindow` is no longer imported there.
 
+**store 1.2.0 — the fix that made it work at all.** 1.1.0 skipped stages with
+no `sid`, to avoid minting duplicate tasks. But `import-transform.js` rebuilds
+stages from a field list that omits `sid`, so **every imported stage had none
+and the sweep would have skipped all seventeen of Katie's projects** — the
+exact data the feature was built for. `syncOutriders` now stamps missing sids
+and confirms that write before spawning. Found by Jake in the dry run.
+
 ⚠️ **The sweep over Katie's existing data has not been run.** Until it is, her
 older projects still show outrider stages and count them in `x/y`.
 
@@ -128,6 +135,27 @@ the same grep.
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
      had regrown to 19 entries / 135 lines — the exact shape this file was
      created to prevent. version-check 1.5.0 now fails when it happens. -->
+
+### 0.29.1
+
+<!-- Retired from the header 2026-08-03 (Cirrothauma) to make room for the
+     1.2.0 entry inside the 60-line budget. Verbatim. -->
+
+```
+0.29.1 — moveTask STRANDED EVERY FOLLOW-UP IT CARRIED. The chain moved
+         board; only the root's tierId was rewritten, so each child landed
+         on the new board still pointing at a tier on the old one. The
+         comment claimed "a follow-up inherits its parent's" tier — true
+         of creation, false of storage: addFollowUp writes an explicit
+         tierId onto the child. Found by Jake in whereis running MOVE-3.
+0.29.0 — THE HURRAH SPAWNS A TASK. A client follow-up at +14 days had to
+         be a pipeline STAGE, so a finished project sat at the top of the
+         to-do list for a fortnight with nothing to do. Ticking a hurrah
+         that carries `spawnDays` now completes the project AND creates an
+         ordinary dated task — which can be rescheduled, escalated and
+         finished on its own terms, none of which a stage can do.
+         `spawnedTaskId` guards against a re-tick minting a second one.
+```
 
 ### 0.28.0
 

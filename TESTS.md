@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.14.0 · current as of 2026-08-03 (Cirrothauma)**
+**Version 2.15.0 · current as of 2026-08-03 (Cirrothauma)**
 
 > ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
 > uploads each drop on receipt and GitHub Pages serves it immediately, so a
@@ -259,8 +259,10 @@ or edited SINCE. Katie's existing projects still hold theirs.
 → *`octodoOutriders()` for a dry run that writes nothing and lists every stage
 that would move; `octodoOutriders({go:1})` to apply. **Read the dry run
 first.** Ticked stages become COMPLETED tasks keeping their original date and
-owner. If it reports skips, those stages have no `sid` (pre-store-0.26.0) —
-open and re-save that project's stages, then re-run. Handoff §0s.*
+owner. ⚠️ **The dry run will flag NO SID on most or all imported stages — that
+is expected and store 1.2.0 stamps them during the sweep.** Under store 1.1.0
+it would have skipped every imported project instead; if you are somehow still
+on 1.1.0, do not run it. Handoff §0s.*
 
 **OUTRIDER-1. Does the −14d engagement letter behave once swept?** *Jake's
 job — the acceptance test for the whole feature.* On a project with a stage

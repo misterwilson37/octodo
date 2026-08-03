@@ -1,10 +1,19 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 1.1.0
+// Version 1.2.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
+// 1.2.0 — syncOutriders NOW STAMPS MISSING SIDS BEFORE IT SPLITS, and
+//          without this the whole of 1.1.0 was a no-op on Katie's board.
+//          import-transform.js rebuilds stages from an explicit field list
+//          that omits `sid`, so every imported stage had none, and 1.1.0
+//          skipped sid-less stages by design — skipping all 17 imported
+//          projects, i.e. exactly the data §0h exists to migrate. Jake
+//          caught it in the dry run. Stamping is additive, is confirmed
+//          before any task is spawned, and repairs live projects that a fix
+//          to the importer could never reach.
 // 1.1.0 — syncOutriders: §0h. A stage anchored outside [startDate, endDate]
 //          leaves the pipeline and becomes a task, carrying a ticked stage's
 //          completedAt/completedBy VERBATIM. BUILD -> VERIFY -> STRIP, and it
@@ -29,19 +38,8 @@
 //              longer exported. All three are read here and imported nowhere.
 //              stage-merge.test.mjs is unaffected: it lifts functions out of
 //              the source TEXT and strips `export` as it goes.
-// 0.29.1 — moveTask STRANDED EVERY FOLLOW-UP IT CARRIED. The chain moved
-//          board; only the root's tierId was rewritten, so each child landed
-//          on the new board still pointing at a tier on the old one. The
-//          comment claimed "a follow-up inherits its parent's" tier — true
-//          of creation, false of storage: addFollowUp writes an explicit
-//          tierId onto the child. Found by Jake in whereis running MOVE-3.
-// 0.29.0 — THE HURRAH SPAWNS A TASK. A client follow-up at +14 days had to
-//          be a pipeline STAGE, so a finished project sat at the top of the
-//          to-do list for a fortnight with nothing to do. Ticking a hurrah
-//          that carries `spawnDays` now completes the project AND creates an
-//          ordinary dated task — which can be rescheduled, escalated and
-//          finished on its own terms, none of which a stage can do.
-//          `spawnedTaskId` guards against a re-tick minting a second one.
+// 0.29.1 — see CHANGELOG.md.
+//
 // 0.28.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
@@ -51,7 +49,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "1.1.0";
+export const STORE_VERSION = "1.2.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -2349,6 +2347,27 @@ export async function syncOutriders(projectId, allowedDays) {
   if (!snap.exists()) return { spawned: 0, adopted: 0, stripped: 0, skipped: 0 };
   const p = { id: projectId, ...snap.data() };
 
+  // ⚠️ 1.2.0 — STAMP MISSING SIDS FIRST, OR THIS FEATURE DOES NOTHING FOR THE
+  // DATA IT WAS BUILT FOR. `import-transform.js` rebuilds each stage from an
+  // explicit field list and `sid` is not in it — the word does not appear in
+  // that file — so EVERY stage that arrived through the 1.x import has none.
+  // 1.1.0 skipped sid-less stages to avoid minting duplicate tasks, which
+  // meant it skipped all seventeen of Katie's imported projects: the exact
+  // set §0h exists to migrate. Jake caught it reading the dry run: *"They all
+  // look like what would turn into tasks to me."*
+  //
+  // Stamping is additive and safe — `ensureSids` preserves any sid already
+  // there and de-duplicates collisions — and it is written and CONFIRMED
+  // before anything is spawned, so the deterministic task id has something
+  // stable to be built from. Doing it here rather than in the importer also
+  // repairs projects that are already live, which a fix to the importer
+  // cannot reach.
+  if ((p.stages || []).some(s => !s.sid)) {
+    const stamped = ensureSids(p.stages || []);
+    await updateDoc(ref, { stages: stamped });
+    p.stages = stamped;
+  }
+
   const { pipeline, outriders } = splitOutriders(p, allowedDays);
   if (!outriders.length) return { spawned: 0, adopted: 0, stripped: 0, skipped: 0 };
 
@@ -2360,6 +2379,9 @@ export async function syncOutriders(projectId, allowedDays) {
     // here would mean a second run spawns a second task. ensureSids has
     // stamped every stage since 0.26.0; a survivor from before that is left
     // in the pipeline rather than half-migrated.
+    // Should now be unreachable: every stage was stamped above. Kept as a
+    // refusal rather than an assumption — a stage with no sid cannot have a
+    // stable task id, and guessing one means a second run mints a second task.
     if (!st.sid) { skipped++; continue; }
     const taskId  = `out_${projectId}_${st.sid}`;
     const taskRef = doc(db, "workspaces", home, "tasks", taskId);

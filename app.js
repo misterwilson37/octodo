@@ -80,7 +80,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin, syncOutriders                                                     // 0.25.0
-} from "./store.js?v=1.1.0";
+} from "./store.js?v=1.2.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -2066,7 +2066,7 @@ window.octodoOutriders = async function (opts = {}) {
       const when = stageEffectiveDate(p, st, (S.tiers.find(t => t.id === p.tierId) || {}).allowedDays);
       console.log(`    · ${st.name} — ${when ? new Date(when).toDateString() : "?"}` +
                   `${st.completedAt ? "  [ticked → COMPLETED task, original date kept]" : "  [→ open task]"}` +
-                  `${st.sid ? "" : "  ⚠️ NO SID — will be SKIPPED, left in the pipeline"}`);
+                  `${st.sid ? "" : "  [no sid yet — one will be stamped first]"}`);
     }
   }
   if (!opts.go) { console.log("[outriders] DRY RUN. Nothing was written. Re-run as octodoOutriders({go:1}) to apply."); return; }
