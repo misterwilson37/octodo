@@ -1,10 +1,17 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 1.0.0
+// Version 1.1.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
+// 1.1.0 — syncOutriders: §0h. A stage anchored outside [startDate, endDate]
+//          leaves the pipeline and becomes a task, carrying a ticked stage's
+//          completedAt/completedBy VERBATIM. BUILD -> VERIFY -> STRIP, and it
+//          refuses to strip anything if any task failed. Idempotent by
+//          deterministic task id (out_<projectId>_<sid>), so it is safe to
+//          re-run over live data; an existing task is adopted, never
+//          overwritten. ⚠️ Imports queue.js so the predicate has one home.
 // 1.0.0 — FIRST STABLE. Katie migrated on 2026-08-02 — 245 documents, one
 //          run, no rehearsal — so this file has been the only thing standing
 //          between a real person and her data for a full day. 0.y.z means
@@ -44,7 +51,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "1.0.0";
+export const STORE_VERSION = "1.1.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -57,6 +64,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
+// ⚠️ queue.js is PURE — no Firestore, no DOM — so importing it here cannot
+// create a cycle and does not give store.js a second opinion about dates.
+// syncOutriders must ask the SAME predicate the UI asks, or a stage could be
+// stripped here and still drawn there.
+import { splitOutriders, stageEffectiveDate } from "./queue.js?v=1.1.0";
 
 
 const app = initializeApp(FIREBASE_CONFIG);
@@ -2288,6 +2300,116 @@ export async function updateProject(projectId, fields) {
   const move = rehomeFor("projects", projectId, fields);
   if (move) return moveProject(move.from, move.to, projectId, fields);
   return updateDoc(docIn("projects", projectId), fields);
+}
+
+/**
+ * ⚠️ 1.1.0 — OUTRIDER STAGES BECOME TASKS. THIS WRITES TO LIVE DATA.
+ *
+ * Katie's rule (handoff §0h): a project's pipeline is what happens DURING the
+ * project; anything anchored outside the window is a task and always was. So
+ * a −14d engagement letter leaves the pipeline and becomes a dated task that
+ * can be rescheduled, escalated and finished on its own terms — the same
+ * thing the hurrah's +N `spawnDays` already does at the far end.
+ *
+ * ⚠️ THE ORDER IS THE WHOLE SAFETY PROPERTY: BUILD → VERIFY → STRIP, exactly
+ * as moveTier does. A half-migrated project — stages gone, tasks absent — is
+ * UNRECOVERABLE BY HAND, because the computed dates lived on the stages and
+ * go with them. Never strip on an unverified write. Never strip early to save
+ * a round trip.
+ *
+ * ⚠️ IDEMPOTENT BY CONSTRUCTION, not by bookkeeping. Each spawned task takes
+ * the DETERMINISTIC id `out_<projectId>_<sid>`, so running this twice cannot
+ * mint a duplicate — the second run finds the task already there and adopts
+ * it. That is why it is safe to call on every project load, on every date
+ * edit, and from a migration sweep over the whole board, without a
+ * `spawnedTaskId` guard to keep in sync. (The hurrah needs such a guard
+ * because its task is minted with an auto id at tick time; this one does not,
+ * and copying that pattern here would add a second authority answering the
+ * same question — see the tierSkinOf note in §0r.)
+ *
+ * ⚠️ A TICKED OUTRIDER BECOMES A COMPLETED TASK, CARRYING ITS ORIGINAL
+ * `completedAt` AND `completedBy` VERBATIM. Jake, 2026-08-01: *"the
+ * reflection is important, and I don't want to lose any data."* Re-stamping
+ * with the migration date would credit the wrong person on the wrong day —
+ * the same failure `stampNewStages` exists to avoid (D59). An existing task
+ * is NEVER overwritten: if someone has since rescheduled or completed it,
+ * their version is the true one and this adopts it untouched.
+ *
+ * @param allowedDays  the OWNING TIER's working days. store.js cannot resolve
+ *                     a tier's fields (`_where.tiers` maps id → board and
+ *                     nothing more), so the caller passes them, exactly as it
+ *                     does for every other queue computation.
+ * @returns {spawned, adopted, stripped, skipped} — counts, for the caller to
+ *          report. `skipped` is non-zero only when a task write failed, and
+ *          in that case NOTHING was stripped.
+ */
+export async function syncOutriders(projectId, allowedDays) {
+  const ref  = docIn("projects", projectId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return { spawned: 0, adopted: 0, stripped: 0, skipped: 0 };
+  const p = { id: projectId, ...snap.data() };
+
+  const { pipeline, outriders } = splitOutriders(p, allowedDays);
+  if (!outriders.length) return { spawned: 0, adopted: 0, stripped: 0, skipped: 0 };
+
+  const home = wsOfTier(p.tierId);
+  let spawned = 0, adopted = 0, skipped = 0;
+
+  for (const st of outriders) {
+    // A stage without a sid cannot have a stable task id, and minting one
+    // here would mean a second run spawns a second task. ensureSids has
+    // stamped every stage since 0.26.0; a survivor from before that is left
+    // in the pipeline rather than half-migrated.
+    if (!st.sid) { skipped++; continue; }
+    const taskId  = `out_${projectId}_${st.sid}`;
+    const taskRef = doc(db, "workspaces", home, "tasks", taskId);
+    try {
+      const existing = await getDoc(taskRef);
+      if (existing.exists()) { adopted++; noteWhere("tasks", taskId, home); continue; }
+
+      const when = stageEffectiveDate(p, st, allowedDays);
+      await setDoc(taskRef, {
+        title: `${st.name} — ${p.name}`,
+        tierId: p.tierId,
+        dueAt: when,
+        // ⚠️ Written straight into the document, so an undefined here is a
+        // Firestore "Unsupported field value" and the whole migration fails
+        // on this project. Same shape the hurrah spawn uses.
+        escalation: { every: 1, unit: "days" },
+        notes: `Was a pipeline stage of ${p.name}, anchored outside the project window.`,
+        projectId: null,          // deliberately standalone, as the hurrah's is:
+                                  // it is no longer part of that pipeline
+        estimateMinutes: null,
+        recurrence: null,
+        spawnedNextAt: null,
+        // The reflection, verbatim. NOT Date.now(), NOT whoami().
+        completedAt: st.completedAt ?? null,
+        completedBy: st.completedAt ? (st.completedBy ?? st.createdBy ?? null) : null,
+        assignedTo: null,
+        parentTaskId: null,
+        offsetDays: null,
+        mirroredGcalEventId: null,
+        createdBy: st.createdBy ?? whoami(),
+        createdAt: st.createdAt ?? Date.now()
+      });
+      noteWhere("tasks", taskId, home);
+      spawned++;
+    } catch (err) {
+      // Do not throw: one bad stage must not strip the others' stages or
+      // abort a sweep partway. It is counted, and the strip below refuses.
+      console.warn(`[store] outrider "${st.name}" of ${p.name} could not become a task:`, err);
+      skipped++;
+    }
+  }
+
+  // ⚠️ VERIFY, THEN STRIP. If a single task did not land, the pipeline is
+  // left exactly as it was: a project that still shows a −14d stage is a
+  // visible, fixable problem, and a project missing both stage and task is
+  // silent data loss. Re-running after the cause is fixed is safe.
+  if (skipped > 0) return { spawned, adopted, stripped: 0, skipped };
+
+  await updateDoc(ref, { stages: pipeline });
+  return { spawned, adopted, stripped: outriders.length, skipped: 0 };
 }
 
 /**

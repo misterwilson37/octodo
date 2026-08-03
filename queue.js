@@ -1,11 +1,18 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 1.0.0
+// Version 1.1.0
 //
 // Pure scheduling logic: priority, pipelines, week and clock geometry,
 // holidays. Has never known Firestore exists — that is why it is testable.
 //
 // RECENT:
+// 1.1.0 — OUTRIDERS. `isOutrider` / `splitOutriders`: a stage whose computed
+//          date falls outside [startDate, endDate] is not a pipeline step,
+//          it is a task. Pure predicate only — store.syncOutriders does the
+//          writing. projectPipelineWindow now collapses toward the project's
+//          own dates, which is the intended consequence and not a regression.
+//          ⚠️ An UNDATED stage is never an outrider, nor is any stage of a
+//          timeless project: null means "not on the calendar", not "outside".
 // 1.0.0 — FIRST STABLE. Not a rewrite: a declaration. This file has run a
 //          real person's day since Katie migrated on 2026-08-02, and 0.y.z
 //          means "the shape may still change," which stopped being true.
@@ -37,7 +44,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const QUEUE_VERSION = "1.0.0";
+export const QUEUE_VERSION = "1.1.0";
 
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -240,7 +247,60 @@ export function stageEffectiveDate(project, stage, allowedDays) {
 
 function atDeadlineHour(ts) { const d = new Date(ts); d.setHours(DEADLINE_HOUR, 0, 0, 0); return d.getTime(); }
 
-/** [first, last] effective dates across ALL stages — the pipeline window (D48). */
+/**
+ * ⚠️ OUTRIDERS (1.1.0) — Katie's rule, stated once:
+ *
+ *   A project's pipeline is what happens DURING the project. Anything
+ *   anchored outside the project window is a TASK, and always was.
+ *
+ * An engagement letter at −14d shows up on its day and on that day alone;
+ * once it is checked off it is checked off, and the project itself does not
+ * appear until its window opens. This is the −N twin of the hurrah's +N
+ * `spawnDays` (store 0.29.0), and they are ONE feature seen from both ends.
+ *
+ * These two functions are the whole test. They decide nothing and write
+ * nothing: `store.syncOutriders` does the spawning and the stripping, and it
+ * asks these. Keeping the predicate here — pure, no Firestore, no DOM — is
+ * what lets it be tested against a live project shape.
+ *
+ * ⚠️ AN UNDATED STAGE IS NEVER AN OUTRIDER. `stageEffectiveDate` returns null
+ * for a stage that is weight rather than a deadline (D50), and for every
+ * stage of a timeless project (D126, no anchor to compute from). Null is not
+ * "outside the window" — it is "not on the calendar at all", and a project
+ * with no dates would otherwise have its entire pipeline evicted.
+ */
+export function isOutrider(project, stage, allowedDays) {
+  if (project.startDate == null || project.endDate == null) return false; // D126
+  const when = stageEffectiveDate(project, stage, allowedDays);
+  if (when == null) return false;                                          // D50
+  // Compare whole days, not instants: a stage lands at DEADLINE_HOUR while
+  // startDate/endDate are midnights, so a raw `<` would evict a stage due on
+  // the morning the project opens.
+  const day   = startOfDay(when);
+  const first = startOfDay(project.startDate);
+  const last  = startOfDay(project.endDate);
+  return day < first || day > last;
+}
+
+/** Split a pipeline into what stays and what leaves. Order is preserved in
+ *  both halves, because `stages` is an ordered list the user arranged. */
+export function splitOutriders(project, allowedDays) {
+  const pipeline = [], outriders = [];
+  for (const s of project.stages || []) {
+    (isOutrider(project, s, allowedDays) ? outriders : pipeline).push(s);
+  }
+  return { pipeline, outriders };
+}
+
+/** [first, last] effective dates across ALL stages — the pipeline window (D48).
+ *
+ *  ⚠️ 1.1.0 — THIS NOW COLLAPSES TOWARD [startDate, endDate] and that is the
+ *  point, not a regression. It spread to cover outrider stages so that a
+ *  −14d stage kept its project visible; under Katie's rule such a stage is
+ *  not in the pipeline at all, so there is nothing left to spread to. Kept
+ *  because the timeline still draws a bar from it and a project may legally
+ *  hold a stage with a manual `dueAt` inside its window that widens nothing.
+ */
 export function projectPipelineWindow(project, allowedDays) {
   const start = project.startDate || 0, end = project.endDate || 0;
   const dated = (project.stages || [])

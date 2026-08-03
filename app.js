@@ -1,10 +1,19 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 2.0.0
+// Version 2.1.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
+// 2.1.0 — OUTRIDER STAGES BECOME TASKS (§0h). A stage anchored outside
+//          [startDate, endDate] leaves the pipeline and becomes a dated task.
+//          isLater MEASURES startDate AGAIN and the pipeline-window branch is
+//          deleted — it was scaffolding for a rule Jake withdrew on 08-01.
+//          syncOutridersFor() runs after create, edit, bar drag and stage
+//          edit; it is never awaited before a modal closes, because the save
+//          is what the user asked for and the spawn is bookkeeping.
+//          ⚠️ Katie's existing projects need the ONE-OFF SWEEP: run
+//          `octodoOutriders()` from the console (dry run by default).
 // 2.0.0 — TENTACALENDAR 2.0. Jake's own definition of what earns the number
 //          was set on 2026-07-27 and it was the board switcher (E24); what
 //          actually earns it is that on 2026-08-02 Katie migrated 245
@@ -47,7 +56,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "2.0.0";
+export const APP_VERSION = "2.1.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -70,16 +79,17 @@ import {
   mergedWorkspaceIds,                                              // item 5
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
-  saveTierSkin                                                     // 0.25.0
-} from "./store.js?v=1.0.0";
+  saveTierSkin, syncOutriders                                                     // 0.25.0
+} from "./store.js?v=1.1.0";
 import {
-  buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline, projectPipelineWindow,
+  buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
   setClearDeckThreshold, buildWeek, addDaysLocal, weekAnchorFor, fmtTime, fmtDay, QUEUE_VERSION,
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
-  rollupSessions, rollupToCSV, sessionsToCSV
-} from "./queue.js?v=1.0.0";
+  rollupSessions, rollupToCSV, sessionsToCSV,
+  splitOutriders, stageEffectiveDate                                // 1.1.0 — §0h
+} from "./queue.js?v=1.1.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
 const $ = sel => document.querySelector(sel);
@@ -2023,6 +2033,86 @@ function timelessTier() {
  *  now, so they can't disagree about what belongs on screen right now. */
 /** 1.39.0 — the Later horizon, in ms. 0 disables folding entirely, which is
  *  the honest way to say "I want to see everything" without a second flag. */
+/**
+ * ⚠️ 2.1.0 — THE ONE-OFF MIGRATION, §0h. Katie has live projects whose
+ * pipelines already contain outrider stages, some of them already ticked.
+ *
+ * Console-driven rather than a button, deliberately: it is run once per
+ * board, by Jake, watching the output — not a thing to leave where a
+ * mis-click writes to every project. Same shape as `octodoWhere()`.
+ *
+ *   octodoOutriders()          → DRY RUN. Lists what would move. Writes nothing.
+ *   octodoOutriders({ go: 1 }) → does it, one project at a time, and reports.
+ *
+ * ⚠️ THE DRY RUN IS THE POINT. Read it before passing `go`. A ticked outrider
+ * becomes a COMPLETED task carrying its original completedAt/completedBy, so
+ * the reflection survives; an unticked one becomes an open task on its
+ * computed day. Nothing is dropped and nothing is re-stamped with today.
+ */
+window.octodoOutriders = async function (opts = {}) {
+  const projects = (S.projects || []).filter(p => (p.stages || []).length);
+  const rows = [];
+  for (const p of projects) {
+    const tier = S.tiers.find(t => t.id === p.tierId);
+    const { outriders } = splitOutriders(p, tier?.allowedDays);
+    if (outriders.length) rows.push({ p, tier, outriders });
+  }
+  if (!rows.length) { console.log("[outriders] nothing to move — every stage sits inside its project window."); return; }
+
+  console.log(`[outriders] ${rows.length} project(s) with stages outside their window:`);
+  for (const { p, outriders } of rows) {
+    console.log(`  ${p.name}`);
+    for (const st of outriders) {
+      const when = stageEffectiveDate(p, st, (S.tiers.find(t => t.id === p.tierId) || {}).allowedDays);
+      console.log(`    · ${st.name} — ${when ? new Date(when).toDateString() : "?"}` +
+                  `${st.completedAt ? "  [ticked → COMPLETED task, original date kept]" : "  [→ open task]"}` +
+                  `${st.sid ? "" : "  ⚠️ NO SID — will be SKIPPED, left in the pipeline"}`);
+    }
+  }
+  if (!opts.go) { console.log("[outriders] DRY RUN. Nothing was written. Re-run as octodoOutriders({go:1}) to apply."); return; }
+
+  let spawned = 0, adopted = 0, stripped = 0, skipped = 0;
+  for (const { p, tier } of rows) {
+    const r = await syncOutriders(p.id, tier?.allowedDays);
+    spawned += r.spawned; adopted += r.adopted; stripped += r.stripped; skipped += r.skipped;
+    console.log(`  ${p.name}: +${r.spawned} new, ${r.adopted} already there, ${r.stripped} stage(s) removed` +
+                (r.skipped ? `, ⚠️ ${r.skipped} SKIPPED (pipeline left intact)` : ""));
+  }
+  console.log(`[outriders] done. ${spawned} task(s) created, ${adopted} adopted, ${stripped} stage(s) left pipelines, ${skipped} skipped.`);
+  return { spawned, adopted, stripped, skipped };
+};
+
+/**
+ * ⚠️ 2.1.0 — §0h. Ask store.js to turn this project's outrider stages into
+ * tasks, and say so if it did. Called after ANY write that can change which
+ * stages fall outside the window: creation, a date edit, a bar drag, a stage
+ * edit. It is idempotent (deterministic task ids), so calling it twice costs
+ * a read and nothing else — call it wherever you are unsure.
+ *
+ * ⚠️ NEVER AWAITED IN A PATH THAT CLOSES A MODAL. The user's edit is the
+ * thing they asked for; the spawn is bookkeeping that follows. A failure here
+ * must not make a successful save look refused — same reasoning as the hurrah
+ * spawn's catch in store 0.29.0.
+ */
+function syncOutridersFor(projectId, tierId) {
+  const tier = S.tiers.find(t => t.id === tierId);
+  return syncOutriders(projectId, tier?.allowedDays)
+    .then(r => {
+      if (r.skipped) {
+        // Louder than the success case on purpose: the pipeline was NOT
+        // stripped, so the project still shows a stage it should not. That is
+        // a visible, fixable state and the user is the one who can retry.
+        showToast("error", "Some stages could not become tasks",
+          `${r.skipped} stage${r.skipped === 1 ? "" : "s"} outside the project window could not be moved, so the pipeline was left exactly as it was. Nothing was lost — open the project and save again.`);
+      } else if (r.spawned) {
+        showToast("soon", "Stages moved out of the pipeline",
+          `${r.spawned} stage${r.spawned === 1 ? "" : "s"} anchored outside the project window ${r.spawned === 1 ? "is now a task" : "are now tasks"} on their own ${r.spawned === 1 ? "day" : "days"}.`);
+      }
+      return r;
+    })
+    .catch(err => console.warn("[app] outrider sync failed:", err));
+}
+
 function laterHorizonMs() {
   const days = S.config?.laterHorizonDays ?? 7;
   return days > 0 ? days * 86400000 : Infinity;
@@ -2766,18 +2856,19 @@ function renderProjects(now) {
   // Threshold is a horizon in DAYS from today, not a date, so it stays true
   // as time passes. A project with no start date is never "later" — undated
   // means someday, which is the want-tos tab's whole job.
-  // 1.40.0 — Jake refined the rule: "If there's a due date, then it should
-  // pop up a week before the project window." So the horizon is measured
-  // against the PIPELINE WINDOW, not the start date — a stage anchored
-  // BEFORE the start (offsetDays with direction "before") pulls the whole
-  // project out of Later on its own, which is the safety property that
-  // matters: nothing with real work in view can be folded away.
+  // ⚠️ 2.1.0 — THIS MEASURES startDate AGAIN, AND THE WINDOW LOGIC WAS
+  // DELETED ON PURPOSE. It used to measure the PIPELINE WINDOW so that a
+  // stage anchored before the start would pull its project out of Later —
+  // safety scaffolding for a requirement Jake explicitly withdrew on
+  // 2026-08-01 after talking to Katie. Under her rule such a stage is not in
+  // the pipeline at all; it left as a task, and a task is never folded into
+  // Later. So there is nothing to protect against any more, and reinstating
+  // the window would drag projects back out of Later on the strength of
+  // stages that no longer exist. See handoff §0h and §0s.
   const horizon = laterHorizonMs();
   const isLater = p => {
     if (p.startDate == null) return false;      // undated is someday, not later
-    const tier = S.tiers.find(t => t.id === p.tierId);
-    const [first] = projectPipelineWindow(p, tier?.allowedDays);
-    return startOfDayTs(first ?? p.startDate) > Date.now() + horizon;
+    return startOfDayTs(p.startDate) > Date.now() + horizon;
   };
   const open = openAll.filter(p => !isLater(p));
   const later = openAll.filter(isLater);
@@ -3499,7 +3590,13 @@ function stagesSave() {
   // colleague's stages). It reports how many it had to put back; say so,
   // because a save that quietly did something different is worse than a
   // save that explains itself.
-  setProjectStages(S.stagesTarget, stages).then(res => {
+  const stagesPid = S.stagesTarget;   // 2.1.0 — captured; the modal clears it
+  setProjectStages(stagesPid, stages).then(res => {
+    // 2.1.0 — a stage just edited to sit outside the window is an outrider
+    // the moment it is saved, so this path needs the sync as much as a date
+    // change does.
+    const sp = S.projects.find(x => x.id === stagesPid);
+    if (sp) syncOutridersFor(stagesPid, sp.tierId);
     if (res && res.reconciled > 0) {
       alert(`Saved. ${res.reconciled} stage${res.reconciled === 1 ? " was" : "s were"} ticked or un-ticked by ` +
             `somebody else while you had this open — those were kept as they are now, not as this screen showed them.`);
@@ -3938,7 +4035,16 @@ function commitProject(payload) {
       pushUndo("project edit", () => updateProject(id, before), () => updateProject(id, after));
     }
   }
-  if (S.editingProjectId) updateProject(S.editingProjectId, payload).then(() => { cancelProjectEdit({ saved: true }); closeYvProjectModal(); });
+  if (S.editingProjectId) {
+    // ⚠️ CAPTURED FIRST. cancelProjectEdit({saved:true}) sets S.editingProjectId
+    // to null, so reading it after the save resolves passes undefined and the
+    // sync silently does nothing.
+    const editedId = S.editingProjectId;
+    updateProject(editedId, payload).then(() => {
+      cancelProjectEdit({ saved: true }); closeYvProjectModal();
+      syncOutridersFor(editedId, payload.tierId);
+    });
+  }
   else {
     // D124 — snapshot the CHOSEN pipeline. Default (empty value) keeps the
     // old addProject path (which reads stageTemplate); a named type copies
@@ -3959,7 +4065,7 @@ function commitProject(payload) {
       : type
         ? addProjectWithStages({ ...payload, stages: stagesFromPipeline(type.stages) })
         : addProject(payload)   // D68: new bar appears behind the closing modal
-    ).then(done);
+    ).then(ref => { done(); if (ref?.id) syncOutridersFor(ref.id, payload.tierId); });
   }
 }
 
@@ -5291,7 +5397,7 @@ function commitBarDrag(p, ns, ne) {
     const after = { startDate: ns, endDate: ne };
     pushUndo("bar drag", () => updateProject(p.id, before), () => updateProject(p.id, after));   // D116: + redo
   }
-  updateProject(p.id, { startDate: ns, endDate: ne });
+  updateProject(p.id, { startDate: ns, endDate: ne }).then(() => syncOutridersFor(p.id, p.tierId));
 }
 
 // ---------- D74: drag drop-ghosts ----------

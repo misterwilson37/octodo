@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.13.0 · current as of 2026-08-02 (Cirrothauma)**
+**Version 2.14.0 · current as of 2026-08-03 (Cirrothauma)**
 
 > ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
 > uploads each drop on receipt and GitHub Pages serves it immediately, so a
@@ -251,6 +251,27 @@ Handoff §0j has the decision that follows from that; it is Jake's to make.
 ---
 
 ## 🔴 Still open — known, not yet fixed
+
+**OUTRIDER-SWEEP. ⚠️ THE MIGRATION HAS NOT BEEN RUN, AND IT IS THE POINT OF
+THE FEATURE.** *Jake's job — console, once per board.* app 2.1.0 turns stages
+anchored outside a project's window into tasks, but only for projects created
+or edited SINCE. Katie's existing projects still hold theirs.
+→ *`octodoOutriders()` for a dry run that writes nothing and lists every stage
+that would move; `octodoOutriders({go:1})` to apply. **Read the dry run
+first.** Ticked stages become COMPLETED tasks keeping their original date and
+owner. If it reports skips, those stages have no `sid` (pre-store-0.26.0) —
+open and re-save that project's stages, then re-run. Handoff §0s.*
+
+**OUTRIDER-1. Does the −14d engagement letter behave once swept?** *Jake's
+job — the acceptance test for the whole feature.* On a project with a stage
+anchored before the start: after the sweep, the stage should be gone from the
+pipeline, a task should exist on its computed day, the project should show
+`0/3` rather than `0/5`, and the project itself should NOT appear until its
+window opens.
+→ *⚠️ The last part is the one most likely to be wrong: `isLater` was changed
+to measure `startDate` again in the same drop. A project appearing too early
+means the horizon is being measured against something else; a task appearing
+on the wrong day means `allowedDays` did not reach the predicate.*
 
 **RULESTEST-1. ⚠️ `rules-test/import.test.mjs` cannot run as documented.**
 *Claude's job, not Jake's — it needs Node, the emulator and the egress

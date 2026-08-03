@@ -23,6 +23,32 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ---
 
+## 🆕 Outriders — app 2.1.0 · store 1.1.0 · queue 1.1.0 (2026-08-03, Cirrothauma)
+
+Handoff §0h's requirement, built; full notes in §0s. In one sentence: **a stage
+anchored outside `[startDate, endDate]` leaves the pipeline and becomes a
+task**, which is the −N twin of the hurrah's +N `spawnDays`.
+
+- `queue.js` gains `isOutrider` / `splitOutriders` — **the predicate and
+  nothing else**, pure enough that `outrider.test.mjs` imports it directly
+  rather than extracting it from source text (24 assertions).
+- `store.js` gains `syncOutriders`, which does all the writing: **build →
+  verify → strip, refusing to strip anything if a single task write failed.**
+  Idempotent by deterministic task id `out_<projectId>_<sid>`; an existing
+  task is adopted, never overwritten; a ticked stage becomes a COMPLETED task
+  carrying its original `completedAt`/`completedBy` verbatim.
+- `store.js` **now imports `queue.js`** so the predicate has exactly one home.
+- `app.js` calls it after create, edit, bar drag and stage edit, and exposes
+  `octodoOutriders()` for the one-off sweep (dry run by default).
+- `app.js`'s `isLater` **measures `startDate` again**; the pipeline-window
+  branch and its 1.40.0 rationale are deleted, per §0h's explicit instruction
+  not to preserve them. `projectPipelineWindow` is no longer imported there.
+
+⚠️ **The sweep over Katie's existing data has not been run.** Until it is, her
+older projects still show outrider stages and count them in `x/y`.
+
+---
+
 ## 🗑 Code removed in the 2.0.0 audit (2026-08-02, Cirrothauma)
 
 **Kept verbatim, because "nothing has been deleted" has to stay true of code

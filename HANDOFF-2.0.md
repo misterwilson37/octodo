@@ -4,13 +4,14 @@
 
 | | |
 |---|---|
-| **Versions** | app 2.0.0 · store 1.0.0 · queue 1.0.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.1 · css 0.59.4 · html 0.51.18 · import.html 1.0.1 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · version-check 1.6.0 · manifest 0.2.0 |
+| **Versions** | app 2.1.0 · store 1.1.0 · queue 1.1.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.1 · css 0.59.4 · html 0.51.19 · import.html 1.0.1 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.0.0 · version-check 1.7.0 · manifest 0.2.0 |
 | ⚠️ **THERE IS NO STAGING** | **Handing Jake a file IS deploying it.** He uploads each drop to the GitHub web portal as it arrives; Pages serves `main`; the app is live at that moment. There is no review branch, no soak, no staging URL. **Anything in this repo is what Katie is running right now.** See the box below — this cost a whole session of wrong advice.
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **DEPLOYED ≠ EXERCISED, AND BOTH ARE TRUE OF EVERYTHING HERE.** Every file is live and Katie used the app all day; `TESTS.md` START HERE still holds 20 items nobody has deliberately walked. **SAVE-1 first** — an unexplained crash that is now merely *visible*. Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
 | ✅ **Katie is on 2.0** | Migrated 2026-08-02, 245 documents, one run, no rehearsal. She has used it all day and filed four reports (§0n). 1.x remains live and untouched as the fallback. |
 | **Unrun and can lose data** | **TIER-10** — undo a delete on a *shared* tier. |
 | 🔢 **THE VERSION NUMBERS CHANGED SHAPE** | **app 1.46.0 → 2.0.0, store 0.29.1 → 1.0.0, queue 0.21.0 → 1.0.0**, on Jake's sign-off, 2026-08-02. Not a rewrite and not a feature — a declaration that these files run a real person's day. **Nothing about their behaviour changed in that drop.** `css`, `html` and `manifest` deliberately stayed 0.y.z; that is Jake's call to make and he has not made it. §0r. |
+| ⚠️ **OUTRIDERS ARE BUILT; THE SWEEP IS NOT RUN** | app 2.1.0 / store 1.1.0 / queue 1.1.0 shipped §0h. **Katie's existing projects still hold their outrider stages until somebody runs `octodoOutriders({go:1})` from the console, once per board.** Dry run first — it writes nothing. §0s. |
 | 🔍 **The 2.0.0 audit is §0r** | A file-by-file read, not a test run. Six dead functions removed, one header trimmed 191→57 lines, **and one wrong finding caught before it shipped.** Read §0r before trusting any "X is unused" claim in this document. |
 
 ### ⚠️ Three things to do before you write a line
@@ -1147,7 +1148,106 @@ repoints. **One sentence from him closes this either way; do not infer it.**
 
 ---
 
-### 0h. ⚠️ NEXT SESSION STARTS HERE — "OUTRIDER STAGES BECOME TASKS"
+---
+
+### 0s. ⚠️ OUTRIDERS ARE BUILT AND KATIE'S BOARD IS NOT SWEPT YET
+
+**app 2.1.0 · store 1.1.0 · queue 1.1.0 · html 0.51.19 · outrider.test 1.0.0**
+
+§0h's requirement, built. **The code is live; the one-off migration over
+existing data is NOT run.** Until it is, Katie's older projects still show
+their outrider stages in the pipeline — a visible, harmless, wrong-looking
+state, not a broken one.
+
+#### ⚠️ THE OUTSTANDING STEP, IN FULL
+
+Open the app as the account that owns the board, console, then:
+
+```js
+octodoOutriders()            // DRY RUN — lists every stage that would move
+octodoOutriders({ go: 1 })   // does it
+```
+
+**Read the dry run before passing `go`.** It names each project, each stage,
+its computed date, and whether it is ticked. **Run it once per board** — it
+reads `S.projects`, which is the merged view of whatever boards that account
+has open, so a board nobody has opened is a board nobody has swept.
+
+#### Where the rule lives, and why it is in three files
+
+| File | What it owns |
+|---|---|
+| `queue.js` 1.1.0 | `isOutrider` / `splitOutriders`. **The predicate, and nothing else.** Pure — no Firestore, no DOM — which is why `outrider.test.mjs` can import it directly instead of extracting it from text. |
+| `store.js` 1.1.0 | `syncOutriders(projectId, allowedDays)`. **All the writing.** It asks queue.js the question; it does not have its own opinion about dates. |
+| `app.js` 2.1.0 | `syncOutridersFor()` at four call sites, and `octodoOutriders()` for the sweep. |
+
+⚠️ **store.js NOW IMPORTS queue.js.** That is new and it is deliberate: if
+store had its own copy of the predicate, a stage could be stripped by one and
+still drawn by the other. queue.js imports nothing, so there is no cycle. **Do
+not "simplify" by inlining the date maths into store.js.**
+
+#### ⚠️ THE FOUR THINGS THAT MAKE THIS SAFE AGAINST LIVE DATA
+
+1. **BUILD → VERIFY → STRIP, and it refuses to strip on any failure.** If even
+   one task write fails, `syncOutriders` returns `skipped > 0` and **leaves
+   the pipeline exactly as it was**. A project still showing a −14d stage is
+   fixable by re-running; a project missing both the stage and the task is
+   not, because the computed date lived on the stage and went with it.
+2. **Idempotent BY CONSTRUCTION, not by bookkeeping.** Each task takes the
+   deterministic id `out_<projectId>_<sid>`. Re-running finds the task and
+   *adopts* it. ⚠️ **This is why there is no `spawnedTaskId` guard here even
+   though the hurrah has one** — the hurrah mints an auto id at tick time and
+   genuinely needs the guard; copying it here would be a second authority
+   answering the same question (see §0r on `tierSkinOf`).
+3. **An existing task is NEVER overwritten.** If somebody has since
+   rescheduled or completed it, theirs is the true version.
+4. **A ticked outrider becomes a COMPLETED task carrying its original
+   `completedAt` and `completedBy` verbatim** — Jake, 08-01: *"the reflection
+   is important, and I don't want to lose any data."* Not re-stamped with the
+   migration date, not credited to whoever runs the sweep (D59's lesson).
+
+⚠️ **A stage with no `sid` is SKIPPED, not migrated.** It cannot have a stable
+task id, so a second run would mint a second task. `ensureSids` has stamped
+every stage since store 0.26.0; a pre-0.26 survivor stays in its pipeline and
+the dry run flags it. **If the sweep reports skips, that is the likely cause —
+open and re-save the project's stages to stamp them, then re-run.**
+
+#### What was deleted, and do not put it back
+
+`isLater` measures `startDate` again. The pipeline-window branch is **gone**,
+along with the 1.40.0 comment explaining it, and `projectPipelineWindow` is no
+longer imported by `app.js` at all.
+
+> ⚠️ **It was scaffolding for a requirement Jake explicitly withdrew on
+> 2026-08-01**, and §0h says in terms: *do not preserve the window-based logic
+> out of politeness to 0g.* A successor who "restores" it will drag projects
+> back out of Later on the strength of stages that no longer exist.
+
+`projectPipelineWindow` itself stays in `queue.js` — the timeline still draws
+from it, and a stage with a manual `dueAt` inside the window is legal.
+
+#### ⚠️ NOT DONE, AND KNOWN
+
+- **The sweep over live data.** Above. This is the whole outstanding item.
+- **`projectProgress` and `nextDeadline` were not changed.** They did not need
+  to be: outriders leave the `stages` array, so those functions see a clean
+  pipeline and a project with a −14d letter and a +14d follow-up shows 0/3
+  rather than 0/5 **once swept**. ⚠️ **Before the sweep they still count the
+  outriders**, because the stages are still there. That is the same wrong-
+  looking-but-correct state as above, and it resolves when the sweep runs.
+- **No UI button.** The sweep is console-only on purpose — it is a once-per-
+  board operation and a button is a mis-click that writes to every project.
+- **AGENDA-ACTIVE is now partly moot** but was not touched; re-read it after
+  the sweep, because outriders leaving may be most of what it was asking for.
+
+---
+
+### 0h. ✅ BUILT 2026-08-03 (Cirrothauma) — "OUTRIDER STAGES BECOME TASKS"
+
+> ✅ **SHIPPED in app 2.1.0 · store 1.1.0 · queue 1.1.0.** The section below is
+> kept verbatim because it is the REQUIREMENT, and the requirement outlives
+> the build. **What was actually built, and the one thing still outstanding
+> (Katie's live projects have not been swept yet), is §0s.**
 
 **Katie corrected the requirement, and the correction is bigger than the
 thing it corrects.** Jake relayed it 2026-08-01, explicitly retracting his own
@@ -1859,6 +1959,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-08-03 | Opus 5 · **Cirrothauma** (same instance, second sitting) | **OUTRIDERS BUILT (§0h → §0s).** Katie's rule: a project's pipeline is what happens DURING the project; anything anchored outside the window is a task. **§0h was right that this is mostly deletion** — the predicate is a comparison against dates `stageEffectiveDate` already computed, and the biggest single change is that `isLater` measures `startDate` again and the pipeline-window branch is gone. **Three files, one rule, one home:** the predicate (`isOutrider`/`splitOutriders`) lives in `queue.js` and nothing else does date maths — **`store.js` now imports `queue.js`** rather than keeping its own opinion, which is the direct lesson of `tierSkinOf`. **The write path is the careful part:** build → verify → strip, and it **refuses to strip anything if a single task write failed**, because a project still showing a −14d stage is fixable and one missing both stage and task is not. **Idempotent by deterministic id `out_<projectId>_<sid>` rather than by a `spawnedTaskId` guard** — the hurrah needs that guard because it mints an auto id at tick time; copying it here would have been a second authority answering the same question. Ticked outriders become COMPLETED tasks carrying their original `completedAt`/`completedBy`, never re-stamped. `outrider.test.mjs`, **24 assertions, imported directly from `queue.js`** — the first suite here that doesn't extract from source text, which is only possible because queue.js still imports nothing. Boundary cases are the bulk of it: a stage ON the start day must stay (DEADLINE_HOUR vs midnight would evict it), an UNDATED stage is never an outrider, and a TIMELESS project keeps its whole pipeline. **Three defects in my own first wiring, all caught before delivery: I called an `alertBar()` that does not exist** (the real one is `showToast`), **read `S.editingProjectId` after `cancelProjectEdit` had nulled it**, and missed the stage-edit path entirely. All three were invented-from-memory API rather than looked-up API — the same failure as §0r's wrong finding, one turn later. **⚠️ NOT DONE: the sweep over Katie's live data.** `octodoOutriders()` dry-runs, `{go:1}` applies, once per board, console only — a button would be a mis-click that writes to every project. Until it runs, her older projects still show outriders and count them in x/y. |
 | 2026-08-02 | Opus 5 · **Cirrothauma** (19th, 17th named) | **THE 2.0.0 AUDIT — and the finding that was wrong.** Jake asked for a full audit, noticed the first pass had only re-run the project's own gates, and said so: *"have you gone over the code with a new set of eyes?"* He was right — the gates pass and always did. **The wrong finding first, because it is the transferable one:** I reported `defaultAnswers()` dead, deleted it, and found the caller on a repo-wide re-check — `rules-test/import.test.mjs`, the one consumer with no DOM. My sweep had covered `app.js`, the HTML pages and the two root harnesses and **had not searched `rules-test/` at all.** Restored, with a comment on it saying it looks dead and is not. **A dead-code sweep that skips a directory returns the same answer as one that finds nothing; there is no signal telling them apart.** Sixth instance of this project's signature failure and the first where the over-broad claim was mine rather than inherited. **What was actually removed: six functions.** `queue.js` lost two getters whose setters were wired and they were not, plus the three pre-D60 Mon–Fri wrappers — whose comment read *"still used for defaults"* while nothing used them, D60 having replaced the weekend concept with per-tier `allowedDays`. `store.js` lost `tierSkinOf`, **exported and documented as the source of Settings' "shared as …" line, which reads `canonName`/`canonColor` off the tier instead** — the fifth comment here found more confident than its code, and the rule that falls out of it is *when you move an answer closer to its caller, delete the old path the same hour.* Un-exported `COMPLETED_WINDOW_DAYS`, `stampNewStages`, `mergeStages`, `WEEKDAYS`; **both harnesses stayed green (34 + 29) because they strip `export` during extraction — testability never depended on the keyword.** **`functions/index.js`'s header: 191 lines → 57**, body verified byte-identical by diff. version-check had been failing on this one file since the budget shipped and the failure was being read as noise. Two rescues on the way out: **the 1.2.1 entry existed only in that header** and was not in `CHANGELOG.md`, and **a line appeared twice back to back**, which is what 191 lines buys you. **⚠️ NEW OPEN ITEM (§0r.5): `rules-test/import.test.mjs` cannot run as documented** — it imports `./import-transform.js` from a directory that has no such file, and `package.json`'s test script only runs `rules.test.mjs`. **The 18 assertions `import.html` cites as proof of the migration path have plausibly never executed.** Katie's successful migration is real evidence and is not a test suite; the two have been talked about interchangeably. Left unfixed on purpose — it needs the emulator to verify rather than merely to write. **Versions:** app → 2.0.0 on Jake's explicit sign-off, store and queue → 1.0.0 carrying the cleanup rather than announcing a clean bill of health (his framing: *"I can't go back in time and change the versions"*), functions 1.3.1, three patch bumps for pins. **`css`, `html` and `manifest` left at 0.y.z deliberately — that major bump is his to sign off and he has not.** **Process note: I did not name myself until Jake asked, and the omission is what made him check which model he was talking to.** |
 | 2026-08-01 | Opus 5 · **Thaumoctopus** (18th, 16th named) | **DASH-FILL SHIPPED, AND THE SCREENSHOT ANSWERED A QUESTION NOBODY ASKED IT.** Opened by checking the handoff against the repo, as three predecessors have, and the finding was the inverse of theirs: **the "NOT uploaded" warnings were stale in the safe direction** — everything through 1.41.0 was live, so TESTS.md's whole 🔴 list became runnable and nothing had to be re-shipped. Then the two real ones: `move.test.mjs` was **announced in the versions row and absent from the repo**, and `version-check.mjs` was **1.1.0 in the repo against 1.3.0 in the row** — and those are one fact, because 1.3.0 would have caught the missing harness and the copy that ran was the one that had never heard of it. **The checker's own drift is what hid the missing file, and it was the single drift the checker could not see.** Fixed by making it check itself and derive `LABELS`/the paste row from `FILES`; the old hand-written `rowOrder` had already diverged badly enough that **pasting its own suggestion would have deleted four entries from the handoff table.** Fifth instance of the second-list bug. **DASH-FILL: Katie runs Timeline, so the 34px ceiling binds and the wall layout's 14px is a red herring** — the surplus goes to the ROWS rather than back into the lane pitch, because filling the pane with 90px lane gaps is a different wrong answer, and the gridlines' `top:0;bottom:0` mean the new space renders as calendar. **The screenshot's most valuable pixel was the version badge: `v1.21.0` — Katie is on 1.x, so DASH-FILL and LABEL-1 are both "fixed for Jake, open for the primary user."** §0g says LABEL-1 is FIXED without saying in which tree, which is E27's exact failure and now the second time it has gone one-sided. **Fourth act — built §0k.4 (Katie's follow-up offer, independent button on the dup modal, guard narrowed and the §0k.4 claim about `spawnedTaskId` corrected rather than inherited), then spent the rest on documents at Jake's request.** `app.js`'s header had regrown to 135 lines / 19 entries — the exact disease `CHANGELOG.md` was created to cure nine days earlier, with the rule written in the header it had eaten. **Made it a check instead of a rule** (version-check 1.5.0, 60 lines / 6 entries, sabotage-verified), which immediately found `functions/index.js` at 191 lines that nobody had looked at; 24 entries moved to CHANGELOG verbatim. This handoff had it too — 1,932 lines, six sections added by me in one day — so the resolved ones are digested and **the ones holding open decisions were left whole on purpose.** README's Status was actively wrong in two places. **Third act — he ran the tests.** OFFDAY-1, MOVE-1/2/4, DASH-FILL-1/2/3 and LATER-1 passed; two things failed and both were mine. **`moveTask` had stranded every follow-up it ever carried** — the root's tier moved, the children's did not, under a comment reading *"a follow-up inherits its parent's"* which is true of creation and false of storage, since `addFollowUp` writes an explicit tierId. **Sixth comment here found more confident than its code, and the fifth of those is the same move: a narrow true statement restated as a broad one.** Lifted `movedTaskData` out as a pure function (the `mergeStages` precedent) and covered it — 29 assertions, sabotage-verified. ⚠️ **The harness's extractor had a latent hole that a default parameter finally exposed** (`indexOf("{")` from the function NAME finds `{}` inside `patch = {}`); fixed to match the parens first. **And DIRTY-1 failed on projects because 1.41.0 hardened one caller and left two** — `suggestProjectColor` and `refreshTypeSelect`, both on subscriptions, both writing signature fields, and `bestFreeColor()` changes its answer when a project is added, which is exactly the repro Jake found and the original could not. **That is §8c #4 committed by the instance that wrote §8c**; all three writers now go through one helper. **Three decisions recorded rather than built** (§0k): project delete should soft-delete — he is right, and note the tension with 0.28.0, since orphaning a ledger and destroying it are both wrong and neither fixes the other; the hurrah offer belongs in the completion modal *as well as* the pipeline, snooze untouched; and the import dry run is **withdrawn**, because Katie's transfer is the test and 1.x stays live — which trades a rehearsal for a super-admin wipe/export panel that now has to exist. **Second half of the session, on Jake's questions:** he caught that `TESTS.md` had two sections headed "run these first" and MOVE-3 in both, and asked the right diagnostic question — *tests broken, or code broken?* **Tests.** The mover has two entry points, both from store 0.28.0, untouched by 0.29.0's hurrah spawn (which calls `addTask`, not `rehomeFor`) and by queue 0.21.0 (a renderer that has never known Firestore exists). **MOVE-1 and MOVE-2 had passed and nobody wrote it down, because only the MOVE-3 failure produced a conversation** — so the file went on claiming none of them had been run. *A test that passes is a document edit, not just a relief.* Rebuilt the top of `TESTS.md` as one ordered START HERE list. **And he settled §0j's fork by reframing it: no 1.x hotfix, because the flip is this weekend and DASH-FILL/LABEL-1 turn the migration from "features you didn't ask for" into "your own bug reports, closed."** That re-ranks the list — IMPORT-1/2/3 to the top, since the importer has still never written to live Firestore. **Process note: a string replace of mine silently no-opped while installing the self-check, and the check I had just written is what caught it** — which is the argument for this project's whole mechanical-check habit, made against its author within the hour. |
 | 2026-07-29 | Opus 5 · **Hapalochlaena** (17th, 15th named) | **THE MIS-ROUTING FIX, AND A HANDOFF THAT HELD UP.** Jake opened by saying the previous instance had started to hallucinate and the code needed a go-over. **It did not — every claim in §0a checked out against the code, and all fourteen version constants agreed with the banner.** Saying so first was the useful part: the alternative was a session spent hunting phantom defects in a file that was fine. Fixed §0b: both routers refuse, seven creators stamp, one global rejection net, `octodoWhere()` left in the file. **Found that the fallback was in TWO resolvers rather than the one the handoff named, and the unnamed one is worse** — `restoreDoc` routes through it and uses `setDoc`, which creates, which is TIER-10's data-loss case. Three more defects found by reading: a catch that swallowed everything and blamed permissions, a latent `undefined` write that would have landed in that same catch, and a `hidden` flag that skipped `refreshMerge`. **What I did not do is the entry worth reading: §0a named two candidate root causes and told me not to guess between them, and I could not settle it.** I found a third that fits Jake's evidence better and said it was a hypothesis rather than dressing it as a finding — the fix is correct under all three, which is what made it shippable without the answer. **Nothing was pushed and nothing was run in a browser; the fix is code, not a verified fix.** Process note for successors: the previous session's own closing lesson was "state the plan in one line before doing it, put the instruction on its own line" — I read it before starting and it is good advice, so it is repeated here rather than left in a paragraph nobody reaches. |

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
-// Version 1.6.0 — says out loud that there is no staging.
+// Version 1.7.0 — says out loud that there is no staging.
 //
 // THE THING SIX FILES ALREADY TOLD YOU TO RUN.
 //
@@ -36,7 +36,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const VERSION_CHECK_VERSION = "1.6.0";
+const VERSION_CHECK_VERSION = "1.7.0";
 
 const SEMVER = String.raw`\d+\.\d+\.\d+`;
 
@@ -79,6 +79,7 @@ const FILES = [
   { file: "functions/index.js",  banner: /^\/\/.*—\s*Version\s+(V)/m,        constant: /^const FUNCTIONS_VERSION\s*=\s*"(V)"/m , label: "functions" },
   { file: "stage-merge.test.mjs", banner: /^\/\/\s*Version\s+(V)/m,          constant: null , label: "stage-merge.test" },
   { file: "move.test.mjs",       banner: /^\/\/\s*Version\s+(V)/m,          constant: null , label: "move.test" },
+  { file: "outrider.test.mjs",   banner: /^\/\/\s*outrider\.test\.mjs\s+—\s+Version\s+(V)/m, constant: null , label: "outrider.test" },
   // ⚠️ THE CHECKER CHECKS THE CHECKER. This file shipped for three versions
   // unable to see its own drift — and drifted: the repo held 1.1.0 while the
   // handoff row said 1.3.0. That is the one file where the mistake is
