@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 2.16.0 · current as of 2026-08-03 (Cirrothauma)**
+**Version 3.1.0 · current as of 2026-08-03 (Cirrothauma)**
 
 > ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
 > uploads each drop on receipt and GitHub Pages serves it immediately, so a
@@ -83,140 +83,61 @@ super-admin wipe/export panel the plan now depends on.
 
 ---
 
-### 1. HURRAH-4. The follow-up offer, on a real finished project.
-Finish a project so "🔁 Same time next year?" appears. Type a task, set the
-days, hit **＋ Add it** — the note should confirm with the date. Then:
-**a)** the task really exists in the queue on that day; **b)** "＋ Add it"
-disables so one click cannot become two; **c)** you can *still* Create next
-year's run, or snooze, or say No thanks afterwards — the two are independent.
-→ *⚠️ (c) is the whole design. If adding a follow-up closed the modal or
-consumed the duplicate choice, that is the bug.*
+### 1. ⚠️ OUTRIDER-SWEEP. The migration has not been run, and it is the point.
+`octodoOutriders()` for a dry run that writes nothing; `octodoOutriders({go:1})`
+to apply. **Read the dry run first.** Once per board. Needs store 1.2.0.
+→ *Ticked stages become COMPLETED tasks keeping their original date and owner.
+`[no sid yet]` on imported stages is expected — 1.2.0 stamps them. Handoff §0s.*
 
-### 2. HURRAH-5. The offer does not leak between projects.
-Add a follow-up on one project, close, finish a different one. The title box
-is empty, the days are back to 14, and **the "✓ Added" note is gone** — a
-stale confirmation would read as a promise about this project.
+### 2. OUTRIDER-1. Does the −14d engagement letter behave once swept?
+The acceptance test for the whole feature. After the sweep, on a project with a
+stage anchored before its start: the stage is gone from the pipeline, a task
+exists on its computed day, the project shows `0/3` not `0/5`, and **the project
+does not appear until its window opens.**
+→ *⚠️ That last part is likeliest to be wrong — `isLater` was changed to measure
+`startDate` in the same drop. Too early = the horizon is measuring something
+else. Wrong day = `allowedDays` never reached the predicate.*
 
-### 3. TOUR-REPLAY-1. Katie can finally see the new tour.
-Settings → bottom → **Show me around: 📋 Tasks & projects**. Settings closes
-and the 11-step tour runs. Try the other two as well.
-→ *Then: change a tier name, DON'T save, and hit a replay button. It must warn
-about unsaved changes, and cancelling must leave Settings open with your edit
-intact.*
-
-### 4. DATE-1. The day label stops stacking three deep.
-Phone, Today view. **`Today — Sun, Aug 2` on one or two lines, not three.**
-Check Want-tos too — same nav, same fix.
-→ *D138's `flex: 1 1 0` made the arrow slots greedy rather than merely
-shrinkable. `0 1 auto` is the difference.*
-
-### 5. HEADER-1. Two rows, in the right order.
-Phone. Row 1: 🐙 Tentacalendar + version + the board chip. Row 2:
-Today/Week/Year + ⚙ + ＋. ⏻ still at the bottom of the page, and **never**
-in front of the app name even for a flash on load.
-→ *⚠️ Live and unverified — she is using this now. If it looks worse than 1.43.0 did, say so and it
-reverts cleanly — the whole change is one ordered block in the 600px media
-query.*
-
-### 6. ⚠️ SAVE-1. What does Save settings actually say now?
-Settings → change a tier's days → **Save settings**. Either it closes (fixed
-by the scoping change) **or a toast appears naming the error**.
-→ *⚠️ **If a toast appears, send me its text — that is the whole ask.** The
-wrap makes the failure visible, not fixed; four theories were checked and
-eliminated against the source and I will not ship a fifth blind. The console
-line (F12 → Console, red) is even better.*
-
-### 7. SAVE-2. The guard still guards.
+### 3. SAVE-2. The guard still guards.
 Change something, hit **✕** instead of Save. It must still warn. Then Save,
 reopen, and ✕ immediately — **no** warning that time.
-→ *A save that clears the dirty flag without saving is worse than the bug.*
+→ *A save that clears the dirty flag without saving is worse than the bug.
+⚠️ Not yet re-run since SAVE-1 was fixed, and SAVE-1's fix touched the same
+save path — this is now a regression test, not just an unrun one.*
 
-### 8. TIMING-1. The Timing pane is readable.
-Settings → Timing. Two labels side by side on one row, the "Duplicating a
-finished project…" paragraph on its own line **below** them, nothing
-overlapping.
+### 4. SAVE-3. The healed project type stays healed.
+New in 2.1.1. After one successful save: reopen Settings → **Pipeline** — the
+imported pipeline is listed and renameable. Then **New project** → its name is
+in the dropdown, and picking it **actually applies its stages**.
+→ *⚠️ The dropdown half is the part nobody would have reported: an id-less type
+rendered `value="undefined"` and fell through to the default template silently.
+Confirm the stages really arrive, not just that the name appears.*
 
-### 9. TOUR-1. The tour reaches the moneymaker.
-⚠️ **Katie cannot see this without a replay button** — she has already
-completed the tour, so this needs TOUR-REPLAY built first, or a fresh account.
-It should run 11 steps: task → project → pipeline → working days → **the two
-meeting in one queue** → want-tos, with no step landing on a missing element.
+### 5. SOFTDEL-1. The record survives the ✕. **The point of §0k.3.**
+Clock some time on a project and tick a stage. ✕ it. Then: **a)** it is gone
+from the timeline, the agenda and the project pane; **b)** Settings → Time
+Report **still counts those hours**, under the project's real name and not
+"another project"; **c)** the CSV export still names it; **d)** ↶ undo puts it
+straight back with its sessions and ticks intact.
+→ *⚠️ (b) is the assertion that matters. If the name reads "another project",
+a ledger surface is reading `S.projects` instead of `S.projectsAll` — handoff
+§0u's table says which is which.*
 
-### 10. RETIER-1. The stranded follow-up walks home.
-Open **`and then this`**, re-pick tier **Work**, save. Re-scan `whereis` — the
-✗ must be gone and the task must sit in `Jake (personal)` with its parent.
-→ *store 0.29.1. `rehomeFor` fires on any edit naming a tier on another board,
-so the repair is an ordinary save — MOVE-1's specimen fix in a new costume.*
+### 6. SOFTDEL-2. It stays gone across a reload, and comes back on demand.
+✕ a project, hard refresh — still gone, still counted in the report. Then
+console: `octodoBinned()` lists it with its id and who removed it;
+`octodoBinned("<id>")` restores it.
+→ *⚠️ There is no restore screen yet and the confirm dialog does not claim one.
+If you want Settings → Data, that is the next slice — say so.*
 
-### 11. RETIER-2. A whole chain moves and lands routable.
-Make a task with a chained follow-up on a personal tier. Change the **parent's**
-tier to the shared one. `whereis` from **both** accounts: parent *and* child on
-the shared board, **no ✗**, and the child still has its own title and dates.
-Then undo. Both come home together.
-→ *⚠️ This is MOVE-3's other half and the regression test for 0.29.1: the child
-used to arrive on the new board still pointing at the old board's tier. Covered
-by `move.test.mjs` too, but only the browser proves the chain walk.*
+### 7. SOFTDEL-3. Katie's side of the fear.
+On a **shared** tier: Jake ✕ a project Katie has logged hours against. Her
+hours are still in **her** Time Report, credited to her.
+→ *⚠️ This is the actual requirement — "John can be pissed at Susan and delete
+a whole project worth of work (and credit!)". Nothing else on this list tests
+the shared case.*
 
-### 12. DIRTY-2. The project form after a NEW project.
-Add a project. Hard refresh. Click ✎ on a project as your **first** action —
-no "unsaved changes". Then type in the name, click ✎ on a **different**
-project — the prompt **should** appear.
-→ *⚠️ Adding a project is load-bearing: `bestFreeColor()` changes its
-suggestion when the colour set changes, which is what made this fail when
-1.41.0's version of the fix passed. Both halves matter.*
-
-### 13. MOVE-4b. Deleting a project still warns honestly.
-Unchanged behaviour — re-run only to confirm 0.29.1 did not disturb it. The
-confirm names the hours and no orphaned session is left.
-→ *⚠️ **You do not like this behaviour and you are right** — see handoff
-§0k.3. The soft delete is not built. This test asserts today's truth, not the
-one you want.*
-
-### 14. FIT-1. Katie's phone, in one tap.
-On a phone: Settings → the versions line at the bottom. It should end with
-**`fit: ok (viewport NNNpx)`**. If it instead reads `⚠️ fit: content runs Npx
-past…`, **send that line** — it names the element and settles this without
-another photograph.
-→ *app 1.42.0. Check it on the desktop too: `fit: ok` there is the control.*
-
-### 15. FIT-2. The header stops running off the edge.
-Same phone, Today view. The header should **wrap onto two or three rows** with
-every control reachable — brand, Today/Week/Year/Dashboard, ⚙ ＋ ⏻ — and no
-horizontal scroll or pinch-to-fit on load.
-→ *⚠️ Live and unverified; the ~860px-in-360px figure is an estimate read
-off the CSS. If it is still tight, the next lever is NOT the Dashboard
-button — that has been hidden below 1200px since D105 and I was wrong to
-suggest it. Corrected estimate: ~750px in a 360px viewport. FIT-1 beats both
-numbers.*
-
-### 16. TRAY-1. ⏻ is at the bottom on a phone, and it works.
-On a phone: the sign-out button is **not** in the header — it sits at the
-bottom of the page under a divider. **Tap it. It must actually sign you out.**
-Then widen the window on a desktop past 600px and back: it returns to the end
-of the header row and leaves no gap behind.
-→ *⚠️ Tapping it is the point. The node is MOVED, not copied, so a broken
-version here is a sign-out button that does nothing rather than one that is
-missing — the failure you would not notice until you needed it.*
-
-### 17. IMPORT-3. Calendar permissions do not travel. **Flip day.**
-Every calendar re-shared with the 2.0 service account — inbound **and** the
-outbound mirror.
-→ *Not a rehearsal, a step. The export holds calendar IDs and cannot hold
-calendar PERMISSIONS. Get it wrong and the tiers import perfectly and stay
-empty forever: no error, no warning, nothing.*
-
-### 18. IMPORT-2. Katie runs it herself, or gets Co-owner.
-RULES-6b measured it: an editor cannot write `pollIntervalMinutes` to the
-workspace document, so *"Katie adds Jake as an editor and he imports"* cannot
-execute. She owns her board and needs nothing extra.
-
-### 19. HURRAH-2. Re-ticking does not mint a second task.
-Un-tick the hurrah, tick it again. **Still exactly one** follow-up task, and
-the first is not deleted by the un-tick.
-→ *`spawnedTaskId` guards this, and it is the same guard the completion-modal
-version in §0k.4 will use. Worth knowing it holds before that is built.*
-
-### 20. HURRAH-3. The field only shows on the hurrah.
+### 8. HURRAH-3. The field only shows on the hurrah.
 Move the 🎆 to a different stage. `↳ +Nd` follows it, and the old row's value
 is dropped rather than riding along on a stage that is no longer the climax.
 
@@ -328,6 +249,15 @@ green run to verify rather than merely a correct-looking edit. Handoff §0r.5.*
 sequence is not. store 0.27.0 made it *report* a partial delete honestly
 instead of promising "nothing was lost." It still cannot put back what it
 removed.
+
+**HARDDEL-RULES. ⚠️ The rules still permit the destructive delete.** *Claude's
+job — needs the emulator.* app 2.2.0's ✕ no longer calls `deleteProject`, so
+the exposure is much smaller, but §0k.3 wants the hard delete to be an owner's
+verb and that is a rules change. **Rules changes run through `rules-test/`
+before the console** (1.2.0/1.2.1's lesson), and the emulator was not reachable
+when soft delete shipped. **Do not record §0k.3 as fully closed until this
+lands.** Handoff §0u. ⚠️ Do this together with TIER-MEMBER-ROLES below — same
+file, same test run.
 
 **TIER-MEMBER-ROLES.** Anyone holding a shared tier can remove anyone,
 including the owner. Boards have four roles; tiers have none.
@@ -442,6 +372,43 @@ can toggle it.
   finding, and it is a feature working:** moving a project from a personal
   tier to the shared one *pulled its start date onto a working day.*
   Jake: *"Well done!"*
+### ✅ Passed 2026-08-03 (Jake, two sittings)
+
+**The 2.0/2.1 acceptance run. Everything here is confirmed by the primary
+users and is OFF the list — do not re-run without a reason.**
+
+- **HURRAH-4** — the follow-up offer on a real finished project. *"a win!"*
+- **HURRAH-5** — no leak between projects. *"a win!"*
+- **TOUR-REPLAY-1** — *"tour replay is a go!"*
+- **DATE-1** — *"date 1 is great!"* The label stopped stacking three deep.
+- **HEADER-1** — *"header 1 is a-okay!"* Two rows, right order.
+- **SAVE-1** — ✅ **SOLVED**, see below. Settings save: *"hip hip!"*
+- **TIMING-1** — the Timing pane is readable.
+- **TOUR-1** — the 11-step tour reaches the moneymaker. ⚠️ *Jake: "it skipped
+  the opening screen." **That is correct behaviour, not a miss.** The welcome
+  splash is `showWelcomeSplash()`, which returns early once
+  `onboardingState().splashDone` is set — once per PERSON, not per board. The
+  replay buttons call `startTour(tourId)` directly and deliberately do not
+  re-show it. Only a fresh account sees the splash again.*
+- **RETIER-1 / RETIER-2** — the stranded follow-up walked home; a whole chain
+  moved and landed routable, and the follow-ups materialised when their
+  parents were checked off (D4, working as designed).
+- **DIRTY-2** — *"dirty 2 is clean."* The project form after a NEW project.
+- **FIT-1, FIT-2, TRAY-1** — *"all look good."* Katie's phone in one tap.
+- **IMPORT-2, IMPORT-3** — *"Import is rocking!"* Katie ran it herself, the
+  calendar synced afterwards, and the permissions directions were followed.
+- **HURRAH-2** — *"allows me to make a second task if I choose to, but it does
+  not automatically make one the second time."* ⚠️ That is exactly the
+  `spawnedTaskId` contract: the guard blocks the automatic re-mint, and a
+  deliberate second task stays possible. Passed.
+
+**⚠️ MOVE-4b — behaviour unchanged, and Jake: *"still not what I want."***
+Not a regression and not a new finding: the test asserts today's truth and
+Jake dislikes today's truth. **The fix is the soft delete (handoff §0k.3),
+which is not built.** Do not re-open this as a bug; build §0k.3 or leave it.
+
+---
+
 - **MOVE-4** — the delete confirm named the hours and did not lie. ⚠️ *Passed
   and the behaviour is wrong* — §0k.3.
 - **DASH-FILL-1, 2, 3** — all three. *"The timeline resizes correctly no

@@ -23,6 +23,26 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ---
 
+## 🆕 Soft delete — app 2.2.0 · store 1.3.0 (2026-08-03, Cirrothauma)
+
+§0k.3. A project's ✕ sets `deletedAt`/`deletedBy` instead of destroying the
+document: it leaves the timeline, agenda and project pane, and its sessions and
+ticked stages stay reachable through it. **Not a revert of store 0.28.0** —
+orphaning the ledger and destroying it are both wrong, and soft delete is the
+third answer.
+
+`subscribeProjects` now calls back `(living, all)`. `S.projects` is living;
+`S.projectsAll` includes the binned and is read **only** by the ledger
+(`projName`, Time Report, CSV, the running-timer bar). The confirm copy no
+longer says the hours die, because they do not.
+
+⚠️ Two pieces left on purpose: no restore screen (undo, plus `octodoBinned()`
+from the console — and the dialog promises only what exists), and **the rules
+were not changed**, so the hard delete is still permitted to the same people.
+That needs the emulator. Handoff §0u.
+
+---
+
 ## ✅ SAVE-1 — app 2.1.1 · import-transform 1.0.2 (2026-08-03, Cirrothauma)
 
 `import-transform.js` synthesised a project type with **no `id`**;
@@ -36,6 +56,18 @@ save) and the importer (so future imports never carry it). The same missing id
 also made that pipeline unselectable in New Project, silently.
 
 ---
+
+<!-- store.js 1.1.0 header entry, retired 2026-08-03 (Cirrothauma). Verbatim. -->
+
+```
+1.1.0 — syncOutriders: §0h. A stage anchored outside [startDate, endDate]
+         leaves the pipeline and becomes a task, carrying a ticked stage's
+         completedAt/completedBy VERBATIM. BUILD -> VERIFY -> STRIP, and it
+         refuses to strip anything if any task failed. Idempotent by
+         deterministic task id (out_<projectId>_<sid>), so it is safe to
+         re-run over live data; an existing task is adopted, never
+         overwritten. ⚠️ Imports queue.js so the predicate has one home.
+```
 
 ## 🆕 Outriders — app 2.1.0 · store 1.1.0 · queue 1.1.0 (2026-08-03, Cirrothauma)
 

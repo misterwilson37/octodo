@@ -1,10 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 2.1.1
+// Version 2.2.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
+// 2.2.0 — SOFT DELETE (§0k.3). A project's ✕ removes it from the timeline
+//          and KEEPS its record: sessions, ticked stages, credit. Undo puts
+//          it straight back; octodoBinned() lists and restores from the
+//          console until Settings → Data exists. ⚠️ S.projects is now LIVING
+//          projects and S.projectsAll includes the binned — the Time Report,
+//          projName and the CSV read `All` on purpose, everything else must
+//          not. The confirm copy no longer says the hours die, because they
+//          do not; do not restore the old wording.
 // 2.1.1 — ⚠️ SAVE-1 IS SOLVED, AND IT WAS NEVER ABOUT TIER DAYS. The
 //          importer synthesised a project type with no `id`; the Settings
 //          draft copied `id: undefined` and setDoc refuses undefined. It
@@ -47,7 +55,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "2.1.1";
+export const APP_VERSION = "2.2.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -56,6 +64,7 @@ import {
   subscribeProjects, subscribeStageTemplate,
   addTask, addFollowUp, setTaskDone, deleteTask, updateTask, rewindFollowUps, taskFirstDue,
   addProject, addProjectWithStages, deleteProject, updateProject,
+  softDeleteProject, restoreProject,                                // 1.3.0 — §0k.3
   setStageDone, setStageDue, setProjectStages,
   saveTier, deleteTier, saveConfig, saveStageTemplate,
   subscribeProjectTypes, saveProjectTypes,
@@ -71,7 +80,7 @@ import {
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin, syncOutriders                                                     // 0.25.0
-} from "./store.js?v=1.2.0";
+} from "./store.js?v=1.3.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -401,6 +410,11 @@ function showPopoverHint(hintId) {
 const S = {
   user: null,
   tiers: [], tasks: [], events: [], projects: [], stageTemplate: [], projectTypes: [],
+  // 2.2.0 — §0k.3. `projects` is LIVING projects; `projectsAll` includes
+  // soft-deleted ones and exists for the LEDGER only (Time Report, session
+  // name lookups, CSV). Reading projectsAll on a display surface puts a
+  // binned project back on screen, which is the whole bug this prevents.
+  projectsAll: [],
   boards: [], wsDoc: null, members: [], boardUnsub: null,   // E34
   config: null,
   viewDay: Date.now(),
@@ -1061,7 +1075,7 @@ function subscribeBoard() {
   // there is a beat where the header names Katie's board while the queue is
   // still showing Jake's tasks — which, in an app about accountability, is
   // the single most alarming thing it could briefly display.
-  S.tiers = []; S.tasks = []; S.events = []; S.projects = [];
+  S.tiers = []; S.tasks = []; S.events = []; S.projects = []; S.projectsAll = [];
   S.sessions = []; S.stageTemplate = []; S.projectTypes = [];
   S.members = []; S.wsDoc = null; S.config = null;
   Object.keys(docCensus).forEach(k => { docCensus[k] = 0; });
@@ -1077,7 +1091,7 @@ function subscribeBoard() {
   // DIRTY-1 — suggestProjectColor writes #project-color, which is in the
   // form signature, and bestFreeColor() changes its answer whenever the set
   // of project colours changes. Adding a project therefore manufactured dirt.
-  S.unsubs.push(subscribeProjects(p => { S.projects = p; docCensus.projects = p.length; preservingProjectFormState(suggestProjectColor); render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeProjects((living, all) => { S.projects = living; S.projectsAll = all; docCensus.projects = all.length; preservingProjectFormState(suggestProjectColor); render(); maybeDecisionTime(); }));
   S.unsubs.push(subscribeSessions(s => { S.sessions = s; docCensus.sessions = s.length; render(); }));   // D112
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
   // DIRTY-1 — refreshTypeSelect writes #project-type, also in the signature.
@@ -2025,6 +2039,35 @@ function timelessTier() {
 /** 1.39.0 — the Later horizon, in ms. 0 disables folding entirely, which is
  *  the honest way to say "I want to see everything" without a second flag. */
 /**
+ * ⚠️ 2.2.0 — §0k.3. The bin, until it has a screen.
+ *
+ * Soft delete keeps every removed project, and a record nobody can find is
+ * only marginally better than one that was destroyed. Until Settings → Data
+ * exists, this is how a project comes back.
+ *
+ *   octodoBinned()          → list every removed project, with its id
+ *   octodoBinned("<id>")    → put that one back
+ */
+window.octodoBinned = async function (restoreId) {
+  const binned = (S.projectsAll || []).filter(p => p.deletedAt);
+  if (restoreId) {
+    const p = binned.find(x => x.id === restoreId);
+    if (!p) { console.warn(`[binned] no removed project with id ${restoreId}. Run octodoBinned() to list them.`); return; }
+    await restoreProject(restoreId);
+    console.log(`[binned] restored "${p.name}". Its sessions and ticked stages never went anywhere.`);
+    return;
+  }
+  if (!binned.length) { console.log("[binned] nothing has been removed."); return; }
+  console.log(`[binned] ${binned.length} removed project(s):`);
+  for (const p of binned) {
+    const hrs = S.sessions.filter(x => x.projectId === p.id).length;
+    console.log(`  ${p.id}  "${p.name}"  removed ${new Date(p.deletedAt).toLocaleString()}` +
+                `${p.deletedBy ? ` by ${p.deletedBy}` : ""}${hrs ? `  · ${hrs} session(s) still counted` : ""}`);
+  }
+  console.log('[binned] octodoBinned("<id>") puts one back.');
+};
+
+/**
  * ⚠️ 2.1.0 — THE ONE-OFF MIGRATION, §0h. Katie has live projects whose
  * pipelines already contain outrider stages, some of them already ticked.
  *
@@ -2585,7 +2628,12 @@ function openSessionNow() {
   const me = currentEmail();
   return S.sessions.find(s => s.end == null && (s.createdBy || "") === me) || null;
 }
-function projName(id) { return S.projects.find(x => x.id === id)?.name || "another project"; }
+/** ⚠️ 2.2.0 — READS projectsAll ON PURPOSE. A session outlives its project
+ *  now (§0k.3), and a binned project still owns its hours. Resolving only
+ *  living projects here would print "another project" against real logged
+ *  time — the orphaned-ledger failure 0.28.0 was written to stop, arriving
+ *  by a different door. */
+function projName(id) { return (S.projectsAll || S.projects).find(x => x.id === id)?.name || "another project"; }
 
 /** D126 — a project's date range as text, or "Someday" for a timeless
  *  (null-dated) want-to. Every place that used to write fmtDay(p.startDate)
@@ -2715,7 +2763,7 @@ function openTimeReport(projectId = null) {
 function renderReportFilterHint() {
   const hint = $("#report-project-filter");
   if (!reportProjectId) { hint.hidden = true; hint.innerHTML = ""; return; }
-  const name = S.projects.find(p => p.id === reportProjectId)?.name || "this project";
+  const name = (S.projectsAll || S.projects).find(p => p.id === reportProjectId)?.name || "this project";
   hint.hidden = false;
   hint.innerHTML = `Showing <strong>${esc(name)}</strong> only. `;
   const clear = document.createElement("button");
@@ -2745,7 +2793,8 @@ function renderTimeReport() {
 
   const granularity = $("#report-granularity").value || "month";
   const rollup = rollupSessions({
-    sessions: S.sessions, projects: S.projects,
+    // 2.2.0 — the ledger sees everything, including binned projects (§0k.3).
+    sessions: S.sessions, projects: S.projectsAll,
     rangeStart, rangeEnd, granularity,
     projectId: reportProjectId, now: Date.now()
   });
@@ -2810,7 +2859,7 @@ function exportReportRawCSV() {
     (!reportProjectId || s.projectId === reportProjectId) &&
     s.start < rangeEnd && (s.end ?? Date.now()) > rangeStart);
   if (!raw.length) return;
-  downloadCSV(sessionsToCSV(raw, S.projects), `tentacalendar-raw-sessions-${startVal}-to-${endVal}.csv`);
+  downloadCSV(sessionsToCSV(raw, S.projectsAll), `tentacalendar-raw-sessions-${startVal}-to-${endVal}.csv`);
 }
 
 function renderProjects(now) {
@@ -2877,7 +2926,7 @@ function renderProjects(now) {
   {
     const os = openSessionNow();
     if (os) {
-      const p = S.projects.find(x => x.id === os.projectId);
+      const p = (S.projectsAll || S.projects).find(x => x.id === os.projectId);   // 2.2.0 — a running timer survives a bin
       const color = p?.color || "#4dd0c4";
       const bar = document.createElement("div");
       bar.className = "now-bar";
@@ -2971,17 +3020,38 @@ function projectCard(p) {
   btns.append(
     iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
     iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
-    iconBtn("✕", "Delete project", () => {
-      // 1.38.0 — say what else goes. store 0.28.0 deletes the clocked time
-      // with the project (it was being orphaned before), and time somebody
-      // spent is exactly the thing you want warned about before it goes.
+    iconBtn("✕", "Remove this project from the timeline (its record is kept)", () => {
+      // ⚠️ 2.2.0 — §0k.3. THIS NO LONGER DESTROYS ANYTHING.
+      //
+      // 1.38.0's version warned that the clocked time was about to die, which
+      // was honest and was the problem: Jake, on a SHARED project, "John can
+      // be pissed at Susan and delete a whole project worth of work (and
+      // credit!) with the click of a button." A warning does not fix a verb
+      // that should not exist on that button.
+      //
+      // So the copy changes with the behaviour. It still NAMES the hours —
+      // that is what tells you this is the project you meant — but it now
+      // promises they are kept, because they are. Do not restore the old
+      // "cannot be recovered" wording; it would be a lie in the other
+      // direction, and a scary-but-false warning teaches people to click
+      // through warnings.
       const logged = S.sessions.filter(x => x.projectId === p.id);
       const mins = Math.round(logged.reduce((t, x) => t + ((x.end ?? Date.now()) - x.start), 0) / 60000);
       const extra = logged.length
-        ? `\n\nThis also deletes ${logged.length} time session${logged.length === 1 ? "" : "s"}` +
-          `${mins > 0 ? ` (${fmtHoursTotal(mins * 60000)})` : ""}. That record cannot be recovered.`
-        : "";
-      if (confirm(`Delete project "${p.name}" and its pipeline?${extra}`)) deleteProject(p.id);
+        ? `\n\nIts ${logged.length} time session${logged.length === 1 ? "" : "s"}` +
+          `${mins > 0 ? ` (${fmtHoursTotal(mins * 60000)})` : ""} and every ticked stage are KEPT` +
+          ` and still counted in the Time Report.`
+        : "\n\nAny ticked stages are kept.";
+      // ⚠️ The copy promises only what exists. There is no restore SCREEN yet
+      // (§0k.3 remainder); there is undo, and there is octodoBinned() from the
+      // console. Promising a Settings tab that is not built is how a user
+      // learns not to believe the dialogs.
+      if (confirm(`Remove "${p.name}" from the timeline?${extra}\n\nUndo (↶) puts it straight back.`)) {
+        // D116 — undo, because this is now a reversible verb and undo is
+        // cheaper than hunting for the restore screen.
+        pushUndo("remove project", () => restoreProject(p.id), () => softDeleteProject(p.id));
+        softDeleteProject(p.id);
+      }
     })
   );
   head.append(chev, nameEl, btns);

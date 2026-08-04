@@ -1,10 +1,20 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 1.2.0
+// Version 1.3.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
+// 1.3.0 — SOFT DELETE (§0k.3). A project's ✕ now sets deletedAt/deletedBy
+//          instead of destroying the document. It leaves the timeline, the
+//          agenda and the project pane; its sessions and ticked stages stay
+//          reachable THROUGH it, so the Time Report and whereis still total
+//          honestly and nobody's work or credit dies to somebody else's bad
+//          afternoon. ⚠️ NOT a revert of 0.28.0: orphaning the ledger and
+//          destroying it are both wrong. subscribeProjects now calls back
+//          with (living, all) — take `living` unless you ARE the ledger.
+//          restoreProject undoes it; deleteProject still exists as the rare
+//          permanent path and is gated on canSetUp().
 // 1.2.0 — syncOutriders NOW STAMPS MISSING SIDS BEFORE IT SPLITS, and
 //          without this the whole of 1.1.0 was a no-op on Katie's board.
 //          import-transform.js rebuilds stages from an explicit field list
@@ -14,13 +24,8 @@
 //          caught it in the dry run. Stamping is additive, is confirmed
 //          before any task is spawned, and repairs live projects that a fix
 //          to the importer could never reach.
-// 1.1.0 — syncOutriders: §0h. A stage anchored outside [startDate, endDate]
-//          leaves the pipeline and becomes a task, carrying a ticked stage's
-//          completedAt/completedBy VERBATIM. BUILD -> VERIFY -> STRIP, and it
-//          refuses to strip anything if any task failed. Idempotent by
-//          deterministic task id (out_<projectId>_<sid>), so it is safe to
-//          re-run over live data; an existing task is adopted, never
-//          overwritten. ⚠️ Imports queue.js so the predicate has one home.
+// 1.1.0 — see CHANGELOG.md.
+//
 // 1.0.0 — FIRST STABLE. Katie migrated on 2026-08-02 — 245 documents, one
 //          run, no rehearsal — so this file has been the only thing standing
 //          between a real person and her data for a full day. 0.y.z means
@@ -49,7 +54,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "1.2.0";
+export const STORE_VERSION = "1.3.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -2115,13 +2120,30 @@ export function restoreDoc(collName, id, data) {
   return setDoc(docIn(collName, id), data);
 }
 
+/**
+ * ⚠️ 1.3.0 — TWO LISTS, AND WHICH ONE YOU TAKE IS A DECISION.
+ *
+ * The callback now receives `(living, all)`. `living` excludes soft-deleted
+ * projects; `all` includes them.
+ *
+ * **Default to `living`.** Every display surface — timeline, agenda, project
+ * pane, queue, pickers — wants it, and a surface that accidentally uses `all`
+ * shows a project the user has binned, which is the bug this feature exists
+ * to prevent. Making `living` the FIRST argument is deliberate: a caller who
+ * writes `cb(p => …)` and thinks no further gets the safe one.
+ *
+ * **`all` is for the LEDGER only** — the Time Report, session name lookups,
+ * `whereis`, CSV export. Those must resolve a deleted project's name or the
+ * record reads "another project", which is precisely the orphaned-ledger
+ * failure 0.28.0 was written to stop. A binned project still owns its hours.
+ */
 export function subscribeProjects(cb) {
   return fanout("projects",
     (wsId, push) => [watchCol(colIn(wsId, "projects"), snap =>
       push(snap.docs.map(d => ({ id: d.id, ...d.data() }))), "project")],
     projects => {
       projects.sort((a, b) => (a.startDate || 0) - (b.startDate || 0));
-      cb(projects);
+      cb(projects.filter(p => !p.deletedAt), projects);
     });
 }
 
@@ -2263,6 +2285,48 @@ export async function addProjectWithStages({ name, color, startDate, endDate, ti
 }
 
 /**
+ * ⚠️ 1.3.0 — SOFT DELETE. §0k.3, and Jake's reason for it verbatim:
+ *
+ *   "I think historical data should stay there no matter what, as work clocked
+ *    happened and checkboxes happened, even if the project gets deleted from
+ *    the timeline. I really don't like it on shared projects, as John can be
+ *    pissed at Susan and delete a whole project worth of work (and credit!)
+ *    with the click of a button."
+ *
+ * The project document STAYS, flagged. It leaves the timeline, the agenda and
+ * the project pane; its sessions and stage completions stay reachable THROUGH
+ * it, so the Time Report and `whereis` still total honestly and no row is
+ * orphaned. Nothing anybody did is destroyed by somebody else's bad afternoon.
+ *
+ * ⚠️ THIS IS NOT A REVERT OF 0.28.0 AND MUST NOT BECOME ONE. `deleteProject`
+ * started taking its sessions BECAUSE it did not: the 07-31 scan found an
+ * 8:02 PM session whose project was gone, unreachable from every surface and
+ * invisible to both accounts holding keys to that board. **Orphaning the
+ * ledger and destroying the ledger are both wrong, and neither is the other's
+ * fix.** Soft delete is the third answer: the ledger keeps its parent, and
+ * the parent keeps out of the way.
+ *
+ * `deletedAt`/`deletedBy` rather than a boolean, deliberately — "when, and by
+ * whom" is the question anybody asks about a vanished project, and a boolean
+ * cannot answer it. Same shape as `completedAt`/`completedBy` (E9).
+ */
+export async function softDeleteProject(projectId) {
+  return updateDoc(docIn("projects", projectId), {
+    deletedAt: Date.now(),
+    deletedBy: whoami()
+  });
+}
+
+/** Undo a soft delete. The project returns with its sessions and its ticked
+ *  stages intact, because none of them ever went anywhere. */
+export async function restoreProject(projectId) {
+  return updateDoc(docIn("projects", projectId), {
+    deletedAt: null,
+    deletedBy: null
+  });
+}
+
+/**
  * ⚠️ 0.28.0 — DELETING A PROJECT TAKES ITS CLOCKED TIME WITH IT.
  *
  * This used to delete one document. Sessions carry `projectId` and nothing
@@ -2278,6 +2342,13 @@ export async function addProjectWithStages({ name, color, startDate, endDate, ti
  * Deleted rather than re-homed, deliberately: the time was spent on a thing
  * the user has just said they no longer want a record of, and a session with
  * no project cannot be displayed, exported or attributed.
+ *
+ * ⚠️ 1.3.0 — THIS IS NOW THE RARE PATH, NOT THE BUTTON. The ✕ on a project
+ * card calls `softDeleteProject`. This one genuinely destroys the record and
+ * should only ever be reached from a deliberate "delete permanently" on an
+ * already-binned project. The callers' gate is `canSetUp()` — owner or editor
+ * — because §0k.3 says a hard delete is an owner's verb and a soft one need
+ * not be. **The rules must agree; a UI-only gate is not a permission.**
  */
 export async function deleteProject(projectId) {
   const home = wsOf("projects", projectId);

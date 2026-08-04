@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Versions** | app 2.1.1 · store 1.2.0 · queue 1.1.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.2 · css 0.59.4 · html 0.51.20 · import.html 1.0.2 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.0.0 · version-check 1.7.0 · manifest 0.2.0 |
+| **Versions** | app 2.2.0 · store 1.3.0 · queue 1.1.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.2 · css 0.59.4 · html 0.51.21 · import.html 1.0.2 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.0.0 · version-check 1.7.0 · manifest 0.2.0 |
 | ⚠️ **THERE IS NO STAGING** | **Handing Jake a file IS deploying it.** He uploads each drop to the GitHub web portal as it arrives; Pages serves `main`; the app is live at that moment. There is no review branch, no soak, no staging URL. **Anything in this repo is what Katie is running right now.** See the box below — this cost a whole session of wrong advice.
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **DEPLOYED ≠ EXERCISED, AND BOTH ARE TRUE OF EVERYTHING HERE.** Every file is live and Katie used the app all day; `TESTS.md` START HERE still holds 20 items nobody has deliberately walked. **SAVE-1 first** — an unexplained crash that is now merely *visible*. Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
@@ -1153,6 +1153,72 @@ repoints. **One sentence from him closes this either way; do not infer it.**
 
 ---
 
+---
+
+### 0u. ✅ SOFT DELETE — §0k.3 BUILT, WITH TWO PIECES DELIBERATELY LEFT
+
+**app 2.2.0 · store 1.3.0 · 2026-08-03**
+
+Jake's reason, verbatim, because it is the spec:
+
+> *"I think historical data should stay there no matter what, as work clocked
+> happened and checkboxes happened, even if the project gets deleted from the
+> timeline. I really don't like it on shared projects, as John can be pissed
+> at Susan and delete a whole project worth of work (and credit!) with the
+> click of a button."*
+
+A project's ✕ now sets `deletedAt`/`deletedBy` instead of destroying the
+document. It leaves the timeline, agenda and project pane; its sessions and
+ticked stages stay reachable **through** it.
+
+⚠️ **THIS IS NOT A REVERT OF store 0.28.0, AND A SUCCESSOR WILL BE TEMPTED TO
+READ IT AS ONE.** `deleteProject` started taking its sessions *because* it did
+not — the 07-31 scan found an 8:02 PM session whose project was gone and which
+was unreachable from every surface. **Orphaning the ledger and destroying the
+ledger are both wrong, and neither is the other's fix.** Soft delete is the
+third answer: the ledger keeps its parent, and the parent keeps out of the way.
+
+#### ⚠️ TWO LISTS NOW, AND PICKING THE WRONG ONE IS THE WHOLE FAILURE MODE
+
+`subscribeProjects` calls back with **`(living, all)`**.
+
+| List | Who reads it |
+|---|---|
+| `S.projects` — **living only** | Everything you can see: timeline, agenda, project pane, queue, pickers. **The default.** |
+| `S.projectsAll` — **includes binned** | The LEDGER only: `projName()`, the Time Report rollup, the CSV export, the running-timer NOW bar. |
+
+`living` is the FIRST callback argument on purpose: a caller who writes
+`cb(p => …)` without thinking gets the safe one. **A display surface reading
+`projectsAll` puts a binned project back on screen — the exact bug this
+prevents.** A ledger surface reading `projects` prints *"another project"*
+against real logged hours, which is 0.28.0's orphan failure by another door.
+
+#### The copy changed because the behaviour did
+
+1.38.0's confirm warned the hours *"cannot be recovered"* — honest then, a lie
+now. It still names the hours (that is what tells you it is the right project)
+but promises they are kept. ⚠️ **Do not restore the old wording.** A
+scary-but-false warning teaches people to click through warnings.
+
+#### ⚠️ NOT DONE — BOTH ON PURPOSE, BOTH SMALL
+
+1. **No restore SCREEN.** There is undo (↶), and `octodoBinned()` from the
+   console lists every removed project with its id, `octodoBinned("<id>")`
+   puts one back. **The confirm dialog promises only undo**, because promising
+   a "Settings → Data" tab that does not exist is how a user learns to stop
+   believing dialogs. Building that tab is the obvious next slice.
+2. **⚠️ THE RULES WERE NOT CHANGED, so `deleteProject` is still permitted to
+   the same people it always was.** §0k.3 wants the hard delete to be an
+   owner's verb. That is a rules change, and **rules changes run through
+   `rules-test/` BEFORE the console** (1.2.0/1.2.1's mistake). The emulator is
+   not reachable from this session, so shipping an unverified rules edit would
+   be exactly the failure the discipline exists to stop. **Today the ✕ button
+   no longer calls the hard delete at all, so the exposure is much smaller —
+   but it is not closed, and it should not be recorded as closed.**
+   ⚠️ This is also where **TIER-MEMBER-ROLES** belongs. Do them together.
+
+---
+
 ### 0t. ✅ SAVE-1, SOLVED — and why four correct analyses missed it
 
 **app 2.1.1 · import-transform 1.0.2 · 2026-08-03**
@@ -2037,6 +2103,8 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-08-03 | Opus 5 · **Cirrothauma** (sixth sitting) | **SOFT DELETE — §0k.3 BUILT (app 2.2.0 · store 1.3.0), §0u.** A project's ✕ sets `deletedAt`/`deletedBy` instead of destroying the document; sessions and ticked stages stay reachable through it, so nobody's work or credit dies to somebody else's bad afternoon. **⚠️ NOT a revert of 0.28.0 and a successor will read it as one** — orphaning the ledger and destroying it are both wrong, and this is the third answer. **The design decision worth inheriting: `subscribeProjects` now calls back `(living, all)`, with `living` FIRST so a thoughtless caller gets the safe list.** `S.projects` is living and drives every display surface; `S.projectsAll` includes the binned and is read by exactly six ledger sites (`projName`, the report name, the rollup, the CSV, the running-timer bar, `octodoBinned`). Each was audited by line. A display surface reading `projectsAll` re-shows a binned project; a ledger surface reading `projects` prints "another project" against real hours, which is 0.28.0's orphan failure by another door. **The confirm copy changed with the behaviour** — it still names the hours, because that is what identifies the right project, but no longer says they cannot be recovered, because that is now false and a scary-but-false warning teaches people to click through warnings. **⚠️ TWO PIECES LEFT DELIBERATELY, both recorded rather than quietly skipped:** (1) no restore SCREEN — there is undo and `octodoBinned()`, and **the dialog promises only undo**, because promising a Settings tab that does not exist is how a user stops believing dialogs; (2) **the RULES were not changed**, so the hard delete is still permitted to the same people it always was. §0k.3 wants it owner-only, that is a rules change, and rules changes run through `rules-test/` before the console per 1.2.0/1.2.1's mistake — the emulator was not reachable here. **§0k.3 must not be recorded as fully closed until HARDDEL-RULES lands, ideally together with TIER-MEMBER-ROLES.** |
+| 2026-08-03 | Opus 5 · **Cirrothauma** (fifth sitting) | **THE ACCEPTANCE RUN. Jake walked the list and TESTS.md is now nearly empty.** Passing: TIMING-1, TOUR-1, RETIER-1/2, DIRTY-2, FIT-1, FIT-2, TRAY-1, IMPORT-2, IMPORT-3, HURRAH-2 — on top of HURRAH-4/5, TOUR-REPLAY-1, DATE-1, HEADER-1 and SAVE-1 from the sitting before. **Settings save, and the calendar synced after the import.** ⚠️ **He also caught me leaving the passed items sitting in START HERE** — I had marked them and not removed them, which is how a test list stops being trusted. START HERE is now rebuilt to the FOUR things actually outstanding (the outrider sweep, OUTRIDER-1, SAVE-2 as a fresh regression test, and a new SAVE-3 for the healed project type) plus HURRAH-3. **Two judgement calls recorded rather than silently accepted:** (1) *"tour 1 skipped the opening screen"* is CORRECT behaviour — `showWelcomeSplash()` returns early once `onboardingState().splashDone` is set, once per person, and the replay buttons call `startTour()` directly on purpose; only a fresh account sees the splash. I did NOT write that tour copy — a predecessor did in 1.45.0 — and said so rather than accept the credit. (2) *"MOVE-4b is still not what I want"* is not a regression: the test asserts today's truth and Jake dislikes today's truth. **The answer is §0k.3's soft delete, which is unbuilt** — it should not be re-opened as a bug. **HURRAH-2's result is worth reading closely:** the guard blocks the automatic re-mint while leaving a deliberate second task possible, which is exactly the `spawnedTaskId` contract. |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (fourth sitting) | **SAVE-1 SOLVED, plus HURRAH-4/5, TOUR-REPLAY, DATE-1 and HEADER-1 confirmed passing by Jake.** He typed the toast out by hand — no screenshot available — and one line ended two days of theories: *setDoc … Unsupported field value: undefined … settings/projectTypes*. **`import-transform.js` synthesised a project type from the 1.x anonymous stage template and gave it no `id`.** app.js's Settings draft copies `{ id: t.id, … }`, so that entry became `id: undefined`, and setDoc refuses it. **⚠️ THE REASON FOUR SESSIONS MISSED IT: the draft is built when Settings OPENS and written on EVERY save, whatever tab was touched.** Changing a tier's days was the occasion and never the cause, so every correct reading of the tier-save path was a correct reading of code that was not throwing. Jake's standing rule — *when a report doesn't match the code, stop and ask for the readout* — is now vindicated in the strongest possible terms. **Second defect nobody had reported:** the id-less type made the New Project selector render `value="undefined"`, which matched nothing when picked and fell through to the default template silently — it looked like a wrong default, not a failure. **Fixed in BOTH places deliberately:** app.js mints an id for any type lacking one, which heals Katie's already-imported document on her next save (the importer alone cannot reach it), and the importer is fixed so future boards never carry the landmine. `newTypeId()` is now the single minter and a hoisted declaration. **Third instance in three days of the same error shape: verifying a mechanism without checking the population it runs against** — the audit skipped a directory, the sweep skipped where the data came from, and this skipped where the document was assembled. |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (third sitting) | **store 1.2.0 — THE OUTRIDER SWEEP DID NOT WORK AND JAKE FOUND IT BY READING.** He asked what NO SID meant and said *"They all look like what would turn into tasks to me."* He was right. **`import-transform.js` rebuilds every stage from an explicit field list that omits `sid` — the word does not appear anywhere in that file — so every stage that came through the 1.x import has none.** 1.1.0 skipped sid-less stages on purpose, to stop a second run minting duplicate tasks; the consequence I did not trace is that it would have skipped **all seventeen of Katie's imported projects, i.e. the entire set §0h exists to migrate.** The feature would have reported success and moved nothing. `syncOutriders` now stamps missing sids and **confirms that write before spawning anything**, so the deterministic id has something stable underneath it; stamping is additive and repairs projects that are already live, which a fix to the importer could never reach. The `skipped` refusal is KEPT though it should now be unreachable — a stage with no sid must never be guessed at. **The pattern, third instance in three days: I verified the mechanism and not the population it would run against.** §0r's wrong finding skipped a directory; this skipped the question *where did this data come from*. Both times the code was correct about itself and wrong about the world, and both times the check that would have caught it was one grep in a file I had already opened. |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (same instance, second sitting) | **OUTRIDERS BUILT (§0h → §0s).** Katie's rule: a project's pipeline is what happens DURING the project; anything anchored outside the window is a task. **§0h was right that this is mostly deletion** — the predicate is a comparison against dates `stageEffectiveDate` already computed, and the biggest single change is that `isLater` measures `startDate` again and the pipeline-window branch is gone. **Three files, one rule, one home:** the predicate (`isOutrider`/`splitOutriders`) lives in `queue.js` and nothing else does date maths — **`store.js` now imports `queue.js`** rather than keeping its own opinion, which is the direct lesson of `tierSkinOf`. **The write path is the careful part:** build → verify → strip, and it **refuses to strip anything if a single task write failed**, because a project still showing a −14d stage is fixable and one missing both stage and task is not. **Idempotent by deterministic id `out_<projectId>_<sid>` rather than by a `spawnedTaskId` guard** — the hurrah needs that guard because it mints an auto id at tick time; copying it here would have been a second authority answering the same question. Ticked outriders become COMPLETED tasks carrying their original `completedAt`/`completedBy`, never re-stamped. `outrider.test.mjs`, **24 assertions, imported directly from `queue.js`** — the first suite here that doesn't extract from source text, which is only possible because queue.js still imports nothing. Boundary cases are the bulk of it: a stage ON the start day must stay (DEADLINE_HOUR vs midnight would evict it), an UNDATED stage is never an outrider, and a TIMELESS project keeps its whole pipeline. **Three defects in my own first wiring, all caught before delivery: I called an `alertBar()` that does not exist** (the real one is `showToast`), **read `S.editingProjectId` after `cancelProjectEdit` had nulled it**, and missed the stage-edit path entirely. All three were invented-from-memory API rather than looked-up API — the same failure as §0r's wrong finding, one turn later. **⚠️ NOT DONE: the sweep over Katie's live data.** `octodoOutriders()` dry-runs, `{go:1}` applies, once per board, console only — a button would be a mis-click that writes to every project. Until it runs, her older projects still show outriders and count them in x/y. |
