@@ -1,11 +1,24 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 1.1.0
+// Version 1.2.0
 //
 // Pure scheduling logic: priority, pipelines, week and clock geometry,
 // holidays. Has never known Firestore exists — that is why it is testable.
 //
 // RECENT:
+// 1.2.0 — FOLLOW-UPS WAIT FOR THE REAL FINISH. waitsForFinish,
+//          projectFinishedAt, afterFinishDue, allowedDaysBetween,
+//          outriderStageFromTask, repegPlan: pure answers for store.js's
+//          "after end" outriders, which now sit in Waiting until the project
+//          is finished and then date from THAT day, not the planned end.
+//          Also: addAllowedDays steps CALENDAR days (was 24h — double-counted
+//          the Sunday the clocks go back, on 7-day tiers).
+// 1.1.1 — ⚠️ WAITING ON… NO LONGER FILLS UP EVERY WEEKEND. 0.21.0 checked
+//          "is this tier off today?" BEFORE "is this task due today?", so on
+//          a Saturday every dated task of every Mon–Fri tier went to Waiting,
+//          due dates weeks away included. Katie: "'Waiting on' tasks seem to
+//          only appear on weekends." Only a task dated TO the off day goes
+//          there now — the one case 0.21.0 was written for. waiting.test.mjs.
 // 1.1.0 — OUTRIDERS. `isOutrider` / `splitOutriders`: a stage whose computed
 //          date falls outside [startDate, endDate] is not a pipeline step,
 //          it is a task. Pure predicate only — store.syncOutriders does the
@@ -13,21 +26,6 @@
 //          own dates, which is the intended consequence and not a regression.
 //          ⚠️ An UNDATED stage is never an outrider, nor is any stage of a
 //          timeless project: null means "not on the calendar", not "outside".
-// 1.0.0 — FIRST STABLE. Not a rewrite: a declaration. This file has run a
-//          real person's day since Katie migrated on 2026-08-02, and 0.y.z
-//          means "the shape may still change," which stopped being true.
-//          Five DEAD functions removed in the same breath, because a 1.0
-//          promises an API and these were never part of one:
-//            · getDeadlineHour, getClearDeckThreshold — setters got wired,
-//              getters never did. Both values are read through the module
-//              locals by the functions that need them.
-//            · isWeekend, addWeekdays, weekendNeighbors — pre-D60 Mon–Fri
-//              wrappers. D60 replaced the weekend CONCEPT with per-tier
-//              allowedDays (isDayAllowed / addAllowedDays / allowedNeighbors)
-//              and these three were left behind describing a rule the app no
-//              longer has. Nothing called them, here or anywhere.
-//          WEEKDAYS is no longer exported — it survives as the Mon–Fri
-//          default inside allowedSet, which is its only remaining reader.
 // 0.21.0 — A DATED TASK NO LONGER VANISHES ON ITS TIER'S OFF DAY. D61's
 //          `continue` dropped it from active AND waiting AND everything —
 //          a Work task dated to a Saturday existed in Firestore and appeared
@@ -35,7 +33,7 @@
 //          (Work must not nag on a Saturday) is kept; it now goes to WAITING
 //          carrying `offDay: true` so the UI can say why. "Don't nag" and
 //          "cannot be reached" are different things.
-// 0.20.0 — see CHANGELOG.md.
+// 1.0.0, 0.20.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -44,7 +42,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const QUEUE_VERSION = "1.1.0";
+export const QUEUE_VERSION = "1.2.0";
 
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -107,14 +105,19 @@ export function isDayAllowed(ts, allowedDays) {
 export function addAllowedDays(ts, n, allowedDays) {
   if (!n) return ts;
   const ok = allowedSet(allowedDays);
-  let t = ts;
-  const step = n > 0 ? DAY_MS : -DAY_MS;
+  // ⚠️ 1.2.0 — CALENDAR days, not 24-hour steps. On the night the clocks go
+  // back, midnight + 24h is 11 PM the SAME Sunday, so a 7-day tier counted
+  // that Sunday twice and every date computed across the first weekend of
+  // November landed a day early. Found by waiting.test's sibling running in
+  // Central time instead of the sandbox's UTC, where it cannot happen.
+  const d = new Date(ts);
+  const step = n > 0 ? 1 : -1;
   let left = Math.abs(n), guard = 0;
   while (left > 0 && guard++ < 4000) {
-    t += step;
-    if (ok.has(new Date(t).getDay())) left--;
+    d.setDate(d.getDate() + step);
+    if (ok.has(d.getDay())) left--;
   }
-  return t;
+  return d.getTime();
 }
 
 /** Nearest allowed day at-or-before / at-or-after ts (for the date
@@ -322,6 +325,117 @@ export function nextDeadline(project, allowedDays) {
   return best; // null = no dated incomplete stages (caller falls back to project end)
 }
 
+/**
+ * ⚠️ 1.2.0 — FOLLOW-UPS PEGGED TO THE DAY YOU ACTUALLY FINISH. Katie:
+ *
+ *   "If I want to send an invoice or check in on whether they're ready to
+ *    finalize, I want that linked to the day I actually publish."
+ *
+ * 1.1.0 turned every outrider into a DATED task at the moment it left the
+ * pipeline, and for a stage anchored "after end" that date came from the
+ * PLANNED end. A project that published a week late had its invoice nagging
+ * a week early; one that published early waited for no reason.
+ *
+ * So an "after end" outrider now WAITS (dueAt null, "Waiting on…") until the
+ * project is finished, and then dates itself from that day. "Before start"
+ * outriders are untouched — the start of a project is a plan you work toward,
+ * and there is no later, truer date for it to wait for.
+ *
+ * These are pure; store.js does the writing and asks these the questions.
+ */
+
+/** Does this stage, once it is an outrider, wait for the finish? Only
+ *  "after END" with no hard due. A stage with a hand-set ⏰ date keeps it —
+ *  somebody chose that date on purpose. "After START" stays a plan. */
+export function waitsForFinish(stage) {
+  const s = normalizeStage(stage);
+  return s.dueAt == null && s.direction === "after" && s.anchor === "end";
+}
+
+/** The moment a project counts as FINISHED for its follow-ups, or null.
+ *  With a 🎆 stage, that stage's tick is the finish (D109: publishing is the
+ *  party, the rest is paperwork) — even if later stages are still open.
+ *  Without one, the last tick, i.e. the project's own completedAt. */
+export function projectFinishedAt(project) {
+  const stages = project.stages || [];
+  const h = stages.find(s => s && s.hurrah);
+  if (h) return h.completedAt ?? null;
+  if (!stages.length) return project.completedAt ?? null;
+  return stages.every(s => s.completedAt) ? (project.completedAt ?? Math.max(...stages.map(s => s.completedAt))) : null;
+}
+
+/** "+N working days after the finish", at the deadline hour — the same
+ *  arithmetic an after-end stage always used, with the finish day standing
+ *  in for the planned end. Built ON stageScheduledAt so the two can never
+ *  disagree about what a working day or a deadline hour is (D103). */
+export function afterFinishDue(finishAt, offsetDays, allowedDays) {
+  const day = startOfDay(finishAt);
+  return stageScheduledAt({ startDate: day, endDate: day },
+    { direction: "after", anchor: "end", offsetDays: offsetDays || 0 }, allowedDays);
+}
+
+/** Allowed days strictly after `from` up to and including `to` — the
+ *  inverse of addAllowedDays for a forward step. 0 when `to` is not later. */
+export function allowedDaysBetween(from, to, allowedDays) {
+  const a = startOfDay(from), b = startOfDay(to);
+  let n = 0, t = a, guard = 0;
+  while (t < b && guard++ < 4000) {
+    t = startOfDay(t + DAY_MS + 3 * 3600000);   // +27h then floor: DST-safe
+    if (isDayAllowed(t, allowedDays)) n++;
+  }
+  return n;
+}
+
+/**
+ * Rebuild the stage a 1.1.0 outrider task came from. Tasks made from 1.2.0
+ * on carry `fromStage`; the ones already on Katie's board do not, but their
+ * date was COMPUTED from the stage, so it can be read backwards exactly —
+ * unless somebody has since moved the task, in which case the rebuilt stage
+ * matches where the task is now, which is the better answer anyway.
+ * Returns null when the task cannot have been an outrider of this project.
+ */
+export function outriderStageFromTask(project, task, allowedDays) {
+  if (task.fromStage) return { ...task.fromStage };
+  if (project.startDate == null || project.endDate == null) return null;
+  const due = task.dueAt ?? task.afterProjectDueSet ?? null;
+  const suffix = ` — ${project.name}`;
+  const name = String(task.title || "").endsWith(suffix)
+    ? task.title.slice(0, -suffix.length) : String(task.title || "Untitled stage");
+  if (task.afterProjectWd != null) {
+    return { name, direction: "after", anchor: "end", offsetDays: task.afterProjectWd };
+  }
+  if (due == null) return null;
+  if (startOfDay(due) > startOfDay(project.endDate)) {
+    return { name, direction: "after", anchor: "end",
+             offsetDays: allowedDaysBetween(project.endDate, due, allowedDays) };
+  }
+  if (startOfDay(due) < startOfDay(project.startDate)) {
+    return { name, direction: "before", anchor: "start",
+             offsetDays: allowedDaysBetween(due, project.startDate, allowedDays) };
+  }
+  return null;
+}
+
+/**
+ * What the one-time re-peg does to ONE existing outrider task (1.1.0 shape).
+ *   { action: "skip" }                       — not ours to touch
+ *   { action: "wait",  wd }                  — project not finished: → Waiting
+ *   { action: "date",  wd, dueAt, finishAt } — finished: date from the finish
+ * ⚠️ Completed tasks are ALWAYS skipped — they happened. So is anything that
+ * already carries `afterProjectId` (it is the new shape, and re-running must
+ * be a no-op), and anything dated inside or before the window (a before-start
+ * outrider is a plan, not a follow-up).
+ */
+export function repegPlan(project, task, allowedDays) {
+  if (!task || task.completedAt || task.afterProjectId) return { action: "skip" };
+  if (project.startDate == null || project.endDate == null || task.dueAt == null) return { action: "skip" };
+  if (startOfDay(task.dueAt) <= startOfDay(project.endDate)) return { action: "skip" };
+  const wd = allowedDaysBetween(project.endDate, task.dueAt, allowedDays);
+  const finishAt = projectFinishedAt(project);
+  if (finishAt == null) return { action: "wait", wd };
+  return { action: "date", wd, finishAt, dueAt: afterFinishDue(finishAt, wd, allowedDays) };
+}
+
 export function projectProgress(project) {
   const stages = project.stages || [];
   if (!stages.length) return { done: 0, total: 0, pct: 0 };
@@ -521,9 +635,27 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
      * checkable, not shouting — carrying `offDay` so the UI can say why it
      * is there rather than leaving it looking like an undated stray.
      */
-    if (offDay(t.tierId)) { waiting.push({ ...t, offDay: true }); continue; } // D61
     const dueThisDay = t.dueAt >= dayStart && t.dueAt < dayEnd;
     const overdueIntoToday = viewingToday && t.dueAt < dayStart;
+    /**
+     * ⚠️ 1.1.1 — 0.21.0 PARKED THE WHOLE TIER, NOT THE ONE TASK. Katie:
+     * *"'Waiting on' tasks seem to only appear on weekends."* They did. The
+     * off-day test ran BEFORE the is-this-task-due-today test, so on a
+     * Saturday every undone, dated task of every Mon–Fri tier — due next
+     * Tuesday, due in March — was pushed into Waiting with a line claiming
+     * its tier "doesn't run that day." On a weekday none of them were, so
+     * the section appeared every weekend and vanished every Monday.
+     *
+     * 0.21.0's rescue was for exactly one case: a task DATED TO the off day,
+     * which otherwise appeared on no screen. That is `dueThisDay`, and only
+     * that case goes to Waiting now. Everything else on an off-day tier is
+     * skipped exactly as D61 always meant — including overdue work, which
+     * does not nag on a Saturday and is back in the queue on Monday.
+     */
+    if (offDay(t.tierId)) {                                                     // D61
+      if (dueThisDay) waiting.push({ ...t, offDay: true });
+      continue;
+    }
     if (!(dueThisDay || overdueIntoToday)) continue;
     const expired = viewingToday && isOverdue(t, now);
     active.push({
@@ -1016,7 +1148,11 @@ export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay,
     .waiting.map(t => ({
       id: t.id, title: t.title, tierId: t.tierId,
       tier: tierById[t.tierId] || null,
-      blocked: t.parentTaskId != null,
+      // 1.2.0 — a follow-up waiting on a PROJECT's finish is just as
+      // unschedulable as one waiting on a parent task.
+      blocked: t.parentTaskId != null || t.afterProjectId != null,
+      afterProjectId: t.afterProjectId ?? null,
+      afterProjectWd: t.afterProjectWd ?? null,
       offsetDays: t.offsetDays ?? null,
       moved: t.rescheduleCount || 0,
       firstDue: firstDueOf(t)

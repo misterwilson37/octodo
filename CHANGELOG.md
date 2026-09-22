@@ -23,6 +23,48 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ---
 
+## 🆕 Katie's handwritten list — app 2.3.0 · store 1.4.0 · queue 1.2.0 · css 0.60.0 · html 0.52.0 (2026-09-22, Cyanea)
+
+Ten notes from the primary user, all built; `HANDOFF-2.0.md` §0v has each in
+her words beside what shipped. By file:
+
+- **queue 1.1.1** — Waiting on… no longer fills every weekend. The off-day
+  test ran before the due-today test, so a Saturday parked every dated task
+  of every Mon–Fri tier. Only a task dated TO the off day waits there now.
+- **queue 1.2.0** — pure answers for follow-ups that wait for the real
+  finish: `waitsForFinish`, `projectFinishedAt` (the 🎆 tick, else the
+  project's completion), `afterFinishDue`, `allowedDaysBetween`,
+  `outriderStageFromTask`, `repegPlan`. **And `addAllowedDays` steps
+  calendar days** — 24-hour steps counted the clocks-go-back Sunday twice
+  on 7-day tiers.
+- **store 1.4.0** — an "after end" outrider becomes an undated task
+  (`afterProjectId`, `afterProjectWd`, `afterProjectDueSet`); `setStageDone`
+  dates those when the project finishes and rewinds only the untouched ones
+  when it un-finishes. `repegFollowUps` converts the ones 1.1.0 dated from
+  the planned end. New fields: `fromStage` on every outrider task (so
+  Duplicate can rebuild the stage), `fromProjectId` on every project-born
+  task (so the project can list it). Header: 1.0.0 retired to this file.
+- **app 2.3.0** — 📋 Duplicate on every project with one-tap date chips,
+  carrying 🎆, its ↳ +Nd and the outriders; Save stages as a template; tasks
+  listed under their project; ⋮⋮ drag in both stage editors; year-view tier
+  chips (their own set); ⏱ and ✎ on Today rows; project and task edits pop
+  up in place; `runRepeg()` fixes old follow-ups automatically. **Fixed:**
+  Pipeline "+ New type" had thrown since 2.1.1; `dupConfirm` never ran
+  `syncOutridersFor`. `plusOneYear()` removed (the chips replace it).
+  Header: 1.46.0 retired to this file.
+- **css 0.60.0** — the grip (`touch-action: none` is load-bearing), date
+  chips, linked-task rows, year chips; `.row-clock`; **every row glyph
+  button one width** (⏰ and 📋 are wider characters than ✎).
+- **html 0.52.0** — markup for all of the above; `#task-edit-modal` is LAST
+  in the document on purpose (it must paint over ✎⋮).
+- **Tests:** `outrider.test` 1.1.0 (24 → 61), new `waiting.test` 1.0.0 (14),
+  `version-check` 1.8.0, and **new `browser-test/` 1.0.0** — the real app in
+  headless Chrome on an in-memory Firestore, 75 checks. It found three bugs
+  before they shipped: drag lost pointer capture after one step, tall rows
+  dragged a half-row late, and the Today ⏱ was smaller than its neighbours.
+
+---
+
 ## 🆕 Soft delete — app 2.2.0 · store 1.3.0 (2026-08-03, Cirrothauma)
 
 §0k.3. A project's ✕ sets `deletedAt`/`deletedBy` instead of destroying the
@@ -177,6 +219,30 @@ the same grep.
 ---
 
 ## `store.js`
+
+### 1.0.0
+
+<!-- Retired from the header 2026-09-22 (Cyanea) to make room for 1.4.0 inside the budget. Verbatim. -->
+
+```
+1.0.0 — FIRST STABLE. Katie migrated on 2026-08-02 — 245 documents, one
+         run, no rehearsal — so this file has been the only thing standing
+         between a real person and her data for a full day. 0.y.z means
+         "the shape may still change"; it does not, and saying so is what
+         this bump is for. No behaviour changed. What changed is that the
+         EXPORT LIST is now a promise rather than an accident:
+           · tierSkinOf DELETED. It was exported and documented as the
+             source of Settings' "shared as …" line and NOTHING CALLED IT.
+             That line is built from canonName/canonColor, which skinFor()
+             stamps onto every tier it returns. A comment describing a path
+             the code does not take — the fifth in this project, after
+             E41's, §0b's, TIER_RANKS's and SKIN-2's, and the same shape
+             every time.
+           · COMPLETED_WINDOW_DAYS, stampNewStages, mergeStages are no
+             longer exported. All three are read here and imported nowhere.
+             stage-merge.test.mjs is unaffected: it lifts functions out of
+             the source TEXT and strips `export` as it goes.
+```
 
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
      had regrown to 19 entries / 135 lines — the exact shape this file was
@@ -632,6 +698,18 @@ the same grep.
 ---
 
 ## `app.js`
+
+### 1.46.0
+
+<!-- Retired from the header 2026-09-22 (Cyanea). Verbatim. -->
+
+```
+1.46.0 — THE FOLLOW-UP OFFER ON PROJECT COMPLETION, which Katie asked for
+         an hour into 2.0. Its own button beside "same time next year?",
+         independent of it: a follow-up on a project that does NOT repeat
+         is the commonest case and hanging it off Create would have made
+         that unreachable. Does not replace the pipeline's ↳ +Nd.
+```
 
 <!-- Moved out of the source header 2026-08-02 (Thaumoctopus). The header
      had regrown to 19 entries / 135 lines — the exact shape this file was
@@ -2035,6 +2113,28 @@ OAuth dance, no token storage.
 ```
 
 ## `queue.js`
+
+### 1.0.0
+
+<!-- Retired from the header 2026-09-22 (Cyanea). Verbatim. -->
+
+```
+1.0.0 — FIRST STABLE. Not a rewrite: a declaration. This file has run a
+         real person's day since Katie migrated on 2026-08-02, and 0.y.z
+         means "the shape may still change," which stopped being true.
+         Five DEAD functions removed in the same breath, because a 1.0
+         promises an API and these were never part of one:
+           · getDeadlineHour, getClearDeckThreshold — setters got wired,
+             getters never did. Both values are read through the module
+             locals by the functions that need them.
+           · isWeekend, addWeekdays, weekendNeighbors — pre-D60 Mon–Fri
+             wrappers. D60 replaced the weekend CONCEPT with per-tier
+             allowedDays (isDayAllowed / addAllowedDays / allowedNeighbors)
+             and these three were left behind describing a rule the app no
+             longer has. Nothing called them, here or anywhere.
+         WEEKDAYS is no longer exported — it survives as the Mon–Fri
+         default inside allowedSet, which is its only remaining reader.
+```
 
 ```
 // Version 0.20.0 — D120: THE TIME REPORT engine. reportPeriods() steps

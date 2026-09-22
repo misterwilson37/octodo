@@ -1,10 +1,18 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 1.3.0
+// Version 1.4.0
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
 //
+// 1.4.0 — FOLLOW-UPS WAIT FOR THE DAY YOU ACTUALLY FINISH. An "after end"
+//          outrider becomes an UNDATED task (afterProjectId/afterProjectWd)
+//          in Waiting on…, and setStageDone dates it from the finish — the
+//          🎆 tick, or the last tick when there is no 🎆. Un-finishing sends
+//          back only the ones still on the date we gave them. repegFollowUps
+//          converts 1.1.0's already-dated ones. Every outrider task also
+//          carries `fromStage` (for Duplicate) and every project-born task
+//          `fromProjectId` (for listing under the project). Katie, items 4/10.
 // 1.3.0 — SOFT DELETE (§0k.3). A project's ✕ now sets deletedAt/deletedBy
 //          instead of destroying the document. It leaves the timeline, the
 //          agenda and the project pane; its sessions and ticked stages stay
@@ -26,26 +34,7 @@
 //          to the importer could never reach.
 // 1.1.0 — see CHANGELOG.md.
 //
-// 1.0.0 — FIRST STABLE. Katie migrated on 2026-08-02 — 245 documents, one
-//          run, no rehearsal — so this file has been the only thing standing
-//          between a real person and her data for a full day. 0.y.z means
-//          "the shape may still change"; it does not, and saying so is what
-//          this bump is for. No behaviour changed. What changed is that the
-//          EXPORT LIST is now a promise rather than an accident:
-//            · tierSkinOf DELETED. It was exported and documented as the
-//              source of Settings' "shared as …" line and NOTHING CALLED IT.
-//              That line is built from canonName/canonColor, which skinFor()
-//              stamps onto every tier it returns. A comment describing a path
-//              the code does not take — the fifth in this project, after
-//              E41's, §0b's, TIER_RANKS's and SKIN-2's, and the same shape
-//              every time.
-//            · COMPLETED_WINDOW_DAYS, stampNewStages, mergeStages are no
-//              longer exported. All three are read here and imported nowhere.
-//              stage-merge.test.mjs is unaffected: it lifts functions out of
-//              the source TEXT and strips `export` as it goes.
-// 0.29.1 — see CHANGELOG.md.
-//
-// 0.28.0 — see CHANGELOG.md.
+// 1.0.0, 0.29.1, 0.28.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -54,7 +43,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "1.3.0";
+export const STORE_VERSION = "1.4.0";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -71,7 +60,10 @@ import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 // create a cycle and does not give store.js a second opinion about dates.
 // syncOutriders must ask the SAME predicate the UI asks, or a stage could be
 // stripped here and still drawn there.
-import { splitOutriders, stageEffectiveDate } from "./queue.js?v=1.1.0";
+import {
+  splitOutriders, stageEffectiveDate,
+  waitsForFinish, projectFinishedAt, afterFinishDue, repegPlan      // 1.4.0 — queue 1.2.0
+} from "./queue.js?v=1.2.0";
 
 
 const app = initializeApp(FIREBASE_CONFIG);
@@ -1783,7 +1775,7 @@ export function subscribeConfig(cb) {
 // tier has to land in the Family workspace, or it is invisible to the person
 // you shared it with and the whole feature is a lie. wsOfTier is the routing
 // rule for everything born against a tier.
-export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null, recurrence = null }) {
+export async function addTask({ title, tierId, dueAt, escalation, notes = "", projectId = null, estimateMinutes = null, recurrence = null, fromProjectId = null }) {
   // 0.24.0 — resolve the board ONCE, then stamp the id we mint against it.
   // The stamp is what lets the routers refuse: app.js creates a task and then
   // creates its follow-up chain against the id in the very next tick
@@ -1798,6 +1790,13 @@ export async function addTask({ title, tierId, dueAt, escalation, notes = "", pr
     estimateMinutes,          // D100 — null = unestimated, NOT zero
     recurrence,               // D111 — {every, unit, anchor:"done"|"due"} or null; the Christmas cactus
     spawnedNextAt: null,      // D111 — set once the next occurrence exists; makes re-checks spawn-safe
+    // 1.4.0 — "which project did this come from?" A LINK, NOT MEMBERSHIP.
+    // `projectId` already exists and means something else (a task that IS
+    // part of a project, carried through recurrence); outriders and the
+    // hurrah deliberately set it null because they have LEFT the pipeline.
+    // This only lets the project's review screens list them. Nothing sorts,
+    // hides, routes or counts by it.
+    fromProjectId,
 
     completedAt: null,
     completedBy: null,        // E9 — who checked it off; null while incomplete
@@ -2461,10 +2460,31 @@ export async function syncOutriders(projectId, allowedDays) {
       if (existing.exists()) { adopted++; noteWhere("tasks", taskId, home); continue; }
 
       const when = stageEffectiveDate(p, st, allowedDays);
+      // ⚠️ 1.4.0 — AN "AFTER END" FOLLOW-UP WAITS FOR THE REAL FINISH.
+      // Katie: "I want that linked to the day I actually publish." Dating it
+      // from the PLANNED end here is what made a late project's invoice nag
+      // early. So it goes to Waiting on… (dueAt null) and setStageDone dates
+      // it when the project finishes — or, if the project is ALREADY
+      // finished, it is dated from that finish right now. A ticked stage is
+      // excluded: it happened, and it keeps its own date below.
+      const waits = !st.completedAt && waitsForFinish(st);
+      const finishedAt = waits ? projectFinishedAt(p) : null;
+      const dueAt = !waits ? when
+        : finishedAt != null ? afterFinishDue(finishedAt, st.offsetDays || 0, allowedDays)
+        : null;
       await setDoc(taskRef, {
         title: `${st.name} — ${p.name}`,
         tierId: p.tierId,
-        dueAt: when,
+        dueAt,
+        ...(waits ? {
+          afterProjectId: projectId,              // what it waits for
+          afterProjectWd: st.offsetDays || 0,     // +N WORKING days, the tier's
+          afterProjectDueSet: dueAt               // the date WE gave it (rewind guard)
+        } : {}),
+        // 1.4.0 — the stage it was, so Duplicate can put it back in next
+        // year's pipeline. Shape only; completion and provenance stay here.
+        fromStage: { name: st.name, direction: st.direction || "none",
+                     anchor: st.anchor || "start", offsetDays: st.offsetDays || 0 },
         // ⚠️ Written straight into the document, so an undefined here is a
         // Firestore "Unsupported field value" and the whole migration fails
         // on this project. Same shape the hurrah spawn uses.
@@ -2472,6 +2492,7 @@ export async function syncOutriders(projectId, allowedDays) {
         notes: `Was a pipeline stage of ${p.name}, anchored outside the project window.`,
         projectId: null,          // deliberately standalone, as the hurrah's is:
                                   // it is no longer part of that pipeline
+        fromProjectId: projectId, // 1.4.0 — but it can still be LISTED with it
         estimateMinutes: null,
         recurrence: null,
         spawnedNextAt: null,
@@ -2506,6 +2527,85 @@ export async function syncOutriders(projectId, allowedDays) {
 }
 
 /**
+ * ⚠️ 1.4.0 — THE PROJECT JUST FINISHED: date every follow-up waiting on it.
+ * +N working days of the project's own tier, from the finish day — the same
+ * arithmetic the "after end" stage always used, with the day you actually
+ * published standing in for the day you planned to. Only tasks still
+ * undated and undone are touched; `afterProjectDueSet` records the date WE
+ * wrote so a rewind can tell it apart from one a person chose.
+ */
+async function dateWaitingFollowUps(projectId, project, finishAt, allowedDays) {
+  const home = wsOfTier(project.tierId);
+  const snap = await getDocs(query(colIn(home, "tasks"), where("afterProjectId", "==", projectId)));
+  const batch = writeBatch(db);
+  let n = 0;
+  snap.forEach(d => {
+    const t = d.data();
+    if (t.completedAt || t.dueAt != null) return;
+    const due = afterFinishDue(finishAt, t.afterProjectWd || 0, allowedDays);
+    batch.update(d.ref, { dueAt: due, afterProjectDueSet: due });
+    n++;
+  });
+  if (n) await batch.commit();
+  return n;
+}
+
+/**
+ * The finish was un-ticked: send its follow-ups back to Waiting on… — but
+ * ONLY the ones still sitting on the date this code gave them. One somebody
+ * has since moved by hand, or finished, is left exactly where it is: that is
+ * the same line rewindFollowUps draws for task chains (D53).
+ */
+async function rewindWaitingFollowUps(projectId, project) {
+  const home = wsOfTier(project.tierId);
+  const snap = await getDocs(query(colIn(home, "tasks"), where("afterProjectId", "==", projectId)));
+  const batch = writeBatch(db);
+  let n = 0;
+  snap.forEach(d => {
+    const t = d.data();
+    if (t.completedAt || t.dueAt == null || t.dueAt !== t.afterProjectDueSet) return;
+    batch.update(d.ref, { dueAt: null, afterProjectDueSet: null });
+    n++;
+  });
+  if (n) await batch.commit();
+  return n;
+}
+
+/**
+ * ⚠️ 1.4.0 — THE ONE-TIME RE-PEG, for outrider tasks made by 1.1.0–1.3.0.
+ * Those were dated from the PLANNED end the moment they were made. Each is
+ * read backwards to its "+N working days" (queue.repegPlan), then either
+ * sent to Waiting on… (project not finished) or re-dated from the real
+ * finish (project finished — AFICC Bonnie's case). Adds `afterProjectId`,
+ * which makes every later run skip it, so this is safe to run on every load.
+ *
+ * `tasks` comes from the caller's live snapshot — this function only writes
+ * what repegPlan says to, one document at a time, and never throws.
+ */
+export async function repegFollowUps(project, tasks, allowedDays) {
+  const out = [];
+  for (const t of tasks) {
+    if (!String(t.id).startsWith(`out_${project.id}_`)) continue;
+    const plan = repegPlan(project, t, allowedDays);
+    if (plan.action === "skip") continue;
+    const fields = {
+      afterProjectId: project.id,
+      afterProjectWd: plan.wd,
+      dueAt: plan.action === "date" ? plan.dueAt : null,
+      afterProjectDueSet: plan.action === "date" ? plan.dueAt : null,
+      fromProjectId: project.id
+    };
+    try {
+      await updateDoc(docIn("tasks", t.id), fields);
+      out.push({ id: t.id, title: t.title, from: t.dueAt, ...plan });
+    } catch (err) {
+      console.warn(`[store] re-peg of "${t.title}" failed; left as it was:`, err);
+    }
+  }
+  return out;
+}
+
+/**
  * Set/unset completion on one stage. Returns the updated stages array so the
  * caller can detect project completion (all stages done) for celebration level 3.
  *
@@ -2517,7 +2617,7 @@ export async function syncOutriders(projectId, allowedDays) {
  * hitting a neighbour is exactly the class of failure 0.24.0 was about.
  * A bare number is still accepted for legacy stages that have no sid yet.
  */
-export async function setStageDone(projectId, where, done) {
+export async function setStageDone(projectId, where, done, allowedDays = null) {
   const ref = docIn("projects", projectId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
@@ -2563,7 +2663,8 @@ export async function setStageDone(projectId, where, done) {
         escalation: { every: 1, unit: "days" },
         notes: `Follow-up from ${p.name} — ${stages[i].spawnDays} days after ${stages[i].name}.`,
         tierId: p.tierId,
-        dueAt: due.getTime()
+        dueAt: due.getTime(),
+        fromProjectId: projectId          // 1.4.0 — listed under the project's stages
       });
       stages[i].spawnedTaskId = ref.id;
       spawnedTask = { id: ref.id, dueAt: due.getTime(), title: `${stages[i].name} — ${p.name}` };
@@ -2574,17 +2675,33 @@ export async function setStageDone(projectId, where, done) {
     }
   }
   const allDone = stages.length > 0 && stages.every(s => s.completedAt);
+  const finishedBefore = projectFinishedAt(snap.data());
+  const after = { ...snap.data(), stages, completedAt: allDone ? Date.now() : null };
   await updateDoc(ref, {
     stages,
-    completedAt: allDone ? Date.now() : null,
+    completedAt: after.completedAt,
     completedBy: allDone ? whoami() : null                       // E9
   });
+  // 1.4.0 — the follow-ups that were waiting for THIS moment. Never fatal:
+  // the tick is what the user asked for; a follow-up still sitting in
+  // Waiting on… is visible and fixable, a refused tick is baffling.
+  const finishedNow = projectFinishedAt(after);
+  let datedFollowUps = 0;
+  try {
+    if (finishedBefore == null && finishedNow != null) {
+      datedFollowUps = await dateWaitingFollowUps(projectId, after, finishedNow, allowedDays);
+    } else if (finishedBefore != null && finishedNow == null) {
+      await rewindWaitingFollowUps(projectId, after);
+    }
+  } catch (err) {
+    console.warn("[store] stage ticked, but its waiting follow-ups could not be updated:", err);
+  }
   // D109 — a stage may carry `hurrah: true` (the designated climax; at most
   // one per project by editor convention, absent on stages that aren't it).
   // The caller decides the celebration level from these two facts:
   // publishing is the party, follow-up is paperwork.
   return {
-    stages, allDone, spawnedTask,
+    stages, allDone, spawnedTask, datedFollowUps,
     hurrah: !!stages[i].hurrah,
     projectHasHurrah: stages.some(s => s.hurrah)
   };

@@ -86,9 +86,20 @@ Stages then enter your queue like tasks, at their own deadlines. You don't have 
 
 One stage per project can be marked the **hurrah** — the moment the thing actually happens, as opposed to the paperwork afterwards. Finishing it gets you a bigger celebration than finishing the last stage, because opening night matters more than filing the receipts.
 
+**Steps that fall outside the project's dates** — send the engagement letter two weeks before it starts, invoice a week after it ends — leave the pipeline and become ordinary tasks, so a project doesn't clog your list before it has begun or after it's done. Open a project's stages (✎⋮) or expand its card and they're listed underneath as **Tasks from this project**, so you can still review the whole thing in one place.
+
+**A step *after the end* waits for the real end.** It sits in **Waiting on…** saying *"5 working days after this project is finished"* until you actually finish — the hurrah, if it has one — and only then gets its date. Publish a week late and the invoice moves a week with you, without you touching it.
+
+**Handy things on a project:**
+
+- **📋 Duplicate.** A copy with its checkmarks reset — and the "Move the dates" buttons (+1 week, +1 month, +1 year…) shift both dates in one tap, so you never have to click back through a calendar. The before/after steps come along too.
+- **✎ Edit** opens right where you tapped, in a pop-up, instead of at the bottom of the page. While you're in there, **✎⋮ Stages…** takes you straight to the steps.
+- **Drag stages by their ⋮⋮ handle** to reorder them. The little ▲▼ still work for nudging one step.
+- **＋ Save as a new template…**, at the bottom of a project's stages, turns the steps you've just shaped into a pipeline for next time.
+
 ### 5. The clock
 
-If you need to know where your hours went, you can clock in to a project and clock out again, and the app keeps a ledger. There's a running timer at the top of the list while it's going, and a Time Report that totals it up.
+If you need to know where your hours went, you can clock in to a project and clock out again, and the app keeps a ledger. **⏱** is on each project's row in Today as well as on its card, so you can start the clock from wherever you are. There's a running timer at the top of the list while it's going, and a Time Report that totals it up.
 
 **At most one clock runs at a time.** Clocking in to something else closes what was open, in the same instant, so the ledger can never claim you were doing two things at once.
 
@@ -101,7 +112,7 @@ Four, along the top:
 - **Dashboard** — where you probably live. Today's queue plus what's coming.
 - **Day** — one day at a time, including days that aren't today.
 - **Week** — the shape of the week. Where you notice that Thursday is a disaster while there's still time to do something about it.
-- **Year** — the long view, for projects and deadlines months out.
+- **Year** — the long view, for projects and deadlines months out. The tier buttons above it hide a whole tier's projects from the calendar — laundry out of the way while you shuffle work — without hiding them from your to-do list.
 
 Which view you're on is remembered per device, so your phone and your laptop can disagree and both be right.
 
@@ -149,6 +160,8 @@ And it's reversible: *Bring it back to my board* returns everything to you and t
 **Your view settings are yours, not the board's.** Visiting someone else's board, you keep your own layout and your own hidden tiers.
 
 **Late things do not go away.** That's not a bug being tolerated, it's the product.
+
+**On a day a tier doesn't run, its tasks don't nag.** A work task due next week stays out of your Saturday entirely. The one exception is something actually *dated* to that Saturday: it waits quietly in **Waiting on…** so you can still tick it off.
 
 ---
 

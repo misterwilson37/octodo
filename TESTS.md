@@ -1,6 +1,6 @@
 # TESTS — what still needs running
 
-**Version 3.1.0 · current as of 2026-08-03 (Cirrothauma)**
+**Version 3.2.0 · current as of 2026-09-22 (Cyanea)**
 
 > ⚠️ **EVERYTHING IN THIS FILE IS ALREADY LIVE.** There is no staging: Jake
 > uploads each drop on receipt and GitHub Pages serves it immediately, so a
@@ -83,13 +83,26 @@ super-admin wipe/export panel the plan now depends on.
 
 ---
 
-### 1. ⚠️ OUTRIDER-SWEEP. The migration has not been run, and it is the point.
+### 1. 🆕 REPEG-1. Did Katie's old follow-ups move — and to the right days?
+**Nothing to do but open the app as Katie, once, after this drop is live.**
+About four seconds after her board loads, a toast titled *"Follow-ups now
+count from the real finish"* says how many moved to Waiting on… and how many
+were re-dated. (No toast = she had none dated after a window; that is a pass.)
+Then open **✎⋮ on AFICC Bonnie** and read *Tasks from this project*: a
+check-in there should be dated from the day Bonnie was published, plus its
+working days — not from the planned end.
+→ *Every move is also printed to the console as `[repeg] …` with old → new
+dates, if anything looks wrong. It runs once per board per load and can never
+touch the same task twice. Handoff §0v. **This is the only part of the drop
+that rewrote existing data.***
+
+### 2. ⚠️ OUTRIDER-SWEEP. The migration has not been run, and it is the point.
 `octodoOutriders()` for a dry run that writes nothing; `octodoOutriders({go:1})`
 to apply. **Read the dry run first.** Once per board. Needs store 1.2.0.
 → *Ticked stages become COMPLETED tasks keeping their original date and owner.
 `[no sid yet]` on imported stages is expected — 1.2.0 stamps them. Handoff §0s.*
 
-### 2. OUTRIDER-1. Does the −14d engagement letter behave once swept?
+### 3. OUTRIDER-1. Does the −14d engagement letter behave once swept?
 The acceptance test for the whole feature. After the sweep, on a project with a
 stage anchored before its start: the stage is gone from the pipeline, a task
 exists on its computed day, the project shows `0/3` not `0/5`, and **the project
@@ -98,14 +111,14 @@ does not appear until its window opens.**
 `startDate` in the same drop. Too early = the horizon is measuring something
 else. Wrong day = `allowedDays` never reached the predicate.*
 
-### 3. SAVE-2. The guard still guards.
+### 4. SAVE-2. The guard still guards.
 Change something, hit **✕** instead of Save. It must still warn. Then Save,
 reopen, and ✕ immediately — **no** warning that time.
 → *A save that clears the dirty flag without saving is worse than the bug.
 ⚠️ Not yet re-run since SAVE-1 was fixed, and SAVE-1's fix touched the same
 save path — this is now a regression test, not just an unrun one.*
 
-### 4. SAVE-3. The healed project type stays healed.
+### 5. SAVE-3. The healed project type stays healed.
 New in 2.1.1. After one successful save: reopen Settings → **Pipeline** — the
 imported pipeline is listed and renameable. Then **New project** → its name is
 in the dropdown, and picking it **actually applies its stages**.
@@ -113,7 +126,7 @@ in the dropdown, and picking it **actually applies its stages**.
 rendered `value="undefined"` and fell through to the default template silently.
 Confirm the stages really arrive, not just that the name appears.*
 
-### 5. SOFTDEL-1. The record survives the ✕. **The point of §0k.3.**
+### 6. SOFTDEL-1. The record survives the ✕. **The point of §0k.3.**
 Clock some time on a project and tick a stage. ✕ it. Then: **a)** it is gone
 from the timeline, the agenda and the project pane; **b)** Settings → Time
 Report **still counts those hours**, under the project's real name and not
@@ -123,23 +136,45 @@ straight back with its sessions and ticks intact.
 a ledger surface is reading `S.projects` instead of `S.projectsAll` — handoff
 §0u's table says which is which.*
 
-### 6. SOFTDEL-2. It stays gone across a reload, and comes back on demand.
+### 7. SOFTDEL-2. It stays gone across a reload, and comes back on demand.
 ✕ a project, hard refresh — still gone, still counted in the report. Then
 console: `octodoBinned()` lists it with its id and who removed it;
 `octodoBinned("<id>")` restores it.
 → *⚠️ There is no restore screen yet and the confirm dialog does not claim one.
 If you want Settings → Data, that is the next slice — say so.*
 
-### 7. SOFTDEL-3. Katie's side of the fear.
+### 8. SOFTDEL-3. Katie's side of the fear.
 On a **shared** tier: Jake ✕ a project Katie has logged hours against. Her
 hours are still in **her** Time Report, credited to her.
 → *⚠️ This is the actual requirement — "John can be pissed at Susan and delete
 a whole project worth of work (and credit!)". Nothing else on this list tests
 the shared case.*
 
-### 8. HURRAH-3. The field only shows on the hurrah.
+### 9. HURRAH-3. The field only shows on the hurrah.
 Move the 🎆 to a different stage. `↳ +Nd` follows it, and the old row's value
 is dropped rather than riding along on a stage that is no longer the climax.
+
+---
+
+## 🆕 Katie's handwritten list (app 2.3.0) — confirm on HER devices
+
+**Already run in a browser by Claude** (`browser-test/`, 75 checks — every
+item, desktop and a 412px touch screen). What is left is only what a fake
+cannot prove: her real Android, her real data. **Each is one minute.**
+
+| | On Katie's phone / board | Pass looks like |
+|---|---|---|
+| **DRAG-1** | ✎⋮ on any project, drag a stage by its **⋮⋮** grip | The row follows her finger and the page does NOT scroll; Save stages keeps the order |
+| **DUP-1** | 📋 on Laundry → **+1 week** → Create the copy | No calendar picker needed; the copy lands a week out with its checkmarks reset |
+| **WAIT-1** | Look at Today on **Saturday** | Waiting on… is empty or nearly so — no work tasks from next week |
+| **EDIT-1** | ✎ on a project row in Today, then on a task | The form pops up over the list; on the phone the keyboard doesn't hide the field she's typing in |
+| **YEAR-1** | 📅 Year → tap her home tier's chip | Laundry and the cabinets vanish from the calendar but **stay** in her Today list |
+| **FINISH-1** | Next time she publishes a project with an "after end" step | A toast says the follow-up is now dated, counted from that day |
+
+→ *If DRAG-1 scrolls the page instead of moving the row, that is
+`touch-action: none` on `.st-grip` not being honoured — report the phone and
+browser. If EDIT-1's keyboard covers the field, that is the pop-up's
+`max-height: 90vh` on a short screen; a screenshot is the fastest report.*
 
 ---
 
@@ -477,13 +512,16 @@ what the next person believes.
 
 ## What Claude runs, so Jake never has to
 
-Both need Node, which Jake does not have and **should not need**. They exist
+All of these need Node, which Jake does not have and **should not need**. They exist
 so they arrive in the repo for the next session, and they gate every drop.
 
 | | |
 |---|---|
 | `node version-check.mjs` | Every banner, constant, `?v=` pin and the handoff version row. **This is what the amber ⚠️ on the app's version badge does in the browser** (app 1.36.0) — same check, no terminal. |
 | `node stage-merge.test.mjs` | 34 assertions on the merge rule that decides whether somebody's finished work survives. Extracted live from `store.js`, so it cannot drift. Verified by sabotage: re-introducing the defect turns it red. |
+| `node outrider.test.mjs` | 61 assertions: outriders, and (1.1.0) follow-ups waiting for the real finish, the re-peg plan, and the working-day arithmetic both ways. **Run with `TZ=America/Chicago`** — in UTC the daylight-saving bug it guards cannot happen. |
+| `node waiting.test.mjs` | 14 assertions: Waiting on… on a Saturday holds only what is dated TO Saturday (Katie's "only appears on weekends"). Sabotage-checked: 5 fail on queue 1.1.0. |
+| `browser-test/walk-*.test.mjs` | **The real app in headless Chrome on an in-memory Firestore.** 75 checks across Katie's ten items, including a phone-sized touch run. Found three bugs nothing else could. Its README says how to run it and what trips you up. |
 
 ---
 

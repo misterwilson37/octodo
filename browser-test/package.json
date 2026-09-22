@@ -1,0 +1,7 @@
+{
+  "name": "octodo-browser-test",
+  "private": true,
+  "type": "module",
+  "description": "Boots the real app in headless Chrome on an in-memory Firestore. See README.md.",
+  "devDependencies": { "puppeteer-core": "^23.0.0" }
+}

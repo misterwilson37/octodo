@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <!-- ============================================================
      Tentacalendar — index.html
-     Version 0.51.21
+     Version 0.52.0
 
      The whole UI. One page, no templating.
 
      RECENT:
+     0.52.0 — Katie's handwritten list (Cyanea): duplicate modal gets date-
+        shift chips and ids for its two modes; stages modal gets "Save as a
+        new template" and a linked-tasks slot; project form gets "✎⋮ Stages…"
+        while editing; new #task-edit-modal (LAST in markup, deliberately);
+        #yv-tier-filters above the year grid. Pins: app 2.3.0, css 0.60.0.
      0.51.21 — no markup change; pin moves to app.js 2.2.0 (soft delete).
      0.51.20 — no markup change; pin moves to app.js 2.1.1 (SAVE-1).
      0.51.19 — no markup change; pin moves to app.js 2.1.0 (outriders, §0h).
@@ -61,9 +66,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tentacalendar">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="tentacalendar.css?v=0.59.4">
+  <link rel="stylesheet" href="tentacalendar.css?v=0.60.0">
 </head>
-<body data-html-version="0.51.21">
+<body data-html-version="0.52.0">
 
   <!-- D37: pixel drift transforms THIS wrapper, never <body> — a transformed
        ancestor becomes the containing block for position:fixed descendants,
@@ -295,6 +300,9 @@
           <div class="form-actions">
             <button type="submit" id="project-submit" class="primary">Launch pipeline</button>
             <button type="button" id="project-cancel" class="mini" hidden>Cancel edit</button>
+            <!-- 0.52.0 — item 9: while editing, the stages are one tap away
+                 instead of back on the card you came from. -->
+            <button type="button" id="project-edit-stages" class="mini" hidden>✎⋮ Stages…</button>
           </div>
         </form>
         <p class="hint">New projects copy the stage template (⚙️ Settings). Each project's stages are then independently editable — check any stage early; the queue only ever nags about the earliest unchecked one.</p>
@@ -396,6 +404,11 @@
           </div>
         </div>
       </div>
+      <!-- 0.52.0 — Katie's item 7: "toggle tiers on/off on annual view (don't
+           need to see laundry or library cabinets when shuffling work
+           projects)". Its OWN set, separate from the Today queue's chips:
+           hiding Home here must not hide the laundry from her to-do list. -->
+      <div id="yv-tier-filters" title="Tap a tier to hide/show its projects on this calendar (this device only; the Today list is not affected)"></div>
       <div id="yv-grid"></div>
       <p id="yv-empty" class="hint" hidden>No projects land in this window. Create one in Today view — its bar shows up here.</p>
       <div id="yv-legend"></div>
@@ -858,8 +871,12 @@
       <div id="stage-proj-editor"></div>
       <button id="stage-proj-add" class="mini">+ Add stage</button>
       <button id="stage-proj-undate" class="mini" title="Early experiments and the old editors saved stages as 'After + 0wd' (from start OR end), silently dating them. This flips every such row to No date — review, then Save.">Un-date all "+0wd" stages</button>
+      <!-- 0.52.0 — Katie's item 4: "review tasks associated w/ a pipeline at
+           the same time you review stages." Filled by renderLinkedTasks(). -->
+      <div id="stage-proj-linked" class="linked-tasks" hidden></div>
       <div class="modal-foot">
-        <span></span>
+        <!-- 0.52.0 — Katie's item 2. Writes a TEMPLATE, not this project. -->
+        <button id="stages-save-template" class="mini" title="Save these rows as a new project type in ⚙️ Settings ▸ Pipeline, for new projects to start from. This project itself only changes when you hit Save stages.">＋ Save as a new template…</button>
         <button id="stages-save" class="primary">Save stages</button>
       </div>
     </div>
@@ -907,12 +924,30 @@
   <!-- ============ DUPLICATE FOR NEXT YEAR (D59/D62) ============ -->
   <div id="dup-modal" class="modal-shell" hidden>
     <div class="modal-card modal-sm">
-      <h3>🔁 Same time next year?</h3>
+      <h3 id="dup-heading">🔁 Same time next year?</h3>
       <p id="dup-text" class="hint"></p>
       <div class="form-row">
         <label class="dup-wide">Name <input id="dup-name" type="text"></label>
       </div>
-      <div class="form-row">
+      <!-- 0.52.0 — KATIE'S LAUNDRY. *"It was probably triggered by a desire to
+           duplicate a project (like laundry) but adjust it so that it wasn't a
+           full year away. Which requires tedious back-clicking on the calendar
+           drop-down."* On Android that picker cannot be typed into, so the
+           answer is not a text box — it is never needing the picker. One tap
+           moves BOTH dates from the original by a set amount, always measured
+           from the ORIGINAL (tapping +1 week twice is still +1 week), snapped
+           onto the tier's working days the same way next-year always was. -->
+      <div class="dup-shift" id="dup-shift-row">
+        <span class="hint-inline">Move the dates:</span>
+        <button type="button" class="mini" data-shift="0d">same dates</button>
+        <button type="button" class="mini" data-shift="1d">+1 day</button>
+        <button type="button" class="mini" data-shift="1w">+1 week</button>
+        <button type="button" class="mini" data-shift="2w">+2 weeks</button>
+        <button type="button" class="mini" data-shift="1m">+1 month</button>
+        <button type="button" class="mini" data-shift="3m">+3 months</button>
+        <button type="button" class="mini" data-shift="1y">+1 year</button>
+      </div>
+      <div class="form-row" id="dup-dates-row">
         <label>Start <input id="dup-start" type="date"></label>
         <label>End <input id="dup-end" type="date"></label>
       </div>
@@ -927,7 +962,7 @@
           </select>
         </label>
       </div>
-      <p class="hint">✎⋮ below edits next year's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
+      <p class="hint" id="dup-pipeline-hint">✎⋮ below edits the copy's pipeline before anything is created (split "Excel setup" into five steps, add offsets) — nothing writes until you hit Create. The new card also opens expanded for a final look.</p>
 
       <!-- ⚠️ 0.51.17 — THE FOLLOW-UP OFFER, AND IT IS DELIBERATELY INDEPENDENT.
            Katie, via Jake: *"That 'Do you want to duplicate for next year?'
@@ -947,7 +982,7 @@
            — I'm sure the new one is fine, too."* Same idiom, two entry
            points: the pipeline for a follow-up you knew about when you built
            the project, this for one you only discover on finishing it. -->
-      <div class="dup-followup">
+      <div class="dup-followup" id="dup-followup">
         <div class="dup-fu-head">↳ Also add a follow-up task?</div>
         <div class="form-row">
           <label class="dup-wide">Task <input id="dup-fu-title" type="text" placeholder="e.g. Send the invoice"></label>
@@ -959,13 +994,28 @@
       <div class="weekend-choices">
         <button id="dup-stages" class="mini">✎⋮ Review the pipeline first…</button>
         <button id="dup-yes" class="primary">Create next year's run</button>
-        <div class="snooze-row"><span class="hint-inline">🕐 Remind me in</span>
+        <div class="snooze-row" id="dup-snooze-row"><span class="hint-inline">🕐 Remind me in</span>
           <button id="dup-snooze-1" class="mini">a day</button>
           <button id="dup-snooze-7" class="mini">a week</button>
           <button id="dup-snooze-30" class="mini">a month</button>
         </div>
         <button id="dup-no" class="mini">No thanks</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ 0.52.0 — EDIT A TASK WHERE YOU ARE (Katie's item 9) ============
+       The REAL task form is reparented in here while a task is being edited,
+       exactly as D68 does for the project form — listeners and all come
+       along, nothing is cloned. "Rather than scrolling down" was the whole
+       complaint: ✎ used to fill a form at the bottom of the side pane.
+       ⚠️ LAST IN THE MARKUP ON PURPOSE: it opens on top of the stages modal
+       (a linked task's ✎) and every shell shares z-index 50, so document
+       order is paint order (see MODAL_ESCAPES in app.js). -->
+  <div id="task-edit-modal" class="modal-shell" hidden>
+    <div class="modal-card yv-project-card">
+      <button id="task-edit-close" class="icon-btn yv-modal-close" title="Close without saving">✕</button>
+      <div id="task-edit-slot"></div>
     </div>
   </div>
 
@@ -1028,6 +1078,6 @@
        The .help-toggle class marks sections that become collapsible on first visit. -->
   <!-- These will be populated by app.js based on help definitions. -->
 
-  <script type="module" src="app.js?v=2.2.0"></script>
+  <script type="module" src="app.js?v=2.3.0"></script>
 </body>
 </html>

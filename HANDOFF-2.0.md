@@ -1,10 +1,12 @@
 # HANDOFF-2.0.md — Tentacalendar 2.0 (the Octodo line)
 
-**Document version 0.24.0** · Last updated 2026-08-02
+**Document version 0.25.0** · Last updated 2026-09-22
 
 | | |
 |---|---|
-| **Versions** | app 2.2.0 · store 1.3.0 · queue 1.1.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.2 · css 0.59.4 · html 0.51.21 · import.html 1.0.2 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.0.0 · version-check 1.7.0 · manifest 0.2.0 |
+| **Versions** | app 2.3.0 · store 1.4.0 · queue 1.2.0 · celebrate 0.2.0 · config 1.2.0 · import-transform 1.0.2 · css 0.60.0 · html 0.52.0 · import.html 1.0.2 · whereis.html 1.5.0 · rules 1.2.1 · functions 1.3.1 · stage-merge.test 1.0.0 · move.test 1.1.0 · outrider.test 1.1.0 · waiting.test 1.0.0 · version-check 1.8.0 · browser-test 1.0.0 · manifest 0.2.0 |
+| 🆕 **KATIE'S HANDWRITTEN LIST, 2026-09-22** | All ten items built in one drop (app 2.3.0 · store 1.4.0 · queue 1.2.0). **The data-touching one is item 10:** "after end" follow-ups now wait for the real finish, and **`runRepeg()` converts the old, planned-end-dated ones automatically on her next load** — no console step. §0v. |
+| 🧪 **THERE IS A BROWSER HARNESS NOW** | `browser-test/` boots the REAL app in headless Chrome on an in-memory Firestore. It found three bugs this session that unit tests, lint and reading could not. **Run it before any UI drop.** Its README says how. |
 | ⚠️ **THERE IS NO STAGING** | **Handing Jake a file IS deploying it.** He uploads each drop to the GitHub web portal as it arrives; Pages serves `main`; the app is live at that moment. There is no review branch, no soak, no staging URL. **Anything in this repo is what Katie is running right now.** See the box below — this cost a whole session of wrong advice.
 | **Passing** | BASE-1…6, 8 · KEYS-3, 7, 8 · **TIER-1, 2, 3, 5** |
 | **Next** | ⚠️ **DEPLOYED ≠ EXERCISED, AND BOTH ARE TRUE OF EVERYTHING HERE.** Every file is live and Katie used the app all day; `TESTS.md` START HERE still holds 20 items nobody has deliberately walked. **SAVE-1 first** — an unexplained crash that is now merely *visible*. Then §0k.3 soft delete, §0k.5 super-admin wipe/export, §0h outriders. |
@@ -1155,6 +1157,88 @@ repoints. **One sentence from him closes this either way; do not infer it.**
 
 ---
 
+### 0v. 🆕 KATIE'S HANDWRITTEN LIST — ALL TEN BUILT (app 2.3.0 · store 1.4.0 · queue 1.2.0 · css 0.60.0 · html 0.52.0) — Cyanea, 2026-09-22
+
+Katie wrote ten notes on a "like it or not TO DO LIST" pad; Jake typed them
+up. Two needed her answers first, and she gave them herself (quoted below).
+**Every item is built and exercised in a real browser** (`browser-test/`,
+75 checks) as well as by the unit tests. Her words first, then what was done.
+
+| # | Katie's note | What shipped |
+|---|---|---|
+| 1 | "Duplicate project (edit name, date range, etc.)" | 📋 on EVERY card (was 🔁, only for dated projects, worded "for next year"). One-tap date chips — see item 3. **Carries 🎆 and its ↳ +Nd** (the copy used to drop both) **and the outrider steps** (it used to drop those too — see below). Someday projects copy with no dates. Finishing a project still offers the old "Same time next year?" — `openDuplicateModal(p, { finished: true })`. |
+| 2 | "When editing stages, option to save as a new template" | "＋ Save as a new template…" in the ✎⋮ foot. Writes a project TYPE (template shape only — no ticks, sids, provenance, and no `spawnDays` because no other template writer carries it). Name clash → confirm replace. **Also fixed: Settings ▸ Pipeline "+ New type" had thrown a ReferenceError since 2.1.1** (`pipelineCurrent = id` with no `id` in scope); lint found it independently. |
+| 3 | "Option to type in date (not just choose from dropdown)" | **Answered by her:** *"I probably meant on an Android. It was probably triggered by a desire to duplicate a project (like laundry) but adjust it so that it wasn't a full year away. Which requires tedious back-clicking on the calendar drop-down."* So no text box — the Duplicate modal's **date chips** (same dates, +1 day, +1 week, +2 weeks, +1 month, +3 months, +1 year) move both dates **from the ORIGINAL** (never cumulative), snapped to the tier's days. |
+| 4 | "Option to review tasks associated w/ a pipeline at the same time you review stages" | "Tasks from this project" under the stages in ✎⋮ and on the expanded card. `linkedTasksOf(p)` — by `fromProjectId` (new, store 1.4.0), `afterProjectId`, the `out_<pid>_` id, or a stage's `spawnedTaskId`, plus each one's ↳ chain. **Never by title text** — a guess that lists a stranger's task is worse than a gap. |
+| 5 | "Option to drag stages to reorder rather than just the tiny up/down arrow buttons" | ⋮⋮ grip on every row of BOTH stage editors (`wireStageDrag`). Pointer events (HTML5 drag-and-drop does not fire on touch). ▲▼ kept. **Two harness-found bugs fixed before shipping — read `wireStageDrag`'s comments before touching it.** |
+| 6 | "'Waiting On' tasks seem to only appear on weekends — that's…odd." | **A real bug since queue 0.21.0**: the off-day test ran before the due-today test, so every Saturday EVERY dated task on a Mon–Fri tier (due next week, due in March) was parked in Waiting on…, and vanished Monday. Now only a task dated TO the off day goes there. `waiting.test.mjs`; sabotage-checked against the old code. |
+| 7 | "Ability to toggle tiers on/off on annual view (don't need to see laundry or library cabinets when shuffling work projects)" | Tier chips above the year grid (`#yv-tier-filters`). **Separate from the Today list's chips on purpose** (`tc-yv-hidden-tiers`), so hiding Home on the calendar does not hide the laundry from her to-do list. An all-hidden calendar says so instead of looking empty. |
+| 8 | "Move clock-in button to 'Today' pane?" | ⏱ on every project row in Today (⏹ + elapsed while running). **Added, not moved** — the card keeps its ⏱ for projects not in today's queue. One implementation, `toggleClock()`. ⚠️ Ask Katie whether the card's should go. |
+| 9 | "Option to edit project/task details in place, rather than scrolling down project pane" — the biggest one; she'd like to expand a project in the main list | ✎ (card, Today row, Waiting row, linked-task row) now **pops the real form up where you clicked** — D68's reparenting, reused for projects and built for tasks (`#task-edit-modal`, LAST in the markup so it paints over ✎⋮). "✎⋮ Stages…" inside the project pop-up. ⚠️ **The "expand in the main list" half is NOT built** — see open items. |
+| 10 | "Follow-up tasks need to be pegged to the ACTUAL completion date, not original target." | **Answered by her:** *"If I want to send an invoice or check in on whether they're ready to finalize, I want that linked to the day I actually publish."* Below. |
+
+#### Item 10 in full — the only one that rewrites existing data
+
+**The model.** An "after END" outrider (no hand-set ⏰) becomes a task with
+`dueAt: null`, `afterProjectId`, `afterProjectWd` (+N **working** days, the
+tier's) and `afterProjectDueSet` — it sits in **Waiting on…** saying so.
+**"Finished" = the 🎆 stage's tick**; no 🎆 → the project's completion
+(`queue.projectFinishedAt`). `setStageDone` (now given the tier's
+`allowedDays`) dates the waiting ones the moment the project finishes, and
+**un-finishing rewinds only those still on the date the code gave them** —
+one a person moved or finished is left alone (the same line D53 draws for
+task chains). "Before START" outriders are unchanged: a start is a plan.
+
+**The existing ones — Katie asked:** *"Will that change automatically correct
+projects that I published recently (i.e., AFICC Bonnie, published
+yesterday) but the final check-in task hasn't yet arrived?"* **Yes.**
+`runRepeg()` (app) runs once per board per load, ~4s after data settles.
+For each undone `out_<pid>_…` task dated after its project's window it reads
+back "+N working days" (`queue.repegPlan`, exact because the date was
+computed) and either parks it in Waiting on… or re-dates it from the real
+finish. It stamps `afterProjectId`, so it can never touch a task twice. It
+toasts what it did and logs every move (`[repeg]`) to the console.
+**Deliberately automatic, unlike `octodoOutriders`:** it only moves the date
+of an undone follow-up — never strips, completes or deletes — and it must
+run on Katie's board from her login. ⚠️ A task dated after the window that
+came from an "after START" stage is treated the same way; that matches what
+she asked for, but it is a choice, not an accident.
+
+**Katie's side question** — whether Bonnie has its own follow-up or rides on
+AFICC's — is answered in the app now: ✎⋮ on Bonnie → "Tasks from this
+project". Not known to this document.
+
+#### Also fixed on the way
+
+- **Duplicate dropped outriders.** Since 2.1.0 they live as tasks, so "copy
+  the pipeline" left out the engagement letter and the invoice. The copy
+  rebuilds them (`fromStage` on new tasks, `outriderStageFromTask` reading
+  old ones backwards) and `syncOutridersFor` — **never called by
+  `dupConfirm` before** — turns them into the new project's own tasks.
+- **Daylight saving (queue 1.2.0).** `addAllowedDays` stepped 24 hours, so
+  the Sunday the clocks go back was counted twice on 7-day tiers and
+  anything computed across the first weekend of November landed a day
+  early. Now calendar days. Invisible in the sandbox (UTC) — **run the
+  queue tests with `TZ=America/Chicago`.**
+- **Row buttons are one width** (css 0.60.0) — ⏰ and 📋 are wider glyphs
+  than ✎, so rows had near-miss boxes. 41.6 × 29 px each, measured.
+
+#### Open items from this list
+
+1. **Item 9's second half — "expand a project in the main list."** Katie
+   asked for it or "at least discuss options." The pop-up edit is shipped
+   as the first step. The proposal for the next: a ▸ on each Today project
+   row that opens the pipeline inline — every stage with its tick, and the
+   linked tasks — so she can review and tick without leaving the list.
+   **Ask her after she has used the pop-up for a week**; she may find it
+   already covers the scroll she disliked.
+2. **Item 8:** does the card's ⏱ go now that Today has one? Her call.
+3. **Duplicate's default chip is +1 year** on both doors. If she mostly
+   copies mid-year, "same dates" is a one-word change in `openDuplicateModal`.
+4. **The §0s sweep is still unrun** (`octodoOutriders({go:1})`). Unchanged
+   by this drop, but the stages it would strip now become the new, better
+   task shape when it runs — so running it is now slightly more attractive.
+
 ### 0u. ✅ SOFT DELETE — §0k.3 BUILT, WITH TWO PIECES DELIBERATELY LEFT
 
 **app 2.2.0 · store 1.3.0 · 2026-08-03**
@@ -1943,6 +2027,9 @@ Two different failures needing two different fixes:
 - **`pollIntervalMinutes` has two homes and one truth.** Written on the workspace document per §4.3, but `settings/config`'s copy is what the settings UI edits and therefore what is authoritative. **Item 7 unifies them and deletes the config copy** — at the same moment the settings form is repointed, which is the only way to change it without a window where the UI edits the wrong field.
 - **`subscribeSessions` is still unfiltered** (inherited from 1.x §5c). 11 documents today, so it is the right shape rather than a fire. Jake's constraint stands: the Σ must be lifetime **"but stored by dates so that we can see what was used when"** — the ledger remains the source of truth and any denormalised total is only ever a display cache.
 - **Firestore persistence** — still unbuilt, still ~3 lines, and 1.x's §5c corrected the claim: a listener disconnected >30 minutes is billed as a new query anyway, so it is a **kiosk optimisation, not a general one**. Whoever builds it must also make the D136 census count only `snapshot.metadata.fromCache === false`, or the counter stops being a cost dashboard. Jake's trusted-device decision is already made: **default on, always clear on sign-out.**
+- **`browser-test/` covers only Katie's-list surfaces so far.** Worth a walk-through each for the flows §0i-bis and TESTS.md START HERE still list as unrun — shared tiers can't be faked (one account), but tier change, undo, soft delete and the D46 check-in can. Cheap now the harness exists.
+- **A stray `index.js` sits at the repo ROOT** — an older copy (1.3.0) of `functions/index.js` (1.3.1). Nothing loads it; Pages never serves it to anyone. Flagged to Jake 2026-09-22 to delete in the GitHub web UI (a zip cannot delete). Until it is gone: **the Cloud Function is `functions/index.js`, never the root one.**
+- **`fromProjectId` is only set going forward** (and by the re-peg). A dup follow-up made before 2.3.0 is not listed under its project; only its notes text names it, and §0v says why that is not matched.
 - **App Check** before item 8 opens signup (E18). Free, and the only real ceiling on a project with no hard spending cap.
 - **The E17 screen has never actually been seen.** Both its states are hard to trigger deliberately. Worth one console-forced render before anyone relies on the copy.
 
@@ -2103,6 +2190,7 @@ Jake, at the end of a very long day: *"Given that literally every iteration of o
 
 | Date | Instance | What happened |
 |---|---|---|
+| 2026-09-22 | Opus 5 → Opus 5.5 · **Cyanea** | **KATIE'S HANDWRITTEN LIST — all ten items, §0v (app 2.3.0 · store 1.4.0 · queue 1.2.0 · css 0.60.0 · html 0.52.0 · outrider.test 1.1.0 · waiting.test 1.0.0 · version-check 1.8.0 · browser-test 1.0.0).** **Name:** *Octopus cyanea*, the day octopus — the one that hunts in daylight, the one divers actually see. A session driven by a note about the Today pane and the things Katie looks at every day. **One conversation, three sittings; the model changed from Opus 5 to Opus 5.5 for the third — one name throughout, per Jake's rule.** Asked two questions before building (items 3 and 10); **Katie answered both herself**, and both answers changed the design — item 3 is not a text box at all, and item 10's "will it fix Bonnie?" is why the re-peg runs itself. **Bugs found that nobody reported:** Waiting on… parking whole tiers every weekend (her item 6, but the cause was 0.21.0), Pipeline "+ New" throwing since 2.1.1, Duplicate dropping 🎆/↳/outriders, `dupConfirm` never syncing outriders, and the DST double-count in `addAllowedDays`. **Built `browser-test/`** — the real app on an in-memory Firestore in headless Chrome — **and it found three more** that unit tests, lint and reading all missed: drag lost pointer capture after one step, tall rows dragged a half-row late, the Today ⏱ was smaller than its neighbours. **Lesson worth inheriting: "parse-clean ≠ wired" has a third term — wired ≠ usable. Look at a screenshot.** |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (sixth sitting) | **SOFT DELETE — §0k.3 BUILT (app 2.2.0 · store 1.3.0), §0u.** A project's ✕ sets `deletedAt`/`deletedBy` instead of destroying the document; sessions and ticked stages stay reachable through it, so nobody's work or credit dies to somebody else's bad afternoon. **⚠️ NOT a revert of 0.28.0 and a successor will read it as one** — orphaning the ledger and destroying it are both wrong, and this is the third answer. **The design decision worth inheriting: `subscribeProjects` now calls back `(living, all)`, with `living` FIRST so a thoughtless caller gets the safe list.** `S.projects` is living and drives every display surface; `S.projectsAll` includes the binned and is read by exactly six ledger sites (`projName`, the report name, the rollup, the CSV, the running-timer bar, `octodoBinned`). Each was audited by line. A display surface reading `projectsAll` re-shows a binned project; a ledger surface reading `projects` prints "another project" against real hours, which is 0.28.0's orphan failure by another door. **The confirm copy changed with the behaviour** — it still names the hours, because that is what identifies the right project, but no longer says they cannot be recovered, because that is now false and a scary-but-false warning teaches people to click through warnings. **⚠️ TWO PIECES LEFT DELIBERATELY, both recorded rather than quietly skipped:** (1) no restore SCREEN — there is undo and `octodoBinned()`, and **the dialog promises only undo**, because promising a Settings tab that does not exist is how a user stops believing dialogs; (2) **the RULES were not changed**, so the hard delete is still permitted to the same people it always was. §0k.3 wants it owner-only, that is a rules change, and rules changes run through `rules-test/` before the console per 1.2.0/1.2.1's mistake — the emulator was not reachable here. **§0k.3 must not be recorded as fully closed until HARDDEL-RULES lands, ideally together with TIER-MEMBER-ROLES.** |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (fifth sitting) | **THE ACCEPTANCE RUN. Jake walked the list and TESTS.md is now nearly empty.** Passing: TIMING-1, TOUR-1, RETIER-1/2, DIRTY-2, FIT-1, FIT-2, TRAY-1, IMPORT-2, IMPORT-3, HURRAH-2 — on top of HURRAH-4/5, TOUR-REPLAY-1, DATE-1, HEADER-1 and SAVE-1 from the sitting before. **Settings save, and the calendar synced after the import.** ⚠️ **He also caught me leaving the passed items sitting in START HERE** — I had marked them and not removed them, which is how a test list stops being trusted. START HERE is now rebuilt to the FOUR things actually outstanding (the outrider sweep, OUTRIDER-1, SAVE-2 as a fresh regression test, and a new SAVE-3 for the healed project type) plus HURRAH-3. **Two judgement calls recorded rather than silently accepted:** (1) *"tour 1 skipped the opening screen"* is CORRECT behaviour — `showWelcomeSplash()` returns early once `onboardingState().splashDone` is set, once per person, and the replay buttons call `startTour()` directly on purpose; only a fresh account sees the splash. I did NOT write that tour copy — a predecessor did in 1.45.0 — and said so rather than accept the credit. (2) *"MOVE-4b is still not what I want"* is not a regression: the test asserts today's truth and Jake dislikes today's truth. **The answer is §0k.3's soft delete, which is unbuilt** — it should not be re-opened as a bug. **HURRAH-2's result is worth reading closely:** the guard blocks the automatic re-mint while leaving a deliberate second task possible, which is exactly the `spawnedTaskId` contract. |
 | 2026-08-03 | Opus 5 · **Cirrothauma** (fourth sitting) | **SAVE-1 SOLVED, plus HURRAH-4/5, TOUR-REPLAY, DATE-1 and HEADER-1 confirmed passing by Jake.** He typed the toast out by hand — no screenshot available — and one line ended two days of theories: *setDoc … Unsupported field value: undefined … settings/projectTypes*. **`import-transform.js` synthesised a project type from the 1.x anonymous stage template and gave it no `id`.** app.js's Settings draft copies `{ id: t.id, … }`, so that entry became `id: undefined`, and setDoc refuses it. **⚠️ THE REASON FOUR SESSIONS MISSED IT: the draft is built when Settings OPENS and written on EVERY save, whatever tab was touched.** Changing a tier's days was the occasion and never the cause, so every correct reading of the tier-save path was a correct reading of code that was not throwing. Jake's standing rule — *when a report doesn't match the code, stop and ask for the readout* — is now vindicated in the strongest possible terms. **Second defect nobody had reported:** the id-less type made the New Project selector render `value="undefined"`, which matched nothing when picked and fell through to the default template silently — it looked like a wrong default, not a failure. **Fixed in BOTH places deliberately:** app.js mints an id for any type lacking one, which heals Katie's already-imported document on her next save (the importer alone cannot reach it), and the importer is fixed so future boards never carry the landmine. `newTypeId()` is now the single minter and a hoisted declaration. **Third instance in three days of the same error shape: verifying a mechanism without checking the population it runs against** — the audit skipped a directory, the sweep skipped where the data came from, and this skipped where the document was assembled. |

@@ -1,10 +1,18 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 2.2.0
+// Version 2.3.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
+// 2.3.0 — KATIE'S HANDWRITTEN LIST (Cyanea). 📋 Duplicate any project, with
+//          one-tap date shifts (her Android laundry case); Save stages as a
+//          template; tasks from a project listed beside its stages; ⋮⋮ drag
+//          to reorder; year-view tier chips; ⏱ and ✎ on Today rows; project
+//          and task edits pop up where you click. "After end" follow-ups wait
+//          for the real finish, and runRepeg() fixes the ones already dated.
+//          Also fixed: Pipeline "+ New" threw since 2.1.1; Duplicate dropped
+//          🎆, its ↳ +Nd, and every outrider stage.
 // 2.2.0 — SOFT DELETE (§0k.3). A project's ✕ removes it from the timeline
 //          and KEEPS its record: sessions, ticked stages, credit. Undo puts
 //          it straight back; octodoBinned() lists and restores from the
@@ -41,12 +49,7 @@
 //          TESTS.md still holds ~20 items nobody has deliberately walked, and
 //          SAVE-1 is an unexplained crash that is merely visible rather than
 //          fixed. Do not read the major bump as a claim about TESTS.md.
-// 1.46.0 — THE FOLLOW-UP OFFER ON PROJECT COMPLETION, which Katie asked for
-//          an hour into 2.0. Its own button beside "same time next year?",
-//          independent of it: a follow-up on a project that does NOT repeat
-//          is the commonest case and hanging it off Create would have made
-//          that unreachable. Does not replace the pipeline's ↳ +Nd.
-// 1.45.0, 1.44.0, 1.43.0 — see CHANGELOG.md.
+// 1.46.0, 1.45.0, 1.44.0, 1.43.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -55,7 +58,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "2.2.0";
+export const APP_VERSION = "2.3.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -79,8 +82,9 @@ import {
   mergedWorkspaceIds,                                              // item 5
   onboardingState, markTourCompleted, dismissHint, markFirstVisitDone,  // E41
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
-  saveTierSkin, syncOutriders                                                     // 0.25.0
-} from "./store.js?v=1.3.0";
+  saveTierSkin, syncOutriders,                                                    // 0.25.0
+  repegFollowUps                                                   // 1.4.0 — Katie's item 10
+} from "./store.js?v=1.4.0";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -88,8 +92,9 @@ import {
   clockBlocks, weekClockWindow, taskEstimate, holidaysForRange,
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
   rollupSessions, rollupToCSV, sessionsToCSV,
-  splitOutriders, stageEffectiveDate                                // 1.1.0 — §0h
-} from "./queue.js?v=1.1.0";
+  splitOutriders, stageEffectiveDate,                               // 1.1.0 — §0h
+  outriderStageFromTask                                             // 1.2.0 — item 1
+} from "./queue.js?v=1.2.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
 const $ = sel => document.querySelector(sel);
@@ -432,6 +437,8 @@ const S = {
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
   showLater: localStorage.getItem("tc-show-later") === "1",        // 1.39.0
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
+  // 2.3.0 — item 7: the YEAR view's own hidden tiers. Separate on purpose.
+  yvHiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-yv-hidden-tiers") || "[]")),
   view: ["year", "week", "day", "dash"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88/D105 (persists per device; setView bounces "dash" to "day" on small glass)
   dashCols: Math.min(80, Math.max(20, parseFloat(localStorage.getItem("tc-dash-cols")) || 50)),  // D105: year pane's share of the wall
   dashRows: Math.min(80, Math.max(20, parseFloat(localStorage.getItem("tc-dash-rows")) || 55)),  // D105: week pane's share of the right column
@@ -625,7 +632,14 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#task-cancel").addEventListener("click", cancelTaskEdit);
   $("#fu-chain-add").addEventListener("click", addChainRow);   // D132
   $("#project-form").addEventListener("submit", onProjectFormSubmit);
-  $("#project-cancel").addEventListener("click", () => cancelProjectEdit());   // D131 — bare call; don't pass the click event as opts
+  $("#project-cancel").addEventListener("click", () => {                        // D131 — bare call; don't pass the click event as opts
+    if (cancelProjectEdit() !== false) closeYvProjectModal();                    // 2.3.0 — the edit may be in the pop-up
+  });
+  $("#project-edit-stages").addEventListener("click", () => {                  // 2.3.0 — item 9
+    const p = S.projects.find(x => x.id === S.editingProjectId);
+    if (p) openStagesDialog(p);   // opens ON TOP of the edit pop-up; closing it lands back here
+  });
+  $("#task-edit-close").addEventListener("click", cancelTaskEdit);             // 2.3.0 — item 9
   $("#project-color").addEventListener("input", checkProjectColor);
   $("#project-tier").addEventListener("change", syncProjectDateRequirement);   // D126
   markClean("projectForm", projectFormSignature);   // D131 — initial empty-form baseline at boot
@@ -649,6 +663,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#due-clear").addEventListener("click", dueClear);
   $("#due-cancel").addEventListener("click", () => { $("#due-modal").hidden = true; });
   $("#stages-save").addEventListener("click", stagesSave);
+  $("#stages-save-template").addEventListener("click", stagesSaveAsTemplate);   // 2.3.0 — item 2
   $("#stages-cancel").addEventListener("click", () => {
     if (!guardedClose("stages", stagesSignature)) return;   // D129
     $("#stages-modal").hidden = true;
@@ -714,6 +729,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Duplicate-for-next-year modal (D59)
   $("#dup-yes").addEventListener("click", dupConfirm);
+  // 2.3.0 — Katie's laundry: one tap moves both dates, no picker.
+  $("#dup-shift-row").addEventListener("click", ev => {
+    const b = ev.target.closest("button[data-shift]");
+    if (b) applyDupShift(b.dataset.shift);
+  });
+  $("#dup-name").addEventListener("input", () => { if (S.dupTarget) S.dupTarget.nameTouched = true; });
+  $("#dup-tier").addEventListener("change", () => {
+    syncDupDates();
+    if (S.dupTarget?.shift) applyDupShift(S.dupTarget.shift);   // re-snap to the new tier's days
+  });
+  // Typing a date by hand means no chip describes the dates any more.
+  for (const id of ["#dup-start", "#dup-end"]) $(id).addEventListener("input", () => {
+    if (S.dupTarget) S.dupTarget.shift = null;
+    $("#dup-shift-row").querySelectorAll("button").forEach(b => b.classList.remove("active"));
+  });
   $("#dup-stages").addEventListener("click", openDupStages);
   $("#dup-snooze-1").addEventListener("click", () => dupSnooze(1));
   $("#dup-snooze-7").addEventListener("click", () => dupSnooze(7));
@@ -1076,6 +1106,7 @@ function subscribeBoard() {
   // still showing Jake's tasks — which, in an app about accountability, is
   // the single most alarming thing it could briefly display.
   S.tiers = []; S.tasks = []; S.events = []; S.projects = []; S.projectsAll = [];
+  S.repegDone = false; clearTimeout(repegTimer);   // 2.3.0 — once per board, per load
   S.sessions = []; S.stageTemplate = []; S.projectTypes = [];
   S.members = []; S.wsDoc = null; S.config = null;
   Object.keys(docCensus).forEach(k => { docCensus[k] = 0; });
@@ -1086,12 +1117,12 @@ function subscribeBoard() {
   }));   // E34
   S.unsubs.push(subscribeMembers(m => { S.members = m; renderPeople(); }));      // E5
   S.unsubs.push(subscribeTiers(t => { S.tiers = t; docCensus.tiers = t.length; refreshTierSelects(); renderFilters(); render(); }));
-  S.unsubs.push(subscribeTasks(t => { S.tasks = t; docCensus.tasks = t.length; render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeTasks(t => { S.tasks = t; docCensus.tasks = t.length; render(); maybeDecisionTime(); scheduleRepeg(); }));
   S.unsubs.push(subscribeEvents(e => { S.events = e; docCensus.events = e.length; render(); }));
   // DIRTY-1 — suggestProjectColor writes #project-color, which is in the
   // form signature, and bestFreeColor() changes its answer whenever the set
   // of project colours changes. Adding a project therefore manufactured dirt.
-  S.unsubs.push(subscribeProjects((living, all) => { S.projects = living; S.projectsAll = all; docCensus.projects = all.length; preservingProjectFormState(suggestProjectColor); render(); maybeDecisionTime(); }));
+  S.unsubs.push(subscribeProjects((living, all) => { S.projects = living; S.projectsAll = all; docCensus.projects = all.length; preservingProjectFormState(suggestProjectColor); render(); maybeDecisionTime(); scheduleRepeg(); }));
   S.unsubs.push(subscribeSessions(s => { S.sessions = s; docCensus.sessions = s.length; render(); }));   // D112
   S.unsubs.push(subscribeStageTemplate(t => { S.stageTemplate = t; }));
   // DIRTY-1 — refreshTypeSelect writes #project-type, also in the signature.
@@ -2128,6 +2159,62 @@ window.octodoOutriders = async function (opts = {}) {
  * must not make a successful save look refused — same reasoning as the hurrah
  * spawn's catch in store 0.29.0.
  */
+/**
+ * ⚠️ 2.3.0 — THE ONE-TIME RE-PEG, RUN AUTOMATICALLY. Katie's item 10, and
+ * her question: *"Will that change automatically correct projects that I
+ * published recently (i.e., AFICC Bonnie, published yesterday) but the final
+ * check-in task hasn't yet arrived?"* Yes — this is what does it.
+ *
+ * Outrider tasks made before store 1.4.0 were dated from the PLANNED end.
+ * Each one still undone and dated after its project's window is read
+ * backwards to "+N working days" and either sent to Waiting on… (project not
+ * finished) or re-dated from the day it actually finished.
+ *
+ * WHY NOT A CONSOLE COMMAND like octodoOutriders: that one strips stages from
+ * pipelines and deserved a human reading a dry run. This one only moves the
+ * date of an undone follow-up, never completes, deletes or strips anything,
+ * and stamps `afterProjectId` so it can never touch the same task twice. And
+ * it has to run on KATIE'S board, from her login — asking her to open a
+ * console is asking a non-tester to test. It says what it did in a toast.
+ *
+ * Waits for tiers, config (the deadline hour), tasks and projects to settle,
+ * then runs once per board per page load. Never for someone who cannot edit.
+ */
+let repegTimer = 0;
+function scheduleRepeg() {
+  if (S.repegDone) return;
+  clearTimeout(repegTimer);
+  repegTimer = setTimeout(runRepeg, 4000);
+}
+async function runRepeg() {
+  if (S.repegDone || !S.user || !S.config || !S.tiers.length) return;
+  if (canWorkList() === false) { S.repegDone = true; return; }
+  const candidates = S.tasks.filter(t =>
+    String(t.id).startsWith("out_") && !t.completedAt && !t.afterProjectId && t.dueAt != null);
+  S.repegDone = true;
+  if (!candidates.length) return;
+  const moved = [];
+  for (const p of S.projects) {
+    const mine = candidates.filter(t => String(t.id).startsWith(`out_${p.id}_`));
+    if (!mine.length) continue;
+    const tier = S.tiers.find(t => t.id === p.tierId);
+    const done = await repegFollowUps(p, mine, tier?.allowedDays);
+    for (const d of done) moved.push({ ...d, project: p.name });
+  }
+  if (!moved.length) return;
+  console.log("[repeg] follow-ups now pegged to the real finish:");
+  for (const m of moved) {
+    console.log(`  ${m.project}: "${m.title}" ${m.from ? new Date(m.from).toDateString() : "—"} → ` +
+      (m.action === "date" ? new Date(m.dueAt).toDateString() : "Waiting on… (until it finishes)"));
+  }
+  const waiting = moved.filter(m => m.action === "wait").length;
+  const dated = moved.length - waiting;
+  showToast("soon", "Follow-ups now count from the real finish",
+    [waiting ? `${waiting} moved to Waiting on… until ${waiting === 1 ? "its project finishes" : "their projects finish"}.` : "",
+     dated ? `${dated} re-dated from the day ${dated === 1 ? "its project" : "their projects"} actually finished.` : ""]
+      .filter(Boolean).join(" "));
+}
+
 function syncOutridersFor(projectId, tierId) {
   const tier = S.tiers.find(t => t.id === tierId);
   return syncOutriders(projectId, tier?.allowedDays)
@@ -2398,10 +2485,32 @@ function renderQueue(items, now) {
         pushUndo("task delete", () => restoreDoc("tasks", it.id, data), () => deleteTask(it.id));
         deleteTask(it.id);
       })] : [])
-    ] : it.kind === "stage" ? [
-      iconBtn("⏰", "Set/change this stage's hard due date", () =>
-        openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex }, `Hard due date — ${it.title}`, it.dueAt))
-    ] : [];
+    ] : it.kind === "stage" ? (() => {
+      // ⚠️ 2.3.0 — Katie's items 8 and 9. "Move clock-in button to 'Today'
+      // pane?" and "edit project/task details in place, rather than
+      // scrolling down project pane." The Today row is where she already is
+      // when she starts work, so the clock and the edit come to it. ADDED,
+      // not moved: the card keeps its ⏱ for projects not in today's queue.
+      const os = openSessionNow();
+      const running = os && os.projectId === it.projectId;
+      const clk = iconBtn(running ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "⏱",
+        running ? `Clock out of ${it.projectName} — you'll get to adjust the end time`
+                : os ? `Clock in to ${it.projectName} — the ${projName(os.projectId)} timer ends at this same moment`
+                     : `Clock in to ${it.projectName}`,
+        () => toggleClock(it.projectId));
+      // NOT .clock-btn: that slims it to the card's compact cluster, and on
+      // this row it sat visibly smaller than ✎ and ⏰ beside it (harness
+      // screenshot, 412px). .row-clock keeps only the running glow.
+      clk.classList.add("row-clock");
+      if (running) clk.classList.add("running");
+      const proj = S.projects.find(x => x.id === it.projectId);
+      return [
+        clk,
+        ...(proj ? [iconBtn("✎", `Edit ${it.projectName} (name, dates, tier…) — opens right here`, () => startProjectEdit(proj))] : []),
+        iconBtn("⏰", "Set/change this stage's hard due date", () =>
+          openDueDialog({ kind: "stage", projectId: it.projectId, stageIndex: it.stageIndex }, `Hard due date — ${it.title}`, it.dueAt))
+      ];
+    })() : [];
     rowScaffold(row, {
       lead, tier: it.tier,
       mainHTML: `<strong>${stagePrefix}${esc(it.title)}</strong>${it.kind === "task" && it.raw?.recurrence ? ` <span class="rec-badge" title="Repeats every ${it.raw.recurrence.every} ${it.raw.recurrence.unit} (${it.raw.recurrence.anchor === "due" ? "from the scheduled due" : "from completion"})">↻</span>` : ""}<span class="sub">${sub}</span>`,
@@ -2442,6 +2551,31 @@ function renderWaiting(waiting) {
         buttons: [
           iconBtn("✎", "Edit this task", () => startTaskEdit(t)),
           iconBtn("✕", "Delete", () => deleteTask(t.id))
+        ],
+        notes: t.notes || "",
+        noteKey: t.id
+      });
+      list.append(row);
+      continue;
+    }
+
+    // 2.3.0 — Katie's item 10. A follow-up waiting on a PROJECT, not a task:
+    // "+N working days after it's finished". A checkbox, because finishing a
+    // check-in early is allowed; ✎ gives it a date of its own, which takes it
+    // out of the automatic dating for good (store's rewind guard).
+    if (t.afterProjectId) {
+      const proj = (S.projectsAll || S.projects).find(x => x.id === t.afterProjectId);
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.addEventListener("change", ev => { setTaskDone(t.id, true); celebrate(1, clickPoint(ev)); });
+      const wd = t.afterProjectWd || 0;
+      rowScaffold(row, {
+        lead: cb, tier,
+        mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">${wd ? `${wd} working day${wd === 1 ? "" : "s"} after` : "the day"} ` +
+          `${esc(proj ? proj.name : "its project")} is finished — it dates itself then</span>`,
+        buttons: [
+          iconBtn("✎", "Give it a date of its own instead", () => startTaskEdit(t)),
+          ...(canDeleteDoc(t) ? [iconBtn("✕", "Delete", () => deleteTask(t.id))] : [])
         ],
         notes: t.notes || "",
         noteKey: t.id
@@ -2577,7 +2711,8 @@ const MODAL_ESCAPES = {
   "weekend-modal":    "#weekend-back",
   "decision-modal":   "#decision-close",
   "uncheck-modal":    "#uncheck-oops",
-  "dup-modal":        "#dup-no"
+  "dup-modal":        "#dup-no",
+  "task-edit-modal":  "#task-edit-close"     // 2.3.0 — item 9
 };
 
 /** The open modal painted on top, or null. Exported shape for testing. */
@@ -2990,6 +3125,20 @@ function renderProjects(now) {
   }
 }
 
+/** ⏱ in / ⏹ out for one project — ONE implementation, two buttons (the
+ *  card's, and since 2.3.0 the Today row's). The card's click handler used
+ *  to hold this inline; a second copy for the Today pane would have been
+ *  D98's drift waiting to happen, so it moved here instead. */
+function toggleClock(projectId) {
+  const os = openSessionNow();
+  if (os && os.projectId === projectId) { openClockOutDialog(os); return; }
+  clockIn(projectId).then(info => {   // D116: silent switch, fully reversible
+    pushUndo("clock in",
+      async () => { await deleteSession(info.newId); for (const id of info.closedIds) await setSessionEnd(id, null); },
+      async () => { for (const id of info.closedIds) await setSessionEnd(id, info.at); await restoreDoc("sessions", info.newId, info.body); });
+  });
+}
+
 /** D56: collapsed = header row + dates + progress bar. The header row
  *  never wraps: [chevron][name (wraps internally)][buttons] — the
  *  buttons Jake kept losing to the second row are now pinned. */
@@ -3011,12 +3160,11 @@ function projectCard(p) {
   nameEl.textContent = p.name;
   const btns = document.createElement("span");
   btns.className = "proj-btns";
-  // D126 — "duplicate for next year" has no year to bump on a timeless
-  // project; offering it would either no-op confusingly or need its own
-  // invented semantics. Left out on purpose, not forgotten.
-  if (p.startDate != null) {
-    btns.append(iconBtn("🔁", "Duplicate this project for next year (same window, stages reset)", () => openDuplicateModal(p)));
-  }
+  // 2.3.0 — Katie's item 1. Any project, any time, including Someday ones
+  // (D126 kept them out only because "next year" had no year to bump; a
+  // plain copy has no such problem). 📋 rather than 🔁: she did not read 🔁
+  // as "duplicate", and it only ever offered next year.
+  btns.append(iconBtn("📋", "Duplicate — a copy with new dates, name or tier; the pipeline comes along with its checkmarks reset", () => openDuplicateModal(p)));
   btns.append(
     iconBtn("✎", "Edit project (name, color, tier, dates, workload)", () => startProjectEdit(p)),
     iconBtn("✎⋮", "Edit this project's stages (rename, reorder, add, remove)", () => openStagesDialog(p)),
@@ -3080,15 +3228,7 @@ function projectCard(p) {
       ? `Clock out — running since ${fmtTime(os.start)}. You'll get to adjust the end time (or cancel a misclick).`
       : os ? `Clock in — the ${projName(os.projectId)} timer ends at this same moment. One tap, no double-running.`
            : "Clock in — start the timer for this project";
-    cbtn.addEventListener("click", e => {
-      e.stopPropagation();
-      if (runningHere) openClockOutDialog(os);
-      else clockIn(p.id).then(info => {   // D116: silent switch, fully reversible
-        pushUndo("clock in",
-          async () => { await deleteSession(info.newId); for (const id of info.closedIds) await setSessionEnd(id, null); },
-          async () => { for (const id of info.closedIds) await setSessionEnd(id, info.at); await restoreDoc("sessions", info.newId, info.body); });
-      });
-    });
+    cbtn.addEventListener("click", e => { e.stopPropagation(); toggleClock(p.id); });
     const tot = document.createElement("span");
     tot.className = "clock-total";
     // 1.35.0 — yours is the headline; the team total only appears when
@@ -3178,6 +3318,12 @@ function projectCard(p) {
     list.append(row);
   });
   card.append(list);
+  // 2.3.0 — item 4, on the card as well as in ✎⋮: an expanded card is where
+  // she reviews a pipeline most often.
+  const linked = document.createElement("div");
+  linked.className = "linked-tasks";
+  renderLinkedTasks(linked, p);
+  if (!linked.hidden) card.append(linked);
   return card;
 }
 
@@ -3195,7 +3341,10 @@ function stageRef(projectId, index) {
 async function onStageToggle(projectId, stageIndex, done, ev) {
   let result;
   try {
-    result = await setStageDone(projectId, stageRef(projectId, stageIndex), done);
+    // 2.3.0 — the tier's working days ride along so the follow-ups waiting
+    // on this project can be dated when it finishes (store 1.4.0).
+    const tierDays = S.tiers.find(t => t.id === S.projects.find(p => p.id === projectId)?.tierId)?.allowedDays;
+    result = await setStageDone(projectId, stageRef(projectId, stageIndex), done, tierDays);
   } catch (err) {
     // 1.35.1 — A REFUSAL MUST REPAINT. The checkbox has already flipped
     // itself: that is the browser's default, not ours. When store.js refuses
@@ -3214,6 +3363,14 @@ async function onStageToggle(projectId, stageIndex, done, ev) {
 
   // 1.40.0 — a task appearing out of nowhere two weeks from now is a
   // surprise unless the moment that created it says so.
+  if (result && result.datedFollowUps > 0) {
+    // 2.3.0 — Katie's item 10: "linked to the day I actually publish."
+    // Say so, for the same reason the hurrah's task below does: something
+    // just got a date nobody typed.
+    const n = result.datedFollowUps;
+    showToast("soon", `${n} follow-up${n === 1 ? "" : "s"} now dated`,
+      `${n === 1 ? "It was" : "They were"} waiting for this project to finish, and ${n === 1 ? "counts" : "count"} from today.`);
+  }
   if (result && result.spawnedTask) {
     const d = new Date(result.spawnedTask.dueAt);
     setTimeout(() => alert(
@@ -3237,40 +3394,48 @@ async function onStageToggle(projectId, stageIndex, done, ev) {
     // D59: once the fireworks land, offer next year's run.
     if (result.allDone) {
       const p = S.projects.find(x => x.id === projectId);
-      if (p) setTimeout(() => openDuplicateModal(p), 2600);
+      if (p) setTimeout(() => openDuplicateModal(p, { finished: true }), 2600);
     }
   }
 }
 
 // ---------- Duplicate for next year (D59) ----------
 
-/** Same calendar date next year; Feb 29 clamps to Feb 28. */
-function plusOneYear(ts) {
-  const d = new Date(ts);
-  const m = d.getMonth();
-  d.setFullYear(d.getFullYear() + 1);
-  if (d.getMonth() !== m) d.setDate(0); // rolled over → back to month end
-  return d.getTime();
-}
+// 2.3.0 — plusOneYear() removed: the duplicate's date chips (applyDupShift)
+// do month-quantum arithmetic for every step, a year included.
 
-function openDuplicateModal(p) {
-  if (p.startDate == null) {   // D126 — the 🔁 button is hidden for these; belt and suspenders
-    alert("Someday projects don't duplicate for next year — there's no year to bump. Use ✎⋮ for a fresh checklist instead.");
-    return;
-  }
-  const tier = S.tiers.find(t => t.id === p.tierId);
-  const allowed = tier?.allowedDays;
-  // Shift the window +1 year, then snap onto the tier's working days:
-  // start slides FORWARD to the next allowed day, end slides BACK to the
-  // previous one (never widening the window), with an order guard.
-  let startDate = plusOneYear(p.startDate);
-  let endDate = plusOneYear(p.endDate);
-  if (!isDayAllowed(startDate, allowed)) startDate = allowedNeighbors(startDate, allowed).next;
-  if (!isDayAllowed(endDate, allowed)) endDate = allowedNeighbors(endDate, allowed).prev;
-  if (endDate < startDate) endDate = allowedNeighbors(startDate, allowed).next;
-  // D62 rev: the stage list is part of the review — copied (and reset)
-  // up front so "✎⋮ Review the pipeline first…" can edit it pre-create.
-  const stages = (p.stages || []).map(sRaw => {
+/**
+ * ⚠️ 2.3.0 — DUPLICATE IS NO LONGER ONLY "FOR NEXT YEAR". Katie's item 1:
+ * *"Duplicate project (edit name, date range, etc.)"*, and her reason, via
+ * Jake: duplicating laundry "so that it wasn't a full year away", which on
+ * Android meant back-clicking a calendar picker one month at a time.
+ *
+ * Two doors, one modal:
+ *   · `finished: true`  — the old offer after the fireworks. Same copy, same
+ *     follow-up box and snooze, +1 year pre-selected. Unchanged in spirit.
+ *   · `finished: false` — the 📋 on any card, any time. A plain copy: no
+ *     "the project stays finished" follow-up box (it may not be), no snooze
+ *     (there is nothing to be reminded of), and Cancel instead of No thanks.
+ *
+ * The date-shift chips are the Android answer: every chip measures from the
+ * ORIGINAL dates, so tapping is never cumulative and never needs the picker.
+ *
+ * Also fixed on the way through, both found reading this function:
+ *   · the copy DROPPED 🎆 and its ↳ +Nd, so next year's run had no climax and
+ *     no follow-up. Both are carried now (never `spawnedTaskId` — that is the
+ *     record that THIS year's follow-up already happened).
+ *   · the copy DROPPED every outrider. Since 2.1.0 those live as tasks, not
+ *     stages, so "copy the pipeline" silently left out the engagement letter
+ *     and the invoice. They are rebuilt from the tasks (queue
+ *     outriderStageFromTask) and go back in at the ends, where syncOutriders
+ *     turns them into the new project's own tasks on create.
+ */
+function openDuplicateModal(p, { finished = false } = {}) {
+  const sourceTier = S.tiers.find(t => t.id === p.tierId);
+  const allowed = sourceTier?.allowedDays;
+  const timeless = p.startDate == null;
+
+  const carry = sRaw => {
     const st = normalizeStage(sRaw);
     return {
       name: st.name,
@@ -3278,23 +3443,49 @@ function openDuplicateModal(p) {
       anchor: st.anchor || "start",
       offsetDays: st.offsetDays || 0,
       completedAt: null,
-      dueAt: null
+      dueAt: null,
+      ...(st.hurrah ? { hurrah: true } : {}),
+      ...(st.hurrah && st.spawnDays != null ? { spawnDays: st.spawnDays } : {})
     };
-  });
-  S.dupTarget = { projectId: p.id, stages };
+  };
+  const pipeline = (p.stages || []).map(carry);
+  // Outriders back in, from the tasks they became. Before-start ones lead,
+  // after-end ones trail — the order a pipeline reads in.
+  const lead = [], trail = [];
+  for (const t of S.tasks.filter(t => String(t.id).startsWith(`out_${p.id}_`))) {
+    const st = outriderStageFromTask(p, t, allowed);
+    if (!st) continue;
+    (st.direction === "before" ? lead : trail).push(carry(st));
+  }
+  const stages = [...lead, ...pipeline, ...trail];
+
+  S.dupTarget = { projectId: p.id, stages, finished, nameTouched: false,
+                  sourceStart: p.startDate, sourceEnd: p.endDate, shift: null };
+
+  $("#dup-heading").textContent = finished ? "🔁 Same time next year?" : "📋 Duplicate project";
+  $("#dup-yes").textContent = finished ? "Create next year's run" : "Create the copy";
+  $("#dup-no").textContent = finished ? "No thanks" : "Cancel";
+  $("#dup-followup").hidden = !finished;
+  $("#dup-snooze-row").hidden = !finished;
+  const restored = lead.length + trail.length;
   $("#dup-text").textContent =
-    `Everything below is pre-filled for next year and editable — double-check before creating. ` +
-    `The ${stages.length}-stage pipeline copies over exactly as this project has it (surgery included), ` +
-    `checkboxes and hard dues reset; review or reshape it first with ✎⋮ below.`;
-  $("#dup-name").value = bumpYearTokens(p.name, new Date(p.startDate).getFullYear(), new Date(startDate).getFullYear());
-  $("#dup-start").value = toDateInput(new Date(startDate));
-  $("#dup-end").value = toDateInput(new Date(endDate));
+    `Everything below is editable — nothing is created until you say so. ` +
+    `The ${stages.length}-stage pipeline copies over with checkmarks and hard dues reset` +
+    (restored ? `, including ${restored} step${restored === 1 ? "" : "s"} that ${restored === 1 ? "lives" : "live"} as ${restored === 1 ? "a task" : "tasks"} outside the project window` : "") +
+    `; review or reshape it with ✎⋮ below.`;
+
+  $("#dup-name").value = p.name;
   $("#dup-color").value = p.color;
   const taskTiers = S.tiers.filter(t => t.kind !== "anchor");
   $("#dup-tier").innerHTML = taskTiers.map(t =>
     `<option value="${t.id}">${t.rank} — ${esc(t.name)}</option>`).join("");
   $("#dup-tier").value = p.tierId;
   $("#dup-workload").value = String(p.workload || 2);
+  $("#dup-start").value = timeless ? "" : toDateInput(new Date(p.startDate));
+  $("#dup-end").value = timeless ? "" : toDateInput(new Date(p.endDate));
+  syncDupDates();
+  if (!timeless) applyDupShift(finished ? "1y" : "1y");
+
   // Fresh every open: a stale "✓ Added" from the last project would read as
   // a promise about this one.
   $("#dup-fu-title").value = "";
@@ -3303,6 +3494,62 @@ function openDuplicateModal(p) {
   $("#dup-fu-note").textContent =
     "It lands on this project's tier, dated from today, and lives its own life — the project stays finished either way.";
   $("#dup-modal").hidden = false;
+}
+
+/** Shift BOTH dates from the ORIGINAL by a chip's amount ("1w", "3m", …),
+ *  snapped onto the chosen tier's working days: start forward, end back,
+ *  never widening the window — the rule next-year always used. */
+function applyDupShift(code) {
+  const t = S.dupTarget;
+  if (!t || t.sourceStart == null) return;
+  const m = /^(\d+)([dwmy])$/.exec(code);
+  if (!m) return;
+  const n = parseInt(m[1], 10), unit = m[2];
+  const move = ts => {
+    const d = new Date(ts);
+    if (unit === "d") d.setDate(d.getDate() + n);
+    else if (unit === "w") d.setDate(d.getDate() + 7 * n);
+    else {
+      const months = unit === "m" ? n : 12 * n;
+      const day = d.getDate();
+      d.setDate(1); d.setMonth(d.getMonth() + months);
+      d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));   // Jan 31 + 1 mo = Feb 28
+    }
+    return d.getTime();
+  };
+  const allowed = S.tiers.find(x => x.id === $("#dup-tier").value)?.allowedDays;
+  let startDate = move(t.sourceStart), endDate = move(t.sourceEnd ?? t.sourceStart);
+  if (n > 0) {   // "same dates" means the same dates — no snapping behind her back
+    if (!isDayAllowed(startDate, allowed)) startDate = allowedNeighbors(startDate, allowed).next;
+    if (!isDayAllowed(endDate, allowed)) endDate = allowedNeighbors(endDate, allowed).prev;
+    if (endDate < startDate) endDate = allowedNeighbors(startDate, allowed).next;
+  }
+  $("#dup-start").value = toDateInput(new Date(startDate));
+  $("#dup-end").value = toDateInput(new Date(endDate));
+  t.shift = code;
+  // Katie's YYNN codes and full years follow a year move — but never over a
+  // name she has typed into herself.
+  if (!t.nameTouched) {
+    const src = S.projects.find(x => x.id === t.projectId);
+    if (src) $("#dup-name").value = bumpYearTokens(src.name,
+      new Date(t.sourceStart).getFullYear(), new Date(startDate).getFullYear());
+  }
+  $("#dup-shift-row").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.shift === code));
+}
+
+/** The date row follows the chosen tier: a Someday tier has no dates, any
+ *  other tier needs them (and gets the original's, or today's, to start). */
+function syncDupDates() {
+  const t = S.dupTarget;
+  const timeless = !!S.tiers.find(x => x.id === $("#dup-tier").value)?.timeless;
+  $("#dup-dates-row").hidden = timeless;
+  $("#dup-shift-row").hidden = timeless || t?.sourceStart == null;
+  if (!timeless && !$("#dup-start").value) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    $("#dup-start").value = toDateInput(today);
+    $("#dup-end").value = toDateInput(today);
+  }
 }
 
 /** ⚠️ THE FOLLOW-UP OFFER ON PROJECT COMPLETION (1.46.0).
@@ -3355,7 +3602,8 @@ async function dupFollowUpAdd() {
     await addTask({
       title, tierId: p.tierId, dueAt: due,
       escalation: { every: 1, unit: "hours" },
-      notes: `Follow-up from “${p.name}”.`
+      notes: `Follow-up from “${p.name}”.`,
+      fromProjectId: p.id          // 2.3.0 — listed under the project (item 4)
     });
     note.textContent = `✓ Added — “${title}”, due ${fmtDay(due)}. The project stays finished.`;
     $("#dup-fu-title").value = "";
@@ -3384,20 +3632,24 @@ function dupConfirm() {
   const p = S.projects.find(x => x.id === t.projectId);
   if (!p) { S.dupTarget = null; $("#dup-modal").hidden = true; return; }
   const name = $("#dup-name").value.trim() || p.name;
-  const startDate = new Date(`${$("#dup-start").value}T00:00`).getTime();
-  const endDate = new Date(`${$("#dup-end").value}T00:00`).getTime();
   const tierId = $("#dup-tier").value;
-  const workload = parseInt($("#dup-workload").value, 10) || 2;
-  if (isNaN(startDate) || isNaN(endDate)) { alert("Both dates are needed."); return; }
-  if (endDate < startDate) { alert("Project can't end before it starts. (The octopus checked.)"); return; }
-  // Edited dates still respect the chosen tier's working days (D60).
   const tier = S.tiers.find(x => x.id === tierId);
-  for (const [label, ts] of [["start", startDate], ["end", endDate]]) {
-    if (!isDayAllowed(ts, tier?.allowedDays)) {
-      const { prev, next } = allowedNeighbors(ts, tier?.allowedDays);
-      alert(`${fmtDay(ts)} is outside ${tier ? tier.name + "'s" : "this tier's"} working days — ` +
-        `try ${fmtDay(prev)} or ${fmtDay(next)} for the ${label} date.`);
-      return;
+  const timeless = !!tier?.timeless;   // D126 — a Someday copy has no dates
+  const workload = parseInt($("#dup-workload").value, 10) || 2;
+  let startDate = null, endDate = null;
+  if (!timeless) {
+    startDate = new Date(`${$("#dup-start").value}T00:00`).getTime();
+    endDate = new Date(`${$("#dup-end").value}T00:00`).getTime();
+    if (isNaN(startDate) || isNaN(endDate)) { alert("Both dates are needed."); return; }
+    if (endDate < startDate) { alert("Project can't end before it starts. (The octopus checked.)"); return; }
+    // Edited dates still respect the chosen tier's working days (D60).
+    for (const [label, ts] of [["start", startDate], ["end", endDate]]) {
+      if (!isDayAllowed(ts, tier?.allowedDays)) {
+        const { prev, next } = allowedNeighbors(ts, tier?.allowedDays);
+        alert(`${fmtDay(ts)} is outside ${tier ? tier.name + "'s" : "this tier's"} working days — ` +
+          `try ${fmtDay(prev)} or ${fmtDay(next)} for the ${label} date.`);
+        return;
+      }
     }
   }
   const stages = t.stages || [];
@@ -3408,7 +3660,13 @@ function dupConfirm() {
   }).then(ref => {
     // Open the new card so the pipeline is immediately reviewable
     // (✎⋮ from there for stage surgery — "Excel setup" → five steps).
-    if (ref?.id) { S.expandedProjects.add(ref.id); persistExpanded(); }
+    if (ref?.id) {
+      S.expandedProjects.add(ref.id); persistExpanded();
+      // 2.3.0 — the rebuilt outriders are stages again for one moment;
+      // this turns them into the NEW project's own tasks. It was missing
+      // here all along, which only mattered once the copy could carry them.
+      if (!timeless) syncOutridersFor(ref.id, tierId);
+    }
   });
 }
 
@@ -3424,6 +3682,8 @@ function openDupStages() {
   const box = $("#stage-proj-editor");
   box.innerHTML = "";
   (S.dupTarget.stages || []).forEach(st => projStageRow(st, -1, false));
+  $("#stage-proj-linked").hidden = true;      // the copy has no tasks yet
+  $("#stages-save-template").hidden = canSetUp() === false;
   $("#stages-modal").hidden = false;
 }
 
@@ -3444,7 +3704,8 @@ function dupSnooze(days) {
     title: `🔁 Set up next year's "${p.name}"?`,
     tierId: p.tierId,
     dueAt: d.getTime(),
-    escalation: { every: 1, unit: "days" }
+    escalation: { every: 1, unit: "days" },
+    fromProjectId: p.id          // 2.3.0 — listed under the project (item 4)
   });
 }
 
@@ -3525,8 +3786,143 @@ function openStagesDialog(p) {
   const box = $("#stage-proj-editor");
   box.innerHTML = "";
   (p.stages || []).forEach((st, i) => projStageRow(normalizeStage(st), i, false));
+  renderLinkedTasks($("#stage-proj-linked"), p, { inModal: true });   // 2.3.0 — item 4
+  $("#stages-save-template").hidden = canSetUp() === false;           // 2.3.0 — item 2
   $("#stages-modal").hidden = false;
   markClean("stages", stagesSignature);   // D129
+}
+
+/**
+ * ⚠️ 2.3.0 — KATIE'S ITEM 2: "When editing stages, option to save as a new
+ * template." The rows on screen become a project type in Settings ▸ Pipeline.
+ *
+ * TEMPLATE SHAPE ONLY — name, timing, 🎆. Completion, hard dues, sids and
+ * provenance belong to THIS project's history and would be meaningless (or
+ * false: somebody's name on work nobody has done) in a template. `spawnDays`
+ * is left out because templates do not carry it anywhere else either
+ * (readStageEditor, stagesFromPipeline) — a field one editor writes and the
+ * next save silently drops is worse than one that is plainly absent.
+ *
+ * ⚠️ THE LIBRARY IS NORMALISED BEFORE IT IS WRITTEN. Every existing type gets
+ * an id if it lacks one — the SAVE-1 landmine (an imported type with no id,
+ * which setDoc refuses) was healed in Settings on open, and this is a second
+ * writer of the same document, so it heals the same way.
+ */
+async function stagesSaveAsTemplate() {
+  const rows = [...document.querySelectorAll("#stage-proj-editor .stage-tmpl-row")];
+  if (!rows.length) { alert("There are no stages here to save."); return; }
+  const stages = rows.map(row => ({
+    name: row.querySelector(".st-name").value.trim() || "Untitled stage",
+    direction: row.querySelector(".st-dir").value,
+    anchor: row.querySelector(".st-anchor").value,
+    offsetDays: clampInt(row.querySelector(".st-off").value, 0, 365, 0),
+    ...(row.querySelector(".st-hurrah")?.classList.contains("active") ? { hurrah: true } : {})
+  }));
+  const src = S.stagesTarget === "@dup"
+    ? S.projects.find(x => x.id === S.dupTarget?.projectId)
+    : S.projects.find(x => x.id === S.stagesTarget);
+  const suggested = (src?.name || "").replace(/\s*\b(19|20)\d{2}\b\s*/g, " ").trim();
+  const name = (prompt("Name the new template (it appears under Project type when you start a project):", suggested) || "").trim();
+  if (!name) return;
+  const types = (S.projectTypes || []).map(t => ({
+    id: t.id || newTypeId(), name: t.name || "Untitled pipeline", stages: t.stages || []
+  }));
+  const clash = types.find(t => t.name.toLowerCase() === name.toLowerCase());
+  if (clash) {
+    if (!confirm(`There is already a template called "${clash.name}". Replace its stages with these ${stages.length}?`)) return;
+    clash.stages = stages;
+  } else {
+    types.push({ id: newTypeId(), name, stages });
+  }
+  try {
+    await saveProjectTypes(types);
+    showToast("soon", clash ? "Template updated" : "Template saved",
+      `"${clash ? clash.name : name}" — ${stages.length} stage${stages.length === 1 ? "" : "s"}. ` +
+      `Pick it under Project type on a new project. This project is unchanged until you hit Save stages.`);
+  } catch (err) {
+    console.error("[stages] save as template failed:", err);
+    alert(`Could not save the template: ${err && err.message ? err.message : err}`);
+  }
+}
+
+/**
+ * ⚠️ 2.3.0 — KATIE'S ITEM 4: "review tasks associated w/ a pipeline at the
+ * same time you review stages." Since 2.1.0 the steps outside a project's
+ * window are TASKS, so reviewing the pipeline showed half of it.
+ *
+ * What counts as "from this project", in order of how it was recorded:
+ *   · `fromProjectId` — everything spawned from store 1.4.0 / app 2.3.0 on;
+ *   · `afterProjectId` — follow-ups waiting on this project's finish;
+ *   · the outrider id `out_<projectId>_…` — the ones made before either;
+ *   · a stage's `spawnedTaskId` — the 🎆 follow-up, before 1.4.0;
+ * plus each one's own ↳ follow-up chain. Deliberately NOT matched by title or
+ * notes text: a guess that lists a stranger's task under this project is
+ * worse than a list that is missing one.
+ *
+ * Only what the live snapshot holds — completed tasks older than the live
+ * window (D139) are not fetched for this.
+ */
+function linkedTasksOf(p) {
+  const spawned = new Set((p.stages || []).map(s => s.spawnedTaskId).filter(Boolean));
+  const direct = S.tasks.filter(t =>
+    t.fromProjectId === p.id || t.afterProjectId === p.id ||
+    String(t.id).startsWith(`out_${p.id}_`) || spawned.has(t.id));
+  const seen = new Set(direct.map(t => t.id));
+  const out = [...direct];
+  for (let i = 0; i < out.length; i++) {
+    for (const k of S.tasks.filter(t => t.parentTaskId === out[i].id && !seen.has(t.id))) {
+      seen.add(k.id); out.push(k);
+    }
+  }
+  const key = t => t.completedAt ? 3e15 + t.completedAt : (t.dueAt ?? 2e15);
+  return out.sort((a, b) => key(a) - key(b));
+}
+
+function renderLinkedTasks(box, p, { inModal = false } = {}) {
+  if (!box) return;
+  box.innerHTML = "";
+  const tasks = linkedTasksOf(p);
+  box.hidden = !tasks.length;
+  if (!tasks.length) return;
+  const h = document.createElement("div");
+  h.className = "linked-head";
+  h.textContent = `Tasks from this project (${tasks.length})`;
+  h.title = "Steps that live outside the pipeline as their own tasks — before the start, after the finish, or a 🎆 follow-up.";
+  box.append(h);
+  for (const t of tasks) {
+    const row = document.createElement("div");
+    row.className = "linked-row" + (t.completedAt ? " linked-done" : "");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!t.completedAt;
+    cb.disabled = !!t.completedAt;   // un-completing has its own modal (the ↶ path); not here
+    cb.title = t.completedAt ? `Done ${fmtDay(t.completedAt)}` : "Mark done";
+    cb.addEventListener("change", ev => { setTaskDone(t.id, true); celebrate(1, clickPoint(ev)); });
+    const name = document.createElement("span");
+    name.className = "linked-name";
+    name.textContent = t.title;
+    const when = document.createElement("span");
+    when.className = "sub linked-when";
+    when.textContent = t.completedAt ? `done ${fmtDay(t.completedAt)}`
+      : t.dueAt != null ? `due ${fmtDay(t.dueAt)}`
+      : t.afterProjectId ? `${t.afterProjectWd || 0}wd after it's finished`
+      : t.parentTaskId ? "waits on the step before"
+      : "no date";
+    row.append(cb, name, when);
+    if (!t.completedAt) {
+      row.append(iconBtn("✎", "Edit this task", () => {
+        // From inside the stages modal: edit on top of it, not behind it.
+        startTaskEdit(t);
+      }));
+    }
+    box.append(row);
+  }
+  if (inModal) {
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = "These are tasks, not stages — they are not changed by Save stages.";
+    box.append(note);
+  }
 }
 
 function timingSelects(st) {
@@ -3559,7 +3955,7 @@ function projStageRow(st, origIndex, isNew) {
   row.className = "stage-tmpl-row" + (st.completedAt ? " proj-stage-done" : "");
   row.dataset.orig = String(origIndex);
   row.innerHTML = `
-    <span class="st-move"><button type="button" class="st-up" title="Move up">▲</button><button type="button" class="st-down" title="Move down">▼</button></span>
+    <span class="st-grip" title="Drag to reorder">⋮⋮</span><span class="st-move"><button type="button" class="st-up" title="Move up">▲</button><button type="button" class="st-down" title="Move down">▼</button></span>
     <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
     ${timingSelects(st)}
     <span class="st-flags">${st.completedAt ? "✓" : ""}${st.dueAt ? " ⏰" : ""}</span>
@@ -3878,7 +4274,9 @@ function startTaskEdit(task) {
   $("#task-title").value = task.title;
   $("#task-notes").value = task.notes || "";
   $("#task-tier").value = task.tierId;
-  const d = new Date(task.dueAt);
+  // 2.3.0 — a waiting follow-up has no date yet; new Date(null) is 1970.
+  // Editing one offers today, which is what "give it a date" means.
+  const d = task.dueAt != null ? new Date(task.dueAt) : new Date(new Date().setHours(9, 0, 0, 0));
   $("#task-date").value = toDateInput(d);
   $("#task-time").value = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   $("#task-esc-n").value = task.escalation?.every ?? 1;
@@ -3887,10 +4285,35 @@ function startTaskEdit(task) {
   $("#task-rec-n").value = task.recurrence?.every ?? "";               // D111 — blank stays blank here too
   $("#task-rec-unit").value = task.recurrence?.unit ?? "weeks";
   $("#task-rec-anchor").value = task.recurrence?.anchor ?? "done";
+  openTaskEditModal();   // 2.3.0 — item 9: edit where you clicked, not at the bottom of the pane
   $("#task-title").focus();
 }
 
+/** ⚠️ 2.3.0 — Katie's item 9. D68's reparenting, for the TASK form: title
+ *  and form move into #task-edit-modal and go home on close. Moved, never
+ *  cloned, so every listener, the tier select and the D143 date reset all
+ *  keep working with no second copy to drift (D98). New tasks still use the
+ *  form where it lives — only EDITING pops up. */
+let taskFormReturn = null;
+function openTaskEditModal() {
+  const title = $("#task-form-title"), form = $("#task-form");
+  if (!$("#task-edit-modal").hidden) return;
+  taskFormReturn = { parent: title.parentElement, next: form.nextElementSibling };
+  $("#task-edit-slot").append(title, form);
+  $("#task-edit-modal").hidden = false;
+}
+function closeTaskEditModal() {
+  const modal = $("#task-edit-modal");
+  if (modal.hidden || !taskFormReturn) return;
+  modal.hidden = true;
+  const { parent, next } = taskFormReturn;
+  parent.insertBefore($("#task-form-title"), next);
+  parent.insertBefore($("#task-form"), next);
+  taskFormReturn = null;
+}
+
 function cancelTaskEdit() {
+  closeTaskEditModal();   // 2.3.0 — every way out of an edit goes home first
   S.editingTaskId = null;
   $("#task-form-title").textContent = "New task";
   $("#task-submit").textContent = "Add to the tentacles";
@@ -3994,6 +4417,8 @@ function startProjectEdit(p) {
   syncProjectDateRequirement();
   const tl = $("#project-type-label"); if (tl) tl.hidden = true;   // D124 — editing keeps the project's own stages
   checkProjectColor();
+  const es = $("#project-edit-stages"); if (es) es.hidden = false;   // 2.3.0 — item 9
+  openYvProjectModal();   // 2.3.0 — item 9: the edit pops up where you are (D68's modal, reused)
   $("#project-name").focus();
   markClean("projectForm", projectFormSignature);   // D131 — this populated edit form is the clean baseline
 }
@@ -4010,6 +4435,7 @@ function cancelProjectEdit(opts = {}) {
   $("#project-workload").value = "2";
   syncProjectDateRequirement();   // D126 — .reset() can land back on a timeless tier's default
   const tl = $("#project-type-label"); if (tl) tl.hidden = false;   // D124 — new projects choose a pipeline again
+  const es = $("#project-edit-stages"); if (es) es.hidden = true;   // 2.3.0 — only while editing
   suggestProjectColor(true);
   $("#project-color-hint").textContent = "";
   markClean("projectForm", projectFormSignature);   // D131 — the empty new-project form is clean
@@ -4751,7 +5177,9 @@ function renderTidalHorizon(w) {
     const chip = document.createElement("span");
     chip.className = "th-chip blocked";
     chip.textContent = t.title;
-    chip.title = `${t.title}\nWaiting on its parent task — it gets a date automatically when the parent is checked off${t.offsetDays != null ? ` (+${t.offsetDays}d)` : ""}.\n\nNot yours to schedule.`;
+    chip.title = t.afterProjectId
+      ? `${t.title}\nWaiting for ${projName(t.afterProjectId)} to finish — it dates itself ${t.afterProjectWd || 0} working day(s) after.`
+      : `${t.title}\nWaiting on its parent task — it gets a date automatically when the parent is checked off${t.offsetDays != null ? ` (+${t.offsetDays}d)` : ""}.\n\nNot yours to schedule.`;
     box.append(chip);
   }
 }
@@ -5589,6 +6017,34 @@ function wireBarDrag(bar, p, rowSpanMs, lanes) {
   });
 }
 
+/** 2.3.0 — Katie's item 7. One chip per tier that has dated projects, so a
+ *  tier with nothing on the calendar does not clutter the row. Styled as
+ *  the Today queue's chips (same look, same meaning of ● and ○), stored
+ *  separately — see the markup comment. */
+function renderYearTierFilters() {
+  const box = $("#yv-tier-filters");
+  if (!box) return;
+  box.innerHTML = "";
+  const used = new Set(S.projects.filter(p => p.startDate != null).map(p => p.tierId));
+  const tiers = S.tiers.filter(t => used.has(t.id) && !t.timeless);
+  box.hidden = tiers.length < 2;   // one tier: nothing to choose between
+  for (const t of tiers) {
+    const hidden = S.yvHiddenTierIds.has(t.id);
+    const chip = document.createElement("button");
+    chip.className = "filter-chip" + (hidden ? " chip-off" : "");
+    chip.textContent = (hidden ? "○ " : "● ") + t.name;
+    chip.style.borderColor = t.color;
+    if (!hidden) chip.style.background = hexToRgba(t.color, 0.18);
+    chip.title = hidden ? `Show ${t.name}'s projects on the calendar` : `Hide ${t.name}'s projects from the calendar (this device only)`;
+    chip.addEventListener("click", () => {
+      if (hidden) S.yvHiddenTierIds.delete(t.id); else S.yvHiddenTierIds.add(t.id);
+      localStorage.setItem("tc-yv-hidden-tiers", JSON.stringify([...S.yvHiddenTierIds]));
+      renderYear();
+    });
+    box.append(chip);
+  }
+}
+
 function renderYearLegend(projs) {
   const box = $("#yv-legend");
   box.innerHTML = "";
@@ -5980,12 +6436,19 @@ function renderYear() {
   // epoch-math accident (0 never overlaps a real year), but "accident" is
   // exactly the kind of trap this file's own history keeps warning about
   // (D106, D110). Exclude by tier, explicitly, and let that be the reason.
-  const projs = S.projects
+  renderYearTierFilters();   // 2.3.0 — item 7
+  const inWindow = S.projects
     .filter(p => !S.tiers.find(t => t.id === p.tierId)?.timeless)
     .filter(p => startOfDayTs(p.startDate || 0) < winEnd &&
-                 startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS > winStart)
+                 startOfDayTs(p.endDate || p.startDate || 0) + DAY_MS > winStart);
+  const projs = inWindow
+    .filter(p => !S.yvHiddenTierIds.has(p.tierId))
     .sort((x, y) => (x.startDate || 0) - (y.startDate || 0));
   $("#yv-empty").hidden = projs.length !== 0;
+  // An empty calendar because of a chip must SAY so, or it reads as data loss.
+  $("#yv-empty").textContent = inWindow.length > projs.length
+    ? `Every project in this window is on a hidden tier — tap a tier above to show it again.`
+    : "No projects land in this window. Create one in Today view — its bar shows up here.";
   $("#yv-layouts").querySelectorAll("button").forEach(b =>
     b.classList.toggle("active", b.dataset.layout === S.yearLayout));
 
@@ -6818,6 +7281,76 @@ function toggleSharePanel(row, t) {
   });
 }
 
+/**
+ * ⚠️ 2.3.0 — KATIE'S ITEM 5: "drag stages to reorder rather than just the
+ * tiny up/down arrow buttons." A ⋮⋮ grip on every row, in BOTH stage editors
+ * (a project's ✎⋮ and Settings ▸ Pipeline) because both are built by
+ * wireTmplRow. ▲▼ stay — they are still the precise tool for one step.
+ *
+ * POINTER events, not HTML5 drag-and-drop: native DnD does not fire on
+ * touch at all, and her phone is Android. The grip has `touch-action: none`
+ * so a drag on it is never read as a scroll. The row itself moves in the DOM
+ * as you go (no ghost), so what you see mid-drag IS the order Save reads —
+ * both savers read rows in document order and neither needed a change.
+ * Near the top or bottom edge of the modal, the modal scrolls.
+ */
+function wireStageDrag(row, box) {
+  const grip = row.querySelector(".st-grip");
+  if (!grip) return;
+  grip.addEventListener("pointerdown", ev => {
+    if (ev.button != null && ev.button !== 0) return;
+    ev.preventDefault();
+    // ⚠️ NO setPointerCapture, AND THE LISTENERS GO ON `document`. Moving the
+    // row with insertBefore detaches it for an instant, and a detached node
+    // loses pointer capture — so listeners on the grip went deaf after the
+    // FIRST reorder step and a stage could only ever move one slot per drag.
+    // Found by the 2026-09 browser harness. Events always reach document.
+    const pid = ev.pointerId;
+    // THE ROW'S LEADING EDGE decides where it lands, not the finger: going
+    // up, its top edge; going down, its bottom edge; it swaps the moment
+    // that edge crosses a neighbour's middle. Rows are not all one height —
+    // on a phone they wrap to ~90px with the grip at the top, and the 🎆 row
+    // wraps even on a laptop — and both "finger vs middle" and "middle vs
+    // middle" made a tall row need dragging well past where it visibly
+    // belonged (harness, 412px phone and 1400px desktop, 2026-09).
+    const grabDy = ev.clientY - row.getBoundingClientRect().top;
+    let lastY = ev.clientY, goingUp = false;
+    row.classList.add("st-dragging");
+    const scroller = row.closest(".modal-card") || row.closest("#settings-modal") || null;
+    const move = e => {
+      if (e.pointerId !== pid) return;
+      e.preventDefault();
+      const y = e.clientY;
+      if (scroller) {
+        const r = scroller.getBoundingClientRect();
+        if (y < r.top + 40) scroller.scrollTop -= 12;
+        else if (y > r.bottom - 40) scroller.scrollTop += 12;
+      }
+      if (y !== lastY) { goingUp = y < lastY; lastY = y; }
+      const top = y - grabDy;
+      const edge = goingUp ? top : top + row.getBoundingClientRect().height;
+      let before = null;
+      for (const r of box.querySelectorAll(".stage-tmpl-row")) {
+        if (r === row) continue;
+        const b = r.getBoundingClientRect();
+        if (edge < b.top + b.height / 2) { before = r; break; }
+      }
+      if (before) { if (row.nextElementSibling !== before) box.insertBefore(row, before); }
+      else if (box.lastElementChild !== row) box.append(row);
+    };
+    const end = e => {
+      if (e.pointerId !== pid) return;
+      row.classList.remove("st-dragging");
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", end);
+      document.removeEventListener("pointercancel", end);
+    };
+    document.addEventListener("pointermove", move, { passive: false });
+    document.addEventListener("pointerup", end);
+    document.addEventListener("pointercancel", end);
+  });
+}
+
 function wireTmplRow(row, box) {
   row.querySelector(".st-dir").addEventListener("change", () => syncTimingRow(row));
   row.querySelector(".st-up").addEventListener("click", () => {
@@ -6827,6 +7360,7 @@ function wireTmplRow(row, box) {
     if (row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
   });
   row.querySelector(".st-del").addEventListener("click", () => row.remove());
+  wireStageDrag(row, box);   // 2.3.0 — item 5
   // D109 — 🎆 is a radio across the editor: marking one un-marks the rest;
   // clicking the marked one clears it (back to last-stage-wins default).
   const hb = row.querySelector(".st-hurrah");
@@ -6914,7 +7448,13 @@ function wirePipelineManager() {
     const name = (prompt("Name this project type (e.g. Holiday Card):") || "").trim();
     if (!name) return;
     capturePipelineEditor();
-    pipelineDraft.types.push({ id: newTypeId(), name, stages: [] });
+    // ⚠️ 2.3.0 — THIS BUTTON HAS THROWN SINCE 2.1.1. It read `pipelineCurrent
+    // = id` with no `id` in scope — 2.1.1 moved the minting into newTypeId()
+    // and took the local with it. A ReferenceError AFTER the push: the type
+    // existed in the draft, but the picker never switched to it and the
+    // editor never loaded it, so "+ New" looked like it did nothing.
+    const id = newTypeId();
+    pipelineDraft.types.push({ id, name, stages: [] });
     pipelineCurrent = id;
     refreshPipelineTarget();
     loadPipelineEditor();
@@ -6945,7 +7485,7 @@ function stageTemplateRow(st, isNew) {
   const row = document.createElement("div");
   row.className = "stage-tmpl-row";
   row.innerHTML = `
-    <span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
+    <span class="st-grip" title="Drag to reorder">⋮⋮</span><span class="st-move"><button class="st-up" title="Move up">▲</button><button class="st-down" title="Move down">▼</button></span>
     <input class="st-name" type="text" value="${esc(st.name || "")}" placeholder="Stage name">
     ${timingSelects(st)}
     <button class="st-hurrah${st.hurrah ? " active" : ""}" title="The big hurrah 🎆 — every project built from this template celebrates big when THIS stage completes. One per template.">🎆</button>

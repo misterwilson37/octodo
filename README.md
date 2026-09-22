@@ -71,7 +71,7 @@ A *dependent* workspace is not a special code path — it is an ordinary workspa
 | File | Role |
 |---|---|
 | `index.html` | The whole UI. One page, no templating. |
-| `app.js` | Rendering, interaction, views. ~6,500 lines, ported from 1.x with four seams changed. |
+| `app.js` | Rendering, interaction, views. ~7,700 lines, ported from 1.x with four seams changed. |
 | `store.js` | **Every** Firebase call. Auth, workspace bootstrap, subscriptions, CRUD. Nothing here touches the DOM. |
 | `queue.js` | Pure scheduling logic — priority, pipelines, week/clock geometry, holidays. Has never known Firestore exists. |
 | `celebrate.js` | The confetti, the parade, the fireworks. |
@@ -81,7 +81,10 @@ A *dependent* workspace is not a special code path — it is an ordinary workspa
 | `firestore-2.0.rules` | **The security model.** Lives in the Firebase console; kept here so the two cannot drift. |
 | `import.html` + `import-transform.js` | The 1.x migration. The page is a form and a batch writer; **all the logic is in the transform**, as pure functions over plain objects, which is the only reason it can be tested. |
 | `whereis.html` | A read-only diagnostic. Prints every board you hold a key to, every tier and which board it lives in, and flags any task sitting in a different board from its own tier. Writes nothing. Prefer it over the Firebase console for any "where does this live" question — the console's subcollection list is a sample, not an inventory. |
-| `rules-test/` | The emulator suite. 42 assertions over the rules and the import. The project's only automated tests. |
+| `rules-test/` | The emulator suite. 42 assertions over the rules and the import. |
+| `*.test.mjs` | Plain-Node tests, no dependencies: `stage-merge` (whose finished work survives a stage edit), `move` (moving a task chain between boards), `outrider` (steps outside a project's window, and follow-ups waiting for the real finish), `waiting` (what a tier's day off shows). |
+| `browser-test/` | **The real app in headless Chrome on an in-memory Firestore** — every button clicked for real, desktop and phone-sized. See its README. |
+| `version-check.mjs` | Every file carries its version twice; this proves the two agree, and that every `?v=` pin points at them. Gates every drop. |
 | `manifest.json`, `icon-*.png` | PWA install. |
 
 **Documentation, and which to read:**
@@ -138,7 +141,11 @@ You need your own Firebase project — this one's identifiers are in `config.js`
 
 **Migrated, for real:** on 2026-08-02 the 1.x household board moved onto 2.0 — 245 documents, in one run, with no dry rehearsal. There was never a throwaway account to practise on, and the reason that was an acceptable bet is that **1.x is still live and untouched**: a failed import costs a wiped 2.0 board and nothing else. The risk that mattered was never in the code — an export holds calendar **ids** and cannot hold calendar **permissions**, and 2.0 runs under a different service account, so calendars are re-shared by hand or the tiers import perfectly and stay empty forever, silently.
 
-**Not built yet:** the activity feed and kudos. A **soft delete for projects** — today, deleting one destroys its clocked hours and stage history, which on a shared project means one person can erase another's work and credit with a button. A **super-admin panel** to export and wipe a user, which the migration plan above quietly assumes exists. And **outrider stages** — turning a stage that is really a separate errand into a task.
+**Built since (2026-08-03):** **soft delete for projects** — the ✕ no longer destroys clocked hours or somebody else's ticked stages — and **outrider stages**: a step that falls outside a project's dates becomes its own task instead of clogging the pipeline.
+
+**Built 2026-09-22 (app 2.3.0) — Katie's handwritten list,** ten notes from the person who uses this every day: duplicate any project with one-tap date shifts; save a project's stages as a template; see a project's tasks beside its stages; drag stages to reorder; hide tiers on the year view; clock in from Today; edit in a pop-up where you tapped; and **follow-ups that wait for the day a project really finishes**, rather than the day it was planned to. Two long-standing bugs went with it — the weekend Waiting on… list, and a daylight-saving slip in the date arithmetic. `HANDOFF-2.0.md` §0v has the whole list in her words.
+
+**Not built yet:** the activity feed and kudos. A **super-admin panel** to export and wipe a user, which the migration plan above quietly assumes exists. Expanding a project inline in the Today list (the second half of Katie's biggest request — waiting on how the pop-up editing feels).
 
 **Per-user tier colours and names** shipped: on a shared tier the name and colour you type are yours alone, so renaming *ELA 8* to *ELA* on your screen does not rename it on anybody else's.
 

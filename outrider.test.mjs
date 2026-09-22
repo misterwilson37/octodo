@@ -1,5 +1,5 @@
 // ============================================================
-// outrider.test.mjs — Version 1.0.0
+// outrider.test.mjs — Version 1.1.0
 //
 // §0h: "A project's pipeline is what happens DURING the project. Anything
 // anchored outside the project window is a TASK, and always was."
@@ -15,7 +15,11 @@
 //   node outrider.test.mjs
 // ============================================================
 
-import { isOutrider, splitOutriders, projectPipelineWindow } from "./queue.js";
+import {
+  isOutrider, splitOutriders, projectPipelineWindow, addAllowedDays, stageScheduledAt,
+  waitsForFinish, projectFinishedAt, afterFinishDue, allowedDaysBetween,
+  outriderStageFromTask, repegPlan                              // 1.1.0 — queue 1.2.0
+} from "./queue.js";
 
 let passed = 0, failed = 0;
 const ok = (cond, msg) => cond
@@ -148,6 +152,99 @@ console.log("\n— projectPipelineWindow collapses once outriders are gone (§0h
   const [first] = projectPipelineWindow(proj([letter]), WD);
   ok(first < proj([]).startDate,
      "an un-migrated outrider still widens the window (so isLater reads startDate instead)");
+}
+
+// ============================================================
+// 1.1.0 — queue 1.2.0: "after end" follow-ups wait for the REAL finish.
+// Katie: "I want that linked to the day I actually publish."
+// ============================================================
+
+console.log("\n— which outriders wait for the finish —");
+{
+  ok(waitsForFinish(stage("Invoice", { direction: "after", anchor: "end", offsetDays: 10 })),
+     "after END waits for the finish");
+  ok(!waitsForFinish(stage("Letter", { direction: "before", anchor: "start", offsetDays: 14 })),
+     "before START does not (a plan, not a follow-up)");
+  ok(!waitsForFinish(stage("Late draft", { direction: "after", anchor: "start", offsetDays: 40 })),
+     "after START does not");
+  ok(!waitsForFinish(stage("Invoice", { direction: "after", anchor: "end", offsetDays: 10, dueAt: day(2026, 10, 30) })),
+     "a hand-set ⏰ date is kept — somebody chose it");
+}
+
+console.log("\n— what counts as finished —");
+{
+  const pub = day(2026, 9, 21), last = day(2026, 9, 24);
+  const withHurrah = proj([
+    stage("Draft", { completedAt: day(2026, 9, 10) }),
+    stage("Publish", { hurrah: true, completedAt: pub }),
+    stage("File it", {})
+  ]);
+  eq(projectFinishedAt(withHurrah), pub, "with a 🎆, its tick IS the finish — even with a stage still open");
+  eq(projectFinishedAt(proj([stage("Publish", { hurrah: true })])), null, "an un-ticked 🎆 means not finished");
+  const plain = proj([stage("A", { completedAt: pub }), stage("B", { completedAt: last })], { completedAt: last });
+  eq(projectFinishedAt(plain), last, "without a 🎆, the project's own completion");
+  eq(projectFinishedAt(proj([stage("A", { completedAt: pub }), stage("B")])), null, "not every stage done → not finished");
+}
+
+console.log("\n— the arithmetic agrees with the stage math it replaces (D103) —");
+{
+  const finish = day(2026, 9, 21);   // a Monday
+  const viaStage = stageScheduledAt({ startDate: finish, endDate: finish },
+    { direction: "after", anchor: "end", offsetDays: 10 }, WD);
+  eq(afterFinishDue(finish + 15 * 3600000, 10, WD), viaStage,
+     "+10wd after a 3 PM finish = +10wd after that day's end, same deadline hour");
+  eq(new Date(afterFinishDue(finish, 5, WD)).getDay(), 1, "+5 working days after a Monday is the next Monday");
+  eq(new Date(afterFinishDue(finish, 5, ALL)).getDay(), 6, "…and Saturday on a 7-day tier");
+}
+{
+  const end = day(2026, 9, 25);
+  for (const n of [0, 1, 4, 5, 10, 23]) {
+    eq(allowedDaysBetween(end, addAllowedDays(end, n, WD), WD), n, `allowedDaysBetween inverts addAllowedDays (${n}, weekdays)`);
+    eq(allowedDaysBetween(end, addAllowedDays(end, n, ALL), ALL), n, `…and (${n}, 7-day)`);
+  }
+  // Across the November DST change, where a raw 24h step would drift.
+  const oct30 = day(2026, 10, 30);
+  eq(allowedDaysBetween(oct30, addAllowedDays(oct30, 6, ALL), ALL), 6, "…across the DST change");
+}
+
+console.log("\n— rebuilding the stage an existing outrider task came from —");
+{
+  const p = proj([]);   // Mon 9/7 → Fri 9/25
+  const invoice = { id: "out_p1_x", title: "Invoice — Audit",
+    dueAt: stageScheduledAt(p, { direction: "after", anchor: "end", offsetDays: 10 }, WD) };
+  const got = outriderStageFromTask(p, invoice, WD);
+  eq(got?.name, "Invoice", "the ' — project' suffix comes off the name");
+  eq(`${got?.direction}/${got?.anchor}/${got?.offsetDays}`, "after/end/10", "after end +10wd, read back exactly");
+  const letter = { id: "out_p1_y", title: "Engagement letter — Audit",
+    dueAt: stageScheduledAt(p, { direction: "before", anchor: "start", offsetDays: 14 }, WD) };
+  const l = outriderStageFromTask(p, letter, WD);
+  eq(`${l?.direction}/${l?.anchor}/${l?.offsetDays}`, "before/start/14", "before start −14wd, read back exactly");
+  const stored = { fromStage: { name: "Check in", direction: "after", anchor: "end", offsetDays: 3 } };
+  eq(outriderStageFromTask(p, stored, WD).name, "Check in", "a stored fromStage wins over arithmetic");
+  eq(outriderStageFromTask(p, { title: "x — Audit", dueAt: day(2026, 9, 15) }, WD), null,
+     "a task dated INSIDE the window was never an outrider");
+}
+
+console.log("\n— the one-time re-peg (AFICC Bonnie's case) —");
+{
+  const plannedEnd = day(2026, 9, 25);
+  const plan = (stages, over = {}) => proj(stages, { endDate: plannedEnd, ...over });
+  const task = { id: "out_p1_z", title: "Final check-in — Audit",
+    dueAt: stageScheduledAt(plan([]), { direction: "after", anchor: "end", offsetDays: 5 }, WD) };
+
+  const unfinished = repegPlan(plan([stage("Publish", { hurrah: true })]), task, WD);
+  eq(unfinished.action, "wait", "not published yet → back to Waiting on…");
+  eq(unfinished.wd, 5, "…remembering +5 working days");
+
+  const published = day(2026, 9, 21);   // published EARLY, on the Monday
+  const done = repegPlan(plan([stage("Publish", { hurrah: true, completedAt: published + 3600000 })]), task, WD);
+  eq(done.action, "date", "published → re-dated");
+  eq(done.dueAt, afterFinishDue(published, 5, WD), "…from the day it was ACTUALLY published, not the planned end");
+  ok(done.dueAt < task.dueAt, "…which, published early, pulls it earlier");
+
+  eq(repegPlan(plan([]), { ...task, completedAt: day(2026, 9, 30) }, WD).action, "skip", "a completed task happened — never touched");
+  eq(repegPlan(plan([]), { ...task, afterProjectId: "p1" }, WD).action, "skip", "already re-pegged → running it again is a no-op");
+  eq(repegPlan(plan([]), { ...task, dueAt: day(2026, 8, 20) }, WD).action, "skip", "a before-start task is a plan, left alone");
 }
 
 console.log(`\n${failed ? "❌" : "✅"} ${passed} passed, ${failed} failed  (imported directly from queue.js)\n`);

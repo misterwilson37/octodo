@@ -1,6 +1,9 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.59.4 — .st-spawn-wrap, the hurrah follow-up field.
+   Version 0.60.0 — Katie's handwritten list (Cyanea): the ⋮⋮ drag grip,
+   the duplicate modal's date-shift chips, the "Tasks from this project"
+   list, and the year view's own tier chips.
+   (prev) Version 0.59.4 — .st-spawn-wrap, the hurrah follow-up field.
    (prev) Version 0.58.0 — .view-nav h2 no longer collapses to an ellipsis while
    there is room; "Later" group in the projects panel.
    (prev) Version 0.57.0 — #version.stale, the amber "you are running old code"
@@ -18,7 +21,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.59.4"; }
+:root { --tc-version: "0.60.0"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -339,6 +342,32 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
   font-size: .72rem; font-weight: 600; padding: .2rem .6rem;
 }
 .filter-chip.chip-off { color: var(--ink-dim); opacity: .55; border-style: dashed; }
+
+/* ---------- 0.60.0 — Katie's handwritten list (app 2.3.0) ----------
+   Sizes deliberately reuse existing ones (.filter-chip, .mini, the
+   .ctl-group active ring) rather than inventing near-misses. */
+#yv-tier-filters { display: flex; flex-wrap: wrap; gap: .4rem; margin: .2rem 0 .6rem; }
+.dup-shift { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: .4rem 0; }
+.dup-shift .mini.active { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+/* touch-action:none is load-bearing: without it a drag on Android is a scroll. */
+.st-grip {
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  color: var(--ink-dim); padding: .35rem .2rem; font-size: .8rem; line-height: 1;
+  letter-spacing: -.15em;
+}
+.st-grip:hover { color: var(--ink); }
+.st-grip:active { cursor: grabbing; }
+.stage-tmpl-row.st-dragging { outline: 1px dashed var(--accent); outline-offset: 2px; border-radius: 6px; }
+.linked-tasks { margin-top: .6rem; border-top: 1px solid var(--line); padding-top: .5rem; }
+.linked-head {
+  font-size: .7rem; color: var(--ink-dim); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: .3rem;
+}
+.linked-row { display: flex; align-items: center; gap: .4rem; margin: .2rem 0; min-width: 0; }
+.linked-row input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+.linked-row .linked-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: .85rem; }
+.linked-row .linked-when { white-space: nowrap; }
+.linked-done .linked-name { text-decoration: line-through; opacity: .6; }
 
 /* Shared tap popover */
 #popover {
@@ -806,6 +835,11 @@ body.celebration-wave::after {
 .row-main.has-notes { cursor: pointer; }
 .note-chev { flex-shrink: 0; }
 .row-actions { display: flex; align-items: center; gap: .3rem; }
+/* 0.60.0 — one width for every glyph button on a row. ⏰ and 📋 are wider
+   characters than ✎ and ✕, so side by side the boxes came out a few px
+   apart — the "slightly off" Jake would rather see normalised. A ⏹ 12m
+   readout is wider than this and simply grows past it. */
+.row-actions .icon-btn { min-width: 2.6rem; padding-left: .3rem; padding-right: .3rem; text-align: center; }
 .row-spacer { flex: 1; }
 .row-notes {
   font-size: .82rem; color: var(--ink-dim);
@@ -911,7 +945,7 @@ body.celebration-wave::after {
    the Σ is quiet — it's the answer, not the interface. */
 .project-dates { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
 .clock-btn { padding: .02rem .4rem; font-size: .68rem; }
-.clock-btn.running {
+.clock-btn.running, .row-clock.running {   /* 0.60.0 — the Today row's ⏱ glows the same */
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent), 0 0 6px rgba(77, 208, 196, .3);
   opacity: 1;
