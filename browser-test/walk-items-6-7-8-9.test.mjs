@@ -1,5 +1,5 @@
 // ============================================================
-// browser-test/walk-items-6-7-8-9.test.mjs — Version 1.0.0
+// browser-test/walk-items-6-7-8-9.test.mjs — Version 1.1.0
 //
 // Katie's handwritten list, items 7, 8 and 9: year-view tier chips, ⏱ ✎ on Today rows, edit pop-ups for projects and tasks (and that they are really on top).
 //   TZ=America/Chicago node browser-test/walk-items-6-7-8-9.test.mjs
@@ -34,9 +34,9 @@ console.log("\n— item 8: ⏱ on the Today row —");
 const rowBtns = () => page.evaluate(() => { const row = [...document.querySelectorAll("#queue .row")].find(r => /Draft memo/.test(r.textContent));
   return row ? [...row.querySelectorAll("button")].map(b => b.textContent.trim()) : null; });
 const rb = await rowBtns();
-ok(rb && rb.includes("⏱") && rb.includes("✎") && rb.includes("⏰"), "the stage row has ⏱ ✎ ⏰: " + JSON.stringify(rb));
+ok(rb && rb.includes("▶ Clock in") && rb.includes("✎") && rb.includes("⏰"), "the stage row has ▶ Clock in, ✎, ⏰ (2.4.0: words, not a fourth clock face): " + JSON.stringify(rb));
 await page.evaluate(() => { const row = [...document.querySelectorAll("#queue .row")].find(r => /Draft memo/.test(r.textContent));
-  const b = [...row.querySelectorAll("button")].find(b => b.textContent.trim() === "⏱"); b.id = "__clk"; });
+  const b = [...row.querySelectorAll("button")].find(b => b.textContent.trim() === "▶ Clock in"); b.id = "__clk"; });
 await realClick("#__clk"); await sleep(500);
 const sess = await list(page, `${P}/sessions/`);
 ok(sess.length === 1 && sess[0].projectId === "pW" && sess[0].end == null, "tapping ⏱ starts a session on Acme 2026");

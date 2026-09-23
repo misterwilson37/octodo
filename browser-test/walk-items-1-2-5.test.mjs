@@ -1,5 +1,5 @@
 // ============================================================
-// browser-test/walk-items-1-2-5.test.mjs — Version 1.0.0
+// browser-test/walk-items-1-2-5.test.mjs — Version 1.1.0
 //
 // Katie's handwritten list, items 1, 2 and 5: Duplicate with date chips, 🎆/outrider carry-over, Someday copies; Save as template; drag (desktop + Settings); Pipeline + New.
 //   TZ=America/Chicago node browser-test/walk-items-1-2-5.test.mjs
@@ -42,7 +42,7 @@ let d = await page.evaluate(() => ({ open: !document.querySelector("#dup-modal")
   active: document.querySelector("#dup-shift-row .active")?.dataset.shift }));
 ok(d.open && d.h === "📋 Duplicate project" && d.yes === "Create the copy" && d.no === "Cancel", "📋 opens a plain Duplicate (heading, Create the copy, Cancel)");
 ok(d.fu && d.sn, "…without the finished-project follow-up box or the snooze");
-ok(d.active === "1y", `…with +1 year pre-selected (start ${d.start})`);
+ok(d.active === "1w", `…with +1 week pre-selected — Laundry runs 2 days, so it's a routine (2.4.0; start ${d.start})`);
 await page.click('#dup-shift-row [data-shift="1w"]'); await sleep(100);
 await page.click('#dup-shift-row [data-shift="1w"]'); await sleep(100);   // twice: must NOT be +2 weeks
 d = await page.evaluate(() => ({ start: document.querySelector("#dup-start").value, end: document.querySelector("#dup-end").value, name: document.querySelector("#dup-name").value,

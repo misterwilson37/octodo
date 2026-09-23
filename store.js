@@ -1,6 +1,6 @@
 // ============================================================
 // Tentacalendar — store.js  (2.0 / OCTODO LINE)
-// Version 1.4.0
+// Version 1.4.2
 //
 // Every Firebase call: auth, workspace bootstrap, subscriptions, CRUD.
 // Nothing here touches the DOM. Schema per HANDOFF-2.0.md §3.
@@ -43,7 +43,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const STORE_VERSION = "1.4.0";
+export const STORE_VERSION = "1.4.2";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
@@ -63,7 +63,7 @@ import { FIREBASE_CONFIG } from "./config.js?v=1.2.0";
 import {
   splitOutriders, stageEffectiveDate,
   waitsForFinish, projectFinishedAt, afterFinishDue, repegPlan      // 1.4.0 — queue 1.2.0
-} from "./queue.js?v=1.2.0";
+} from "./queue.js?v=1.4.0";
 
 
 const app = initializeApp(FIREBASE_CONFIG);

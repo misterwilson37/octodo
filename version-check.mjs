@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ============================================================
 // Tentacalendar — version-check.mjs  (2.0 / OCTODO LINE)
-// Version 1.8.0 — knows about waiting.test.mjs and browser-test/harness.mjs.
+// Version 1.9.0 — knows about typed-date.test.mjs.
 //
 // THE THING SIX FILES ALREADY TOLD YOU TO RUN.
 //
@@ -36,7 +36,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 
-const VERSION_CHECK_VERSION = "1.8.0";
+const VERSION_CHECK_VERSION = "1.9.0";
 
 const SEMVER = String.raw`\d+\.\d+\.\d+`;
 
@@ -81,6 +81,7 @@ const FILES = [
   { file: "move.test.mjs",       banner: /^\/\/\s*Version\s+(V)/m,          constant: null , label: "move.test" },
   { file: "outrider.test.mjs",   banner: /^\/\/\s*outrider\.test\.mjs\s+—\s+Version\s+(V)/m, constant: null , label: "outrider.test" },
   { file: "waiting.test.mjs",    banner: /^\/\/\s*waiting\.test\.mjs\s+—\s+Version\s+(V)/m, constant: null , label: "waiting.test" },
+  { file: "typed-date.test.mjs", banner: /^\/\/\s*typed-date\.test\.mjs\s+—\s+Version\s+(V)/m, constant: null , label: "typed-date.test" },
   { file: "browser-test/harness.mjs", banner: /^\/\/\s*browser-test\/harness\.mjs\s+—\s+Version\s+(V)/m, constant: null , label: "browser-test" },
   // ⚠️ THE CHECKER CHECKS THE CHECKER. This file shipped for three versions
   // unable to see its own drift — and drifted: the repo held 1.1.0 while the

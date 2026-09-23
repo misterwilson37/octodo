@@ -1,5 +1,5 @@
 // ============================================================
-// waiting.test.mjs — Version 1.0.0
+// waiting.test.mjs — Version 1.1.0
 //
 // Katie, 2026-09: *"'Waiting on' tasks seem to only appear on weekends."*
 //
@@ -15,7 +15,7 @@
 //   node waiting.test.mjs
 // ============================================================
 
-import { buildQueue } from "./queue.js";
+import { buildQueue, buildWeek } from "./queue.js";
 
 let passed = 0, failed = 0;
 const ok = (cond, msg) => cond
@@ -81,6 +81,57 @@ const ids = arr => arr.map(x => x.id);
   const q = buildQueue({ tasks, events: [], tiers, projects: [], now: MON, viewDay: at(2026, 9, 26, 10) });
   ok(ids(q.waiting).length === 1 && ids(q.waiting)[0] === "undated-follow-up",
      "browsing ahead to next Saturday parks nothing dated (none of them is due that day)");
+}
+
+// ============================================================
+// 1.1.0 — queue 1.4.0. Katie: "I now see 'Follow-up/finalize' for 4
+// reports, three of which are Alabama Farmers reports for next year… I do
+// NOT want to see that I plan to follow up 14 days after a project I
+// tentatively plan to publish a year from now." But: "I published a project
+// 5 days ago… I shouldn't forget that I plan to follow up with the client
+// in 9 more days."
+// ============================================================
+{
+  const stage = (name, o = {}) => ({ sid: name, name, direction: "none", anchor: "start", offsetDays: 0, completedAt: null, dueAt: null, ...o });
+  const projects = [
+    { id: "alfa27", name: "Alabama Farmers 2027", tierId: "work", startDate: at(2027, 4, 1, 0), endDate: at(2027, 5, 14, 0),
+      stages: [stage("Publish", { hurrah: true })] },
+    { id: "acme", name: "Acme", tierId: "work", startDate: at(2026, 9, 14, 0), endDate: at(2026, 10, 2, 0),
+      stages: [stage("Draft", { completedAt: at(2026, 9, 15) }), stage("Publish", { hurrah: true })] },
+    { id: "bonnie", name: "AFICC Bonnie", tierId: "work", startDate: at(2026, 9, 1, 0), endDate: at(2026, 9, 30, 0),
+      stages: [stage("Publish", { hurrah: true, completedAt: at(2026, 9, 16), spawnedTaskId: "hurrahOld" })] }
+  ];
+  const T = [
+    task("Follow-up/finalize — Alabama Farmers 2027", "work", null, { afterProjectId: "alfa27", afterProjectWd: 14 }),
+    task("Follow-up/finalize — Acme", "work", null, { afterProjectId: "acme", afterProjectWd: 10 }),
+    task("Check in — AFICC Bonnie", "work", at(2026, 9, 30, 16), { afterProjectId: "bonnie", afterProjectWd: 10 }),
+    task("Publish — AFICC Bonnie", "work", at(2026, 10, 5, 9), {}),                       // an OLD 🎆 spawn: linked only by spawnedTaskId
+    task("Invoice — AFICC Bonnie", "work", at(2026, 9, 25, 16), {}),                     // an OLD outrider: linked only by its id
+    task("Unrelated dentist", "work", at(2026, 9, 28, 16), {}),
+    task("Bonnie call — today", "work", at(2026, 9, 21, 15), { fromProjectId: "bonnie" })
+  ];
+  T[3].id = "hurrahOld";
+  T[4].id = "out_bonnie_s9";
+  const q = buildQueue({ tasks: T, events: [], tiers, projects, now: MON, viewDay: MON });
+  const w = q.waiting.map(t => t.title), items = q.items.map(x => x.title || x.raw?.title);
+  console.log("\n— Waiting on… is for live projects (queue 1.4.0) —");
+  ok(!w.some(x => /Alabama Farmers/.test(x)), "THE REPORT: next year's Alabama Farmers follow-up is NOT in Waiting on…");
+  ok(w.includes("Follow-up/finalize — Acme"), "a running project's follow-up still waits there");
+  ok(w.includes("Check in — AFICC Bonnie"), "a finished project's dated follow-up (9 days out) shows — her 'don't let me forget'");
+  ok(q.waiting.find(t => t.title === "Check in — AFICC Bonnie")?.upcoming === true, "…flagged upcoming, so the row can say when");
+  ok(w.includes("Publish — AFICC Bonnie"), "…found through an OLD 🎆 spawn's spawnedTaskId");
+  ok(w.includes("Invoice — AFICC Bonnie"), "…and through an OLD outrider's out_<project>_ id");
+  ok(!w.includes("Unrelated dentist"), "a dated task that came from no project is untouched (not here)");
+  ok(!w.includes("Bonnie call — today"), "a finished project's follow-up DUE TODAY is not 'upcoming'…");
+  const idx = t => w.indexOf(t);
+  ok(idx("Follow-up/finalize — Acme") < idx("Invoice — AFICC Bonnie") &&
+     idx("Invoice — AFICC Bonnie") < idx("Check in — AFICC Bonnie") &&
+     idx("Check in — AFICC Bonnie") < idx("Publish — AFICC Bonnie"),
+     "order: genuinely waiting first, then the upcoming ones soonest-first: " + w.join(" | "));
+  const qApr = buildQueue({ tasks: T, events: [], tiers, projects, now: MON, viewDay: at(2027, 4, 5, 10) });
+  ok(qApr.waiting.some(t => /Alabama Farmers/.test(t.title)), "browse ahead to April 2027: once it has started, it's back");
+  const wk = buildWeek({ tasks: T, events: [], tiers, projects, now: MON, anchorDay: MON });
+  ok(!wk.waiting.some(t => /AFICC Bonnie/.test(t.title)), "the week view's horizon doesn't list them as undated — they're on the grid");
 }
 
 console.log(failed

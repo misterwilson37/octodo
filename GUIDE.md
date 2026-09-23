@@ -51,6 +51,8 @@ Two kinds of tier:
 
 A title, a tier, and a due date and time. That's it to get started.
 
+**You can type any date** instead of picking it: *10/15*, *Oct 15*, *fri*, *tomorrow*, *+2w* (two weeks from today) all work, and so does *1015* on a number pad with no slash. The 📅 beside the box opens the calendar if you'd rather tap. If the box turns red, it couldn't read what you typed — nothing saves until it can.
+
 Two optional things worth learning, because they're where the app earns its keep:
 
 **Escalation — *"If ignored, nag again every ___."*** Set a task to nag every day, or every hour, or every six months. When the deadline passes, the task turns red and climbs; on each escalation step it climbs again. A thing set to nag hourly becomes genuinely hard to ignore by lunchtime. A thing set to nag every three months sits quietly and resurfaces in the spring.
@@ -88,18 +90,21 @@ One stage per project can be marked the **hurrah** — the moment the thing actu
 
 **Steps that fall outside the project's dates** — send the engagement letter two weeks before it starts, invoice a week after it ends — leave the pipeline and become ordinary tasks, so a project doesn't clog your list before it has begun or after it's done. Open a project's stages (✎⋮) or expand its card and they're listed underneath as **Tasks from this project**, so you can still review the whole thing in one place.
 
-**A step *after the end* waits for the real end.** It sits in **Waiting on…** saying *"5 working days after this project is finished"* until you actually finish — the hurrah, if it has one — and only then gets its date. Publish a week late and the invoice moves a week with you, without you touching it.
+**A step *after the end* waits for the real end.** Once the project is under way it sits in **Waiting on…** saying *"5 working days after this project is finished"*, and only when you actually finish — the hurrah, if it has one — does it get its date. Publish a week late and the invoice moves a week with you, without you touching it. After you finish, it stays in Waiting on… with its date (*"due Thu, Oct 1 — in 9 days"*) so you don't forget it, and moves into your list on the day.
+
+**Projects that haven't started yet keep their follow-ups to themselves** — next year's reports don't clutter Waiting on… for nine months. Look for them on the project's own card.
 
 **Handy things on a project:**
 
-- **📋 Duplicate.** A copy with its checkmarks reset — and the "Move the dates" buttons (+1 week, +1 month, +1 year…) shift both dates in one tap, so you never have to click back through a calendar. The before/after steps come along too.
+- **▸ on a project's row in Today** opens its whole pipeline right there. Tick any stage, in any order — the row keeps showing the next one that's still open.
+- **📋 Duplicate.** A copy with its checkmarks reset — and the "Move the dates" buttons (+1 week, +1 month, +1 year…) shift both dates in one tap. It remembers which one you used for that project, so laundry comes back at +2 weeks and work comes back at +1 year. The before/after steps come along too.
 - **✎ Edit** opens right where you tapped, in a pop-up, instead of at the bottom of the page. While you're in there, **✎⋮ Stages…** takes you straight to the steps.
 - **Drag stages by their ⋮⋮ handle** to reorder them. The little ▲▼ still work for nudging one step.
 - **＋ Save as a new template…**, at the bottom of a project's stages, turns the steps you've just shaped into a pipeline for next time.
 
 ### 5. The clock
 
-If you need to know where your hours went, you can clock in to a project and clock out again, and the app keeps a ledger. **⏱** is on each project's row in Today as well as on its card, so you can start the clock from wherever you are. There's a running timer at the top of the list while it's going, and a Time Report that totals it up.
+If you need to know where your hours went, you can clock in to a project and clock out again, and the app keeps a ledger. **▶ Clock in** is on each project's row in Today as well as on its card, so you can start the clock from wherever you are. There's a running timer at the top of the list while it's going, and a Time Report that totals it up.
 
 **At most one clock runs at a time.** Clocking in to something else closes what was open, in the same instant, so the ledger can never claim you were doing two things at once.
 

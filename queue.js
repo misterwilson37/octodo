@@ -1,11 +1,17 @@
 // ============================================================
 // Tentacalendar — queue.js
-// Version 1.2.0
+// Version 1.4.0
 //
 // Pure scheduling logic: priority, pipelines, week and clock geometry,
 // holidays. Has never known Firestore exists — that is why it is testable.
 //
 // RECENT:
+// 1.4.0 — WAITING ON… IS FOR LIVE PROJECTS (Katie). A follow-up waiting on a
+//          project that hasn't started yet is left off (it's on the card);
+//          a finished project's DATED follow-up shows, `upcoming`, until due.
+// 1.3.0 — parseTypedDate: every date field can be TYPED (Katie, on Android,
+//          whose picker cannot be). 10/15 · Oct 15 · fri · +2w · 1015 …
+//          typed-date.test.mjs.
 // 1.2.0 — FOLLOW-UPS WAIT FOR THE REAL FINISH. waitsForFinish,
 //          projectFinishedAt, afterFinishDue, allowedDaysBetween,
 //          outriderStageFromTask, repegPlan: pure answers for store.js's
@@ -42,7 +48,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const QUEUE_VERSION = "1.2.0";
+export const QUEUE_VERSION = "1.4.0";
 
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -436,6 +442,93 @@ export function repegPlan(project, task, allowedDays) {
   return { action: "date", wd, finishAt, dueAt: afterFinishDue(finishAt, wd, allowedDays) };
 }
 
+/**
+ * ⚠️ 1.3.0 — A DATE, TYPED. Katie, on Android, where the native picker
+ * cannot be typed into: *"that's why I want to be able to type in a date
+ * from whatever portal I'm using to access. If the default is set to +1
+ * year for the sake of work projects, then it's annoying to have to click
+ * backwards 51 weeks for laundry."*
+ *
+ * Returns a Date at local midnight, or null when it cannot tell. US order
+ * (she is in Tennessee): month first. Understands —
+ *   10/15 · 10-15 · 10.15 · 10 15 · 1015 · 915      (year inferred)
+ *   10/15/26 · 10/15/2026 · 10152026 · 2026-10-15
+ *   oct 15 · October 15th 2026 · 15 oct
+ *   today · tomorrow · yesterday · fri · next fri
+ *   +3 · +3d · +2w · +1m · +1y · -5                 (from today)
+ * A missing year is THIS year, unless that is more than 60 days gone, in
+ * which case next year — so "1/10" typed in December means January coming.
+ * Impossible dates (2/30, 13/1) are null, never rolled into March.
+ */
+const MONTH3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const DOW3 = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+export function parseTypedDate(text, nowTs = Date.now()) {
+  const t = String(text ?? "").trim().toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ");
+  if (!t) return null;
+  const today = new Date(startOfDay(nowTs));
+  const mk = (y, m, d) => {
+    if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;
+    const x = new Date(y, m - 1, d);
+    return x.getFullYear() === y && x.getMonth() === m - 1 && x.getDate() === d ? x : null;
+  };
+  const year = y => y == null ? null : (y < 100 ? 2000 + y : y);
+  const guessYear = (m, d) => {
+    const ty = today.getFullYear();
+    const x = mk(ty, m, d);
+    if (x && today - x <= 60 * DAY_MS) return x;
+    return mk(ty + 1, m, d) || x;
+  };
+  const withYear = (m, d, y) => y == null ? guessYear(m, d) : mk(year(y), m, d);
+  const plusDays = n => { const x = new Date(today); x.setDate(x.getDate() + n); return x; };
+  let r;
+
+  if (t === "today" || t === "tod") return today;
+  if (t === "tomorrow" || t === "tmrw" || t === "tom") return plusDays(1);
+  if (t === "yesterday") return plusDays(-1);
+
+  if ((r = /^([+-])\s*(\d{1,4})\s*(d|days?|w|wks?|weeks?|m|mos?|months?|y|yrs?|years?)?$/.exec(t))) {
+    const n = parseInt(r[2], 10) * (r[1] === "-" ? -1 : 1);
+    const u = (r[3] || "d")[0];
+    const x = new Date(today);
+    if (u === "d") x.setDate(x.getDate() + n);
+    else if (u === "w") x.setDate(x.getDate() + 7 * n);
+    else {
+      const months = u === "m" ? n : 12 * n, day = x.getDate();
+      x.setDate(1); x.setMonth(x.getMonth() + months);
+      x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate()));
+    }
+    return x;
+  }
+  if ((r = /^(next )?([a-z]{3,9})$/.exec(t)) && DOW3.includes(r[2].slice(0, 3)) &&
+      DOW3.map((d, i) => ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][i]).some(full => full.startsWith(r[2]))) {
+    const want = DOW3.indexOf(r[2].slice(0, 3));
+    let n = (want - today.getDay() + 7) % 7 || 7;   // "fri" on a Friday = next Friday
+    return plusDays(n);
+  }
+  if ((r = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t))) return mk(+r[1], +r[2], +r[3]);
+  if ((r = /^(\d{1,2})[\/\-. ](\d{1,2})(?:[\/\-. ](\d{2}|\d{4}))?$/.exec(t))) return withYear(+r[1], +r[2], r[3] == null ? null : +r[3]);
+  // digits only — a phone's number pad often has no "/"
+  if ((r = /^(\d{3,4}|\d{6}|\d{8})$/.exec(t))) {
+    const s = r[1];
+    if (s.length === 3) return withYear(+s[0], +s.slice(1), null);
+    if (s.length === 4) return withYear(+s.slice(0, 2), +s.slice(2), null);
+    if (s.length === 6) return withYear(+s.slice(0, 2), +s.slice(2, 4), +s.slice(4));
+    return withYear(+s.slice(0, 2), +s.slice(2, 4), +s.slice(4));
+  }
+  const month = w => {
+    const i = MONTH3.indexOf(w.slice(0, 3));
+    const full = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+    return i >= 0 && w.length >= 3 && full[i].startsWith(w.replace(/\.$/, "")) ? i + 1 : 0;
+  };
+  if ((r = /^([a-z]+\.?) (\d{1,2})(?:st|nd|rd|th)?(?: (\d{2}|\d{4}))?$/.exec(t)) && month(r[1])) {
+    return withYear(month(r[1]), +r[2], r[3] == null ? null : +r[3]);
+  }
+  if ((r = /^(\d{1,2})(?:st|nd|rd|th)? ([a-z]+\.?)(?: (\d{2}|\d{4}))?$/.exec(t)) && month(r[2])) {
+    return withYear(month(r[2]), +r[1], r[3] == null ? null : +r[3]);
+  }
+  return null;
+}
+
 export function projectProgress(project) {
   const stages = project.stages || [];
   if (!stages.length) return { done: 0, total: 0, pct: 0 };
@@ -612,14 +705,62 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
   // --- Tasks ---
   const active = [];
   const waiting = [];
+  const upcoming = [];
   const doneToday = [];
+  /**
+   * ⚠️ 1.4.0 — WAITING ON… IS FOR LIVE PROJECTS, NOT NEXT YEAR'S. Katie,
+   * after 1.2.0 parked "after end" follow-ups there:
+   *
+   *   "I now see 'Follow-up/finalize' for 4 reports, three of which are
+   *    Alabama Farmers reports for next year. As in, they won't even start
+   *    until April of 2027. That list is going to get cluttered beyond the
+   *    point of usefulness if it holds onto things for 9+ months before they
+   *    even go live."
+   *
+   * and what she DOES want there:
+   *
+   *   "I published a project 5 days ago so it's out of my queue but I
+   *    shouldn't forget that I plan to follow up with the client in 9 more
+   *    days. I do NOT want to see that I plan to follow up 14 days after a
+   *    project I tentatively plan to publish a year from now. Those sorts of
+   *    outside-of-pipeline tasks are better reviewed in the card."
+   *
+   * So, for a task that came OUT of a project:
+   *   · waiting on a project that has NOT STARTED (by the viewed day)
+   *     → not here at all. The card's "Tasks from this project" has it.
+   *   · waiting on a project that is running → here, as in 1.2.0.
+   *   · DATED, not due yet, and its project is FINISHED → here, flagged
+   *     `upcoming`, until the day it is due and moves into the queue. Before
+   *     this it was invisible until that day — the gap she described.
+   * Tasks that did not come from a project are untouched.
+   */
+  const projById = {};
+  const spawnedBy = {};
+  for (const p of projects) {
+    projById[p.id] = p;
+    for (const st of p.stages || []) if (st && st.spawnedTaskId) spawnedBy[st.spawnedTaskId] = p.id;
+  }
+  const sourceProject = t => {
+    const pid = t.afterProjectId || t.fromProjectId || spawnedBy[t.id] ||
+      (String(t.id).startsWith("out_") ? String(t.id).slice(4).split("_")[0] : null);
+    return pid ? projById[pid] || null : null;
+  };
+  const notStartedYet = p => p && p.startDate != null && startOfDay(p.startDate) > dayStart;
   for (const t of tasks) {
     if (hidden(t.tierId)) continue;
     if (t.completedAt) {
       if (t.completedAt >= dayStart && t.completedAt < dayEnd) doneToday.push(t);
       continue;
     }
-    if (t.dueAt == null) { waiting.push(t); continue; }
+    if (t.dueAt == null) {
+      if (t.afterProjectId && notStartedYet(projById[t.afterProjectId])) continue;   // 1.4.0
+      waiting.push(t);
+      continue;
+    }
+    if (t.dueAt >= dayEnd) {                                                         // 1.4.0
+      const p = sourceProject(t);
+      if (p && projectFinishedAt(p) != null) upcoming.push({ ...t, upcoming: true, sourceProjectId: p.id });
+    }
     /**
      * ⚠️ 0.21.0 — D61 USED TO MAKE THIS TASK DISAPPEAR FROM THE WHOLE APP.
      *
@@ -728,6 +869,10 @@ export function buildQueue({ tasks, events, tiers, projects = [], now, viewDay, 
 
   doneToday.sort((a, b) => b.completedAt - a.completedAt);
   waiting.sort((a, b) => rankOf(a.tierId) - rankOf(b.tierId));
+  // 1.4.0 — finished projects' coming follow-ups go after the things that
+  // are genuinely waiting, soonest first: they are reminders, not blockers.
+  upcoming.sort((a, b) => a.dueAt - b.dueAt);
+  waiting.push(...upcoming);
 
   return { pinned, items, waiting, doneToday, banners, passedEvents };
 }
@@ -1145,7 +1290,8 @@ export function buildWeek({ tasks, events, tiers, projects = [], now, anchorDay,
   // available work. Calling both "inventory for the week" would invite Katie
   // to plan around things that aren't hers to plan.
   const waiting = buildQueue({ tasks, events, tiers, projects, now, viewDay: today, hiddenTierIds })
-    .waiting.map(t => ({
+    .waiting.filter(t => !t.upcoming)   // 1.4.0 — dated; the week grid already shows them
+    .map(t => ({
       id: t.id, title: t.title, tierId: t.tierId,
       tier: tierById[t.tierId] || null,
       // 1.2.0 — a follow-up waiting on a PROJECT's finish is just as

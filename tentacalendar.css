@@ -1,6 +1,8 @@
 /* ============================================================
    Tentacalendar — tentacalendar.css
-   Version 0.60.0 — Katie's handwritten list (Cyanea): the ⋮⋮ drag grip,
+   Version 0.61.0 — Katie's first feedback on 2.3.0 (Cyanea): typed date
+   fields (.typed-date), and the Today row's inline stage list.
+   (prev) Version 0.60.0 — Katie's handwritten list (Cyanea): the ⋮⋮ drag grip,
    the duplicate modal's date-shift chips, the "Tasks from this project"
    list, and the year view's own tier chips.
    (prev) Version 0.59.4 — .st-spawn-wrap, the hurrah follow-up field.
@@ -21,7 +23,7 @@
       times. Verify with `node version-check.mjs`.
    ============================================================ */
 
-:root { --tc-version: "0.60.0"; }
+:root { --tc-version: "0.61.0"; }
 
 /* The hidden attribute applies display:none at UA-stylesheet priority,
    which ANY author display rule silently overrides. Never let that
@@ -368,6 +370,28 @@ input[type="text"], input[type="date"], input[type="time"], input[type="number"]
 .linked-row .linked-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: .85rem; }
 .linked-row .linked-when { white-space: nowrap; }
 .linked-done .linked-name { text-decoration: line-through; opacity: .6; }
+
+/* ---------- 0.61.0 — typed dates (app 2.4.0) ----------
+   The real <input type="date"> sits INVISIBLY over the 📅, so a tap on 📅
+   is a tap on the date input and the phone opens its own calendar. Its box
+   must match .date-pick's exactly, or the tap target and the glyph drift. */
+.typed-date { position: relative; display: inline-flex; align-items: center; gap: .3rem; min-width: 0; }
+.typed-date .date-typed { width: 8.2rem; min-width: 0; }
+.typed-date .date-typed.bad { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.typed-date .date-pick {
+  min-width: 2.6rem; padding: 0 .3rem;
+  align-self: stretch;    /* as tall as the text box beside it, not a few px short */
+  display: inline-flex; align-items: center; justify-content: center;
+  pointer-events: none;   /* the date input above it takes the tap */
+}
+.typed-date .date-native {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 2.6rem; height: 100%; margin: 0; padding: 0; border: 0;
+  opacity: 0; cursor: pointer;
+}
+/* The Today row's ▸: the project's whole pipeline, indented under its title. */
+.today-stages { margin: .4rem 0 .1rem 2.2rem; }
+.popover-hint.stacked .popover-hint-arrow { display: none; }   /* 0.61.0 — placed below/above, not beside */
 
 /* Shared tap popover */
 #popover {

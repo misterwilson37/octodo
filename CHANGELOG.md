@@ -23,6 +23,49 @@ references in the code, so treat this as a dictionary rather than a history.
 
 ---
 
+## 🆕 Waiting on… is for live projects — app 2.5.0 · queue 1.4.0 · store 1.4.2 · html 0.52.2 (2026-09-22, Cyanea)
+
+`HANDOFF-2.0.md` §0x has Katie's rule verbatim.
+
+- **queue 1.4.0** — `buildQueue`: a follow-up waiting on a project that has
+  not started (by the viewed day) is left out of `waiting`; a finished
+  project's dated, not-yet-due follow-up is added to it with `upcoming:
+  true` and `sourceProjectId`, after the others, soonest first. Source found
+  by `afterProjectId`, `fromProjectId`, an old 🎆's `spawnedTaskId`, or an old
+  `out_<pid>_` id. `buildWeek`'s horizon skips `upcoming`.
+- **app 2.5.0** — the `upcoming` row in Waiting on…: *"due … (in N days) —
+  follow-up to X, finished …"*, with ✓ ✎ ✕.
+- **store 1.4.2 · html 0.52.2** — pins only.
+- **Tests:** `waiting.test` 1.1.0 (14 → 25), `walk-feedback` 1.1.0 (28).
+
+---
+
+## 🆕 Katie's same-day feedback — app 2.4.0 · queue 1.3.0 · css 0.61.0 · html 0.52.1 · store 1.4.1 (2026-09-22, Cyanea)
+
+`HANDOFF-2.0.md` §0w has her notes verbatim.
+
+- **queue 1.3.0** — `parseTypedDate`: 10/15 · 10/15/26 · 1015 · Oct 15 ·
+  15 oct · fri · tomorrow · +2w · 2026-10-15. Month first. Missing year =
+  this year unless >60 days gone. Impossible dates → null, never rolled.
+- **app 2.4.0** — `makeTypeable` on every date field: a text box, then 📅,
+  with the real date input invisibly on the 📅 (so the phone's calendar
+  still opens). `typedDatesValid` guards the Duplicate and ⏰ buttons.
+  `buildStageList` extracted from `projectCard`; ▸/▾ on Today project rows
+  uses it (`tc-today-expanded`). Clock-in: "▶ Clock in" / "▶ in" instead of
+  ⏱. `dupDefaultShift`/`rememberDupShift`: the date chip remembered per
+  project name, years stripped (`tc-dup-shift`). `visibleAnchor` for tours
+  and hints; hints that can't fit beside a field go below it instead of on
+  it. Header: 2.0.0 retired to this file.
+- **css 0.61.0** — `.typed-date` family (the 📅 and the invisible input
+  share one box, measured 41.6 × 34 px at +0,+0), `.today-stages`,
+  `.popover-hint.stacked`.
+- **html 0.52.1** — no markup change; pins. **store 1.4.1** — pin only.
+- **Tests:** `typed-date.test` 1.0.0 (42), `version-check` 1.9.0,
+  `browser-test/walk-feedback` 1.0.0 (24, desktop and `PHONE=1`); two
+  older walks bumped to 1.1.0 for the new clock label and Laundry's default.
+
+---
+
 ## 🆕 Katie's handwritten list — app 2.3.0 · store 1.4.0 · queue 1.2.0 · css 0.60.0 · html 0.52.0 (2026-09-22, Cyanea)
 
 Ten notes from the primary user, all built; `HANDOFF-2.0.md` §0v has each in
@@ -698,6 +741,26 @@ the same grep.
 ---
 
 ## `app.js`
+
+### 2.0.0
+
+<!-- Retired from the header 2026-09-22 (Cyanea). Verbatim. -->
+
+```
+2.0.0 — TENTACALENDAR 2.0. Jake's own definition of what earns the number
+         was set on 2026-07-27 and it was the board switcher (E24); what
+         actually earns it is that on 2026-08-02 Katie migrated 245
+         documents in one run with no rehearsal and used the app all day.
+         1.x remains live and untouched as the fallback.
+         NO BEHAVIOUR CHANGED IN THIS FILE. The number and two `?v=` pins
+         are the whole diff — store.js and queue.js went to 1.0.0 in the
+         same drop and a stale pin would serve Katie the old modules.
+         ⚠️ 2.0.0 MEANS AUDITED, NOT FINISHED. It was cut after a
+         file-by-file read (HANDOFF §0r), not after the test list emptied:
+         TESTS.md still holds ~20 items nobody has deliberately walked, and
+         SAVE-1 is an unexplained crash that is merely visible rather than
+         fixed. Do not read the major bump as a claim about TESTS.md.
+```
 
 ### 1.46.0
 

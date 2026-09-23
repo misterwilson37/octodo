@@ -1,10 +1,19 @@
 // ============================================================
 // Tentacalendar — app.js  (2.0 / OCTODO LINE)
-// Version 2.3.0
+// Version 2.5.0
 //
 // Rendering, interaction, views. Ported from 1.x with four seams changed.
 // All Firebase access goes through store.js; no Firestore calls here.
 //
+// 2.5.0 — Waiting on… shows a finished project's coming follow-ups ("due
+//          Sep 30 (in 9 days) — follow-up to …") and no longer shows ones
+//          for projects that haven't started (queue 1.4.0; Katie).
+// 2.4.0 — KATIE'S FIRST FEEDBACK ON 2.3.0 (Cyanea). Every date field can be
+//          TYPED (makeTypeable; 📅 still opens the phone's calendar). ▸ on a
+//          Today project row opens its whole pipeline to tick in ANY order
+//          (buildStageList, shared with the card). Clock-in reads "▶ Clock
+//          in" — ⏱ looked like a reschedule button. 📋 remembers the date
+//          chip per project (dupDefaultShift).
 // 2.3.0 — KATIE'S HANDWRITTEN LIST (Cyanea). 📋 Duplicate any project, with
 //          one-tap date shifts (her Android laundry case); Save stages as a
 //          template; tasks from a project listed beside its stages; ⋮⋮ drag
@@ -36,20 +45,7 @@
 //          is what the user asked for and the spawn is bookkeeping.
 //          ⚠️ Katie's existing projects need the ONE-OFF SWEEP: run
 //          `octodoOutriders()` from the console (dry run by default).
-// 2.0.0 — TENTACALENDAR 2.0. Jake's own definition of what earns the number
-//          was set on 2026-07-27 and it was the board switcher (E24); what
-//          actually earns it is that on 2026-08-02 Katie migrated 245
-//          documents in one run with no rehearsal and used the app all day.
-//          1.x remains live and untouched as the fallback.
-//          NO BEHAVIOUR CHANGED IN THIS FILE. The number and two `?v=` pins
-//          are the whole diff — store.js and queue.js went to 1.0.0 in the
-//          same drop and a stale pin would serve Katie the old modules.
-//          ⚠️ 2.0.0 MEANS AUDITED, NOT FINISHED. It was cut after a
-//          file-by-file read (HANDOFF §0r), not after the test list emptied:
-//          TESTS.md still holds ~20 items nobody has deliberately walked, and
-//          SAVE-1 is an unexplained crash that is merely visible rather than
-//          fixed. Do not read the major bump as a claim about TESTS.md.
-// 1.46.0, 1.45.0, 1.44.0, 1.43.0 — see CHANGELOG.md.
+// 2.0.0, 1.46.0, 1.45.0, 1.44.0, 1.43.0 — see CHANGELOG.md.
 //
 // ⚠️ Full version history is in CHANGELOG.md. Keep this header SHORT —
 //    it grew to hundreds of lines, which is how the banner and the
@@ -58,7 +54,7 @@
 //    Verify with `node version-check.mjs` before handing anything over.
 // ============================================================
 
-export const APP_VERSION = "2.3.0";
+export const APP_VERSION = "2.5.0";
 
 import { CONFIG_VERSION, CALENDAR_ROBOT } from "./config.js?v=1.2.0";
 import {
@@ -84,7 +80,7 @@ import {
   isRouteError, isStageGone, routingSnapshot,                      // 0.24.0 / 0.26.0
   saveTierSkin, syncOutriders,                                                    // 0.25.0
   repegFollowUps                                                   // 1.4.0 — Katie's item 10
-} from "./store.js?v=1.4.0";
+} from "./store.js?v=1.4.2";
 import {
   buildQueue, projectProgress, remainingWork, normalizeStage, nextDeadline,
   isDayAllowed, addAllowedDays, allowedNeighbors, setDeadlineHour,
@@ -93,8 +89,10 @@ import {
   DEFAULT_ESTIMATE_MINUTES, MIN_ESTIMATE_MINUTES, MAX_ESTIMATE_MINUTES,
   rollupSessions, rollupToCSV, sessionsToCSV,
   splitOutriders, stageEffectiveDate,                               // 1.1.0 — §0h
-  outriderStageFromTask                                             // 1.2.0 — item 1
-} from "./queue.js?v=1.2.0";
+  outriderStageFromTask,                                            // 1.2.0 — item 1
+  parseTypedDate,                                                   // 1.3.0 — typed dates
+  projectFinishedAt                                                 // 1.4.0 — the upcoming row
+} from "./queue.js?v=1.4.0";
 import { celebrate, CELEBRATE_VERSION } from "./celebrate.js?v=0.2.0";
 
 const $ = sel => document.querySelector(sel);
@@ -280,7 +278,7 @@ function showTourStep() {
     try { step.before(); } catch (err) { console.warn("[tour] step setup failed:", err); }
   }
 
-  const targetEl = $(step.selector);
+  const targetEl = visibleAnchor($(step.selector));   // 2.4.0
 
   // A step whose element is missing or not laid out (display:none, or inside
   // a closed modal) cannot be highlighted honestly. 1.32.0 drew the box at
@@ -388,7 +386,7 @@ function showPopoverHint(hintId) {
   if (!hint) return;
   if (onboardingState().hints[hintId]) return;          // already dismissed, by this PERSON
 
-  const targetEl = $(hint.selector);
+  const targetEl = visibleAnchor($(hint.selector));   // 2.4.0
   const popover = $("#popover-hint");
   if (!targetEl || !popover) return;
 
@@ -402,9 +400,24 @@ function showPopoverHint(hintId) {
   const pw = popover.offsetWidth || 320, ph = popover.offsetHeight || 80;
   const GAP = 10, EDGE = 12;
   let x = r.right + GAP;
-  if (x + pw > window.innerWidth - EDGE) x = Math.max(EDGE, r.left - pw - GAP);
   let y = r.top + r.height / 2 - ph / 2;
-  y = Math.min(Math.max(y, EDGE), Math.max(EDGE, window.innerHeight - ph - EDGE));
+  let stacked = false;
+  if (x + pw > window.innerWidth - EDGE) {
+    const left = r.left - pw - GAP;
+    if (left >= EDGE) x = left;
+    else {
+      // ⚠️ 2.4.0 — NO ROOM BESIDE IT: GO BELOW, NOT ON TOP. On a phone a
+      // 320px hint fits neither side of a field, and the old fallback
+      // (x = EDGE, y = centred on the target) laid the hint over the very
+      // field it was explaining — found by the harness at 412px.
+      stacked = true;
+      x = Math.min(Math.max(r.left, EDGE), Math.max(EDGE, window.innerWidth - pw - EDGE));
+      y = r.bottom + GAP;
+      if (y + ph > window.innerHeight - EDGE) y = Math.max(EDGE, r.top - ph - GAP);
+    }
+  }
+  if (!stacked) y = Math.min(Math.max(y, EDGE), Math.max(EDGE, window.innerHeight - ph - EDGE));
+  popover.classList.toggle("stacked", stacked);   // the side arrow means nothing above/below
   popover.style.left = x + "px";
   popover.style.top = y + "px";
 }
@@ -437,6 +450,8 @@ const S = {
   showFinished: localStorage.getItem("tc-show-finished") === "1",  // D56
   showLater: localStorage.getItem("tc-show-later") === "1",        // 1.39.0
   hiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-hidden-tiers") || "[]")),
+  // 2.4.0 — which projects have their stages open on the Today list.
+  todayExpanded: new Set(JSON.parse(localStorage.getItem("tc-today-expanded") || "[]")),
   // 2.3.0 — item 7: the YEAR view's own hidden tiers. Separate on purpose.
   yvHiddenTierIds: new Set(JSON.parse(localStorage.getItem("tc-yv-hidden-tiers") || "[]")),
   view: ["year", "week", "day", "dash"].includes(localStorage.getItem("tc-view")) ? localStorage.getItem("tc-view") : "day", // D65/D88/D105 (persists per device; setView bounces "dash" to "day" on small glass)
@@ -760,6 +775,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // 2.4.0 — every date field can be TYPED as well as picked (Katie, Android).
+  for (const id of ["task-date", "project-start", "project-end", "due-date",
+                    "dup-start", "dup-end", "report-start", "report-end"]) makeTypeable($("#" + id));
   $("#task-date").value = toDateInput(new Date()); // due date defaults to today
   $("#task-time").value = defaultDueTime();        // D143 — and the time to the next hour
 
@@ -2493,7 +2511,11 @@ function renderQueue(items, now) {
       // not moved: the card keeps its ⏱ for projects not in today's queue.
       const os = openSessionNow();
       const running = os && os.projectId === it.projectId;
-      const clk = iconBtn(running ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "⏱",
+      // 2.4.0 — WORDS, NOT A CLOCK FACE. Katie: "Confusing that it looks so
+      // much like one of the icons used to reschedule a task." It did: the app
+      // uses FOUR clock faces (⏱ clock in, 🕐 reschedule, 🕰 log time by hand,
+      // ⏰ hard due), and she nearly didn't hover. ▶ means "start" everywhere.
+      const clk = iconBtn(running ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "▶ Clock in",
         running ? `Clock out of ${it.projectName} — you'll get to adjust the end time`
                 : os ? `Clock in to ${it.projectName} — the ${projName(os.projectId)} timer ends at this same moment`
                      : `Clock in to ${it.projectName}`,
@@ -2504,7 +2526,15 @@ function renderQueue(items, now) {
       clk.classList.add("row-clock");
       if (running) clk.classList.add("running");
       const proj = S.projects.find(x => x.id === it.projectId);
+      // 2.4.0 — ▸ opens this project's WHOLE pipeline under the row.
+      const open = S.todayExpanded.has(it.projectId);
+      const exp = iconBtn(open ? "▾" : "▸", open ? "Hide the stages" : `Show all of ${it.projectName}'s stages — tick any of them, in any order`, () => {
+        if (S.todayExpanded.has(it.projectId)) S.todayExpanded.delete(it.projectId); else S.todayExpanded.add(it.projectId);
+        try { localStorage.setItem("tc-today-expanded", JSON.stringify([...S.todayExpanded])); } catch { /* private mode */ }
+        render();
+      });
       return [
+        exp,
         clk,
         ...(proj ? [iconBtn("✎", `Edit ${it.projectName} (name, dates, tier…) — opens right here`, () => startProjectEdit(proj))] : []),
         iconBtn("⏰", "Set/change this stage's hard due date", () =>
@@ -2518,6 +2548,15 @@ function renderQueue(items, now) {
       notes: it.kind === "task" ? (it.raw?.notes || "") : "",
       noteKey: it.kind === "task" ? it.id : null
     });
+    // 2.4.0 — the ▸ above: the whole pipeline, tickable in any order.
+    if (it.kind === "stage" && S.todayExpanded.has(it.projectId)) {
+      const proj = S.projects.find(x => x.id === it.projectId);
+      if (proj) {
+        const sl = buildStageList(proj);
+        sl.classList.add("today-stages");
+        row.append(sl);
+      }
+    }
     list.append(row);
   }
 }
@@ -2555,6 +2594,34 @@ function renderWaiting(waiting) {
         notes: t.notes || "",
         noteKey: t.id
       });
+      list.append(row);
+      continue;
+    }
+
+    // 2.5.0 — a FINISHED project's follow-up that is dated but not due yet
+    // (queue 1.4.0). Katie: "I published a project 5 days ago so it's out of
+    // my queue but I shouldn't forget that I plan to follow up with the
+    // client in 9 more days." It moves into the queue on its day, by itself.
+    if (t.upcoming) {
+      const proj = (S.projectsAll || S.projects).find(x => x.id === t.sourceProjectId);
+      const fin = proj ? projectFinishedAt(proj) : null;
+      const days = Math.round((startOfDayTs(t.dueAt) - startOfDayTs(Date.now())) / DAY_MS);
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.addEventListener("change", ev => { setTaskDone(t.id, true); celebrate(1, clickPoint(ev)); });
+      rowScaffold(row, {
+        lead: cb, tier,
+        mainHTML: `<strong>${esc(t.title)}</strong><span class="sub">due ${fmtDay(t.dueAt)}` +
+          `${days > 0 ? ` (in ${days} day${days === 1 ? "" : "s"})` : ""} — follow-up to ` +
+          `${esc(proj ? proj.name : "a finished project")}${fin ? `, finished ${fmtDay(fin)}` : ""}</span>`,
+        buttons: [
+          iconBtn("✎", "Edit this task", () => startTaskEdit(t)),
+          ...(canDeleteDoc(t) ? [iconBtn("✕", "Delete", () => deleteTask(t.id))] : [])
+        ],
+        notes: t.notes || "",
+        noteKey: t.id
+      });
+      row.classList.add("upcoming-row");
       list.append(row);
       continue;
     }
@@ -3223,7 +3290,7 @@ function projectCard(p) {
     const runningHere = os && os.projectId === p.id;
     const cbtn = document.createElement("button");
     cbtn.className = "mini clock-btn" + (runningHere ? " running" : "");
-    cbtn.textContent = runningHere ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "⏱ in";
+    cbtn.textContent = runningHere ? `⏹ ${fmtElapsed(Date.now() - os.start)}` : "▶ in";   // 2.4.0 — ▶, not a fourth clock face
     cbtn.title = runningHere
       ? `Clock out — running since ${fmtTime(os.start)}. You'll get to adjust the end time (or cancel a misclick).`
       : os ? `Clock in — the ${projName(os.projectId)} timer ends at this same moment. One tap, no double-running.`
@@ -3280,43 +3347,7 @@ function projectCard(p) {
 
   if (!expanded) return card;
 
-  const stages = p.stages || [];
-  const activeIdx = stages.findIndex(x => !x.completedAt);
-  const list = document.createElement("div");
-  list.className = "stage-list";
-  stages.forEach((sRaw, i) => {
-    const st = normalizeStage(sRaw);
-    const row = document.createElement("div");
-    row.className = "stage-row"
-      + (st.completedAt ? " stage-done" : "")
-      + (i === activeIdx ? " stage-active" : "");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = !!st.completedAt;
-    cb.addEventListener("change", ev => onStageToggle(p.id, i, cb.checked, ev));
-    row.append(cb);
-
-    const label = document.createElement("span");
-    label.className = "stage-name";
-    label.textContent = st.name;
-    row.append(label);
-
-    if (st.direction && st.direction !== "none") {
-      const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
-      row.append(badge(code, `${st.offsetDays} working day(s) ${st.direction} project ${st.anchor} (counts this tier's allowed days)`));
-    }
-    if (st.dueAt) {
-      const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
-      due.classList.add("clickable");
-      due.addEventListener("click", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, st.dueAt));
-      row.append(due);
-    } else if (!st.completedAt) {
-      const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, null));
-      setDue.classList.add("stage-due-btn");
-      row.append(setDue);
-    }
-    list.append(row);
-  });
+  const list = buildStageList(p);
   card.append(list);
   // 2.3.0 — item 4, on the card as well as in ✎⋮: an expanded card is where
   // she reviews a pipeline most often.
@@ -3325,6 +3356,55 @@ function projectCard(p) {
   renderLinkedTasks(linked, p);
   if (!linked.hidden) card.append(linked);
   return card;
+}
+
+/**
+ * The tickable stage list — every stage, done or not, with its offset badge
+ * and ⏰. ONE builder for two places (2.4.0): the expanded project card, and
+ * the ▸ on a project's row in Today. Each checkbox ticks THAT stage, in any
+ * order — the Today queue only ever surfaces the next one, which is exactly
+ * why Katie asked for this: *"I want to be able to check off stages
+ * out-of-order."* Extracted from projectCard verbatim, not copied (D98).
+ */
+function buildStageList(p) {
+  const stages = p.stages || [];
+const activeIdx = stages.findIndex(x => !x.completedAt);
+const list = document.createElement("div");
+list.className = "stage-list";
+stages.forEach((sRaw, i) => {
+  const st = normalizeStage(sRaw);
+  const row = document.createElement("div");
+  row.className = "stage-row"
+    + (st.completedAt ? " stage-done" : "")
+    + (i === activeIdx ? " stage-active" : "");
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!st.completedAt;
+  cb.addEventListener("change", ev => onStageToggle(p.id, i, cb.checked, ev));
+  row.append(cb);
+
+  const label = document.createElement("span");
+  label.className = "stage-name";
+  label.textContent = st.name;
+  row.append(label);
+
+  if (st.direction && st.direction !== "none") {
+    const code = `${st.direction === "before" ? "−" : "+"}${st.offsetDays}wd ${st.anchor === "end" ? "end" : "start"}`;
+    row.append(badge(code, `${st.offsetDays} working day(s) ${st.direction} project ${st.anchor} (counts this tier's allowed days)`));
+  }
+  if (st.dueAt) {
+    const due = badge(`⏰ ${fmtDay(st.dueAt)}`, "Hard due date — click to change/clear");
+    due.classList.add("clickable");
+    due.addEventListener("click", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, st.dueAt));
+    row.append(due);
+  } else if (!st.completedAt) {
+    const setDue = iconBtn("⏰", "Set a hard due date", () => openDueDialog({ kind: "stage", projectId: p.id, stageIndex: i }, `Hard due date — ${st.name}`, null));
+    setDue.classList.add("stage-due-btn");
+    row.append(setDue);
+  }
+  list.append(row);
+});
+  return list;
 }
 
 /**
@@ -3484,7 +3564,7 @@ function openDuplicateModal(p, { finished = false } = {}) {
   $("#dup-start").value = timeless ? "" : toDateInput(new Date(p.startDate));
   $("#dup-end").value = timeless ? "" : toDateInput(new Date(p.endDate));
   syncDupDates();
-  if (!timeless) applyDupShift(finished ? "1y" : "1y");
+  if (!timeless) applyDupShift(finished ? "1y" : dupDefaultShift(p));
 
   // Fresh every open: a stale "✓ Added" from the last project would read as
   // a promise about this one.
@@ -3494,6 +3574,43 @@ function openDuplicateModal(p, { finished = false } = {}) {
   $("#dup-fu-note").textContent =
     "It lands on this project's tier, dated from today, and lives its own life — the project stays finished either way.";
   $("#dup-modal").hidden = false;
+}
+
+/**
+ * ⚠️ 2.4.0 — WHICH DATE CHIP IS LIT WHEN 📋 OPENS. Katie: *"my true
+ * preference depends on the project (e.g., it's safe to assume most work
+ * projects should populate at +1 year, while certain home/family projects
+ * like laundry should populate at +1-2 weeks)."*
+ *
+ * So it REMEMBERS, per project: whichever chip she created the last copy
+ * with. Keyed by the name with its years stripped, so "Acme 2026" and its
+ * copy "Acme 2027" are one project, and every "Laundry" is the same laundry.
+ * Never remembered from the finished-project offer (that door is always
+ * next year) nor from hand-typed dates (no chip describes those).
+ * First time, before there is anything to remember: a project that runs a
+ * fortnight or less is probably a routine → +1 week; longer → +1 year.
+ * Per device (localStorage), like the rest of the view settings.
+ */
+function dupKey(name) {
+  // Any standalone 4-digit token (2026, and Katie's YYNN codes like 2526)
+  // and any year range (25-26, 2025/26). Other numbers stay: "Room 12".
+  return String(name || "").toLowerCase()
+    .replace(/\b\d{2,4}[-\/]\d{2,4}\b|\b\d{4}\b/g, "").replace(/\s+/g, " ").trim();
+}
+function dupMemory() {
+  try { return JSON.parse(localStorage.getItem("tc-dup-shift") || "{}") || {}; } catch { return {}; }
+}
+function dupDefaultShift(p) {
+  const remembered = dupMemory()[dupKey(p.name)];
+  if (remembered) return remembered;
+  const days = (p.endDate - p.startDate) / DAY_MS;
+  return days <= 14 ? "1w" : "1y";
+}
+function rememberDupShift(name, code) {
+  if (!code) return;
+  const m = dupMemory();
+  m[dupKey(name)] = code;
+  try { localStorage.setItem("tc-dup-shift", JSON.stringify(m)); } catch { /* private mode */ }
 }
 
 /** Shift BOTH dates from the ORIGINAL by a chip's amount ("1w", "3m", …),
@@ -3627,6 +3744,7 @@ function bumpYearTokens(name, fromYear, toYear) {
 }
 
 function dupConfirm() {
+  if (!typedDatesValid($("#dup-modal"))) return;   // 2.4.0
   const t = S.dupTarget;
   if (!t) { $("#dup-modal").hidden = true; return; }
   const p = S.projects.find(x => x.id === t.projectId);
@@ -3653,6 +3771,7 @@ function dupConfirm() {
     }
   }
   const stages = t.stages || [];
+  if (!t.finished && !timeless) rememberDupShift(p.name, t.shift);   // 2.4.0 — next time, start here
   S.dupTarget = null;
   $("#dup-modal").hidden = true;
   addProjectWithStages({
@@ -3744,6 +3863,7 @@ function openDueDialog(target, label, existingDueAt) {
 }
 
 function dueSave() {
+  if (!typedDatesValid($("#due-modal"))) return;   // 2.4.0
   const date = $("#due-date").value;
   if (!date || !S.dueTarget) { $("#due-modal").hidden = true; return; }
   const time = $("#due-time").value || "17:00";
@@ -7649,6 +7769,133 @@ function updatePollCostHint() {
 }
 
 // ---------- Utils ----------
+
+/**
+ * ⚠️ 2.4.0 — A DATE FIELD YOU CAN TYPE INTO. Katie: *"that's why I want to
+ * be able to type in a date from whatever portal I'm using to access."* On
+ * Android the native <input type="date"> opens a calendar and nothing else;
+ * duplicating laundry from a +1-year default meant clicking back 51 weeks.
+ *
+ * THE SHAPE. A text box she types into, then 📅. The ORIGINAL date input is
+ * not replaced: it keeps its id, its value, its `required`, its listeners —
+ * every line of the app that reads `#task-date.value` still reads it — and
+ * it sits INVISIBLY ON TOP OF THE 📅 (opacity 0, same box). So tapping 📅
+ * is tapping the real date input, and the phone opens its own calendar
+ * exactly as before, on every browser, with no showPicker() to be missing.
+ *
+ * THE SYNC, both ways:
+ *   · typed → parsed (queue.parseTypedDate) on change/Enter → written to the
+ *     date input, which then fires `input` and `change` like a pick would;
+ *   · everything else → the text. The instance's `value` setter is wrapped,
+ *     so the app's own `el.value = …` (defaults, edit, the dup chips, Today)
+ *     updates the text too, and a pick fires `input`/`change`.
+ * Unreadable text turns red and sets its OWN validity, so a form submit
+ * stops on the text box with the reason — never silently keeps the old date.
+ * Non-form buttons (Duplicate, the ⏰ modal) ask typedDatesValid() first.
+ */
+/** 2.4.0 — what a tour step or hint should point AT. A typed date field's
+ *  real <input type="date"> is invisible and sits on its 📅, so anchoring
+ *  to it put the first-run due-date hint squarely over the text box it was
+ *  explaining (browser harness). Anchor to the whole visible box instead. */
+function visibleAnchor(el) {
+  return el?.classList?.contains("date-native") ? (el.closest(".typed-date") || el) : el;
+}
+function fmtTypedDate(isoStr) {
+  if (!isoStr) return "";
+  const [y, m, d] = isoStr.split("-").map(Number);
+  return `${m}/${d}/${y}`;
+}
+function makeTypeable(inp) {
+  if (!inp || inp.dataset.typeable) return;
+  inp.dataset.typeable = "1";
+  const box = document.createElement("span");
+  box.className = "typed-date";
+  const txt = document.createElement("input");
+  txt.type = "text";
+  txt.className = "date-typed";
+  txt.autocomplete = "off";
+  txt.spellcheck = false;
+  txt.placeholder = "m/d/yyyy";
+  txt.title = "Type a date — 10/15, 10/15/2026, Oct 15, fri, tomorrow, +2w — or tap 📅 for the calendar";
+  const pick = document.createElement("span");
+  pick.className = "icon-btn date-pick";
+  pick.textContent = "📅";
+  pick.setAttribute("aria-hidden", "true");
+  inp.parentNode.insertBefore(box, inp);
+  box.append(txt, pick, inp);
+  inp.classList.add("date-native");
+  inp.tabIndex = -1;          // keyboard users type; the calendar is one tap away
+  inp.title = "Pick from the calendar";
+
+  const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  const show = () => {
+    txt.value = fmtTypedDate(proto.get.call(inp));
+    txt.classList.remove("bad");
+    txt.setCustomValidity("");
+  };
+  Object.defineProperty(inp, "value", {
+    configurable: true,
+    get() { return proto.get.call(this); },
+    set(v) { proto.set.call(this, v); show(); }
+  });
+  inp.addEventListener("input", show);
+  inp.addEventListener("change", show);
+  inp.form?.addEventListener("reset", () => setTimeout(show, 0));
+  const syncRequired = () => { txt.required = inp.required; };
+  new MutationObserver(syncRequired).observe(inp, { attributes: true, attributeFilter: ["required"] });
+  syncRequired();
+
+  const commit = () => {
+    const raw = txt.value.trim();
+    if (!raw) {
+      if (inp.required) { show(); return true; }     // a required date can't be blanked by typing
+      if (proto.get.call(inp) !== "") {
+        proto.set.call(inp, "");
+        inp.dispatchEvent(new Event("input", { bubbles: true }));
+        inp.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return true;
+    }
+    const d = parseTypedDate(raw);
+    if (!d) {
+      txt.classList.add("bad");
+      txt.setCustomValidity(`"${raw}" isn't a date I can read — try 10/15, 10/15/2026, Oct 15, fri or +2w`);
+      return false;
+    }
+    const isoStr = toDateInput(d);
+    if (isoStr !== proto.get.call(inp)) {
+      proto.set.call(inp, isoStr);
+      inp.dispatchEvent(new Event("input", { bubbles: true }));
+      inp.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    show();
+    return true;
+  };
+  txt._commitTyped = commit;
+  txt.addEventListener("change", commit);
+  txt.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !commit()) { e.preventDefault(); txt.reportValidity(); }
+  });
+  txt.addEventListener("input", () => { txt.classList.remove("bad"); txt.setCustomValidity(""); });
+  txt.addEventListener("focus", () => {
+    txt.select();
+    inp.dispatchEvent(new Event("focus"));   // the E41 hint listens on the date field itself
+  });
+  // A tap on the invisible date input must not bubble to the <label> and be
+  // re-routed to the text box (same reason as D140's Today button).
+  inp.addEventListener("click", e => e.stopPropagation());
+  show();
+}
+
+/** For buttons that are not a form submit: commit every typed date inside
+ *  `root` and refuse (with the reason, on the field) if one can't be read. */
+function typedDatesValid(root) {
+  for (const txt of root.querySelectorAll(".date-typed")) {
+    if (txt.closest("[hidden]")) continue;
+    if (txt._commitTyped && !txt._commitTyped()) { txt.reportValidity(); txt.focus(); return false; }
+  }
+  return true;
+}
 
 // D140 — "Today" beside the due-date field. The native <input type="date">
 // picker is drawn by the BROWSER, so we cannot add a button inside it (Jake
